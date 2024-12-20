@@ -1,0 +1,87 @@
+.form-container {
+  margin-left: 280px;
+  margin-top: 60px;
+  padding: 24px;
+  min-height: calc(100vh - 60px);
+  background: var(--background-dark);
+  width: calc(100% - 280px);
+}
+
+.content-paper {
+  background: var(--background-light);
+  border-radius: 12px;
+  box-shadow: var(--shadow-md);
+  padding: 32px;
+  transition: all 0.3s ease;
+}
+
+.content-paper:hover {
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
+}
+
+/* Form Elements */
+.MuiTextField-root {
+  margin-bottom: 24px !important;
+}
+
+.MuiInputLabel-root {
+  font-size: 0.9rem !important;
+  font-weight: 500 !important;
+  color: var(--text-secondary) !important;
+}
+
+.MuiOutlinedInput-root {
+  border-radius: 8px !important;
+  background-color: #ffffff !important;
+  transition: all 0.3s ease !important;
+}
+
+.MuiOutlinedInput-root:hover {
+  background-color: #f8f9fa !important;
+}
+
+.MuiOutlinedInput-root.Mui-focused {
+  background-color: #ffffff !important;
+}
+
+/* Buttons */
+.form-submit-button {
+  background-color: var(--primary-color) !important;
+  color: #ffffff !important;
+  height: 48px !important;
+  min-width: 160px !important;
+  font-size: 1rem !important;
+  font-weight: 500 !important;
+  text-transform: none !important;
+  border-radius: 8px !important;
+  box-shadow: var(--shadow-sm) !important;
+  transition: all 0.3s ease !important;
+}
+
+.form-submit-button:hover {
+  background-color: #333333 !important;
+  box-shadow: var(--shadow-md) !important;
+}
+
+/* Print Styles */
+@media print {
+  .page-container {
+    margin: 0 !important;
+    padding: 20px !important;
+    width: 100% !important;
+  }
+
+  .content-paper {
+    box-shadow: none !important;
+    padding: 0 !important;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+
+  .signature-section {
+    margin-top: 100px !important;
+    page-break-inside: avoid !important;
+  }
+} 
