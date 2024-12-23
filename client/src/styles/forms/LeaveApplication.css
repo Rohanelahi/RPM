@@ -1,0 +1,72 @@
+.leave-form-container {
+  margin-left: 280px;
+  margin-top: 60px;
+  padding: 24px;
+  min-height: calc(100vh - 60px);
+  background: var(--background-dark);
+  width: calc(100% - 280px);
+}
+
+.leave-content-paper {
+  background: var(--background-light);
+  border-radius: 12px;
+  box-shadow: var(--shadow-md);
+  padding: 32px;
+}
+
+/* Form Fields */
+.MuiTextField-root {
+  background-color: #fff;
+}
+
+.MuiOutlinedInput-root {
+  transition: all 0.3s ease;
+}
+
+.MuiOutlinedInput-root:hover {
+  background-color: #fafafa;
+}
+
+.MuiOutlinedInput-root.Mui-focused {
+  background-color: #ffffff;
+  box-shadow: 0 0 0 2px rgba(25, 118, 210, 0.1);
+}
+
+/* Disabled Fields */
+.MuiTextField-root.Mui-disabled {
+  background-color: #f5f5f5;
+  border-radius: 4px;
+}
+
+/* Action Buttons */
+.action-buttons {
+  margin-top: 2rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid #e0e0e0;
+}
+
+.MuiButton-contained {
+  text-transform: none;
+  font-weight: 500;
+  padding: 8px 24px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.MuiButton-outlined {
+  text-transform: none;
+  font-weight: 500;
+  padding: 8px 24px;
+}
+
+/* Hide signature section in UI */
+.print-only {
+  display: none;
+}
+
+/* Show signature section only in print */
+@media print {
+  .print-only {
+    display: block;
+  }
+  /* ... rest of print styles remain same ... */
+} 

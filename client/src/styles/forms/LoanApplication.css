@@ -1,0 +1,177 @@
+.loan-form-container {
+  margin-left: 280px;
+  margin-top: 60px;
+  padding: 24px;
+  min-height: calc(100vh - 60px);
+  background: var(--background-dark);
+  width: calc(100% - 280px);
+}
+
+.loan-content-paper {
+  background: var(--background-light);
+  border-radius: 12px;
+  box-shadow: var(--shadow-md);
+  padding: 32px;
+}
+
+/* Print-specific styles */
+@media print {
+  /* Hide everything by default */
+  body * {
+    visibility: hidden;
+  }
+
+  /* Show only the form content */
+  .loan-content-paper,
+  .loan-content-paper * {
+    visibility: visible;
+  }
+
+  /* Reset container for print */
+  .loan-form-container {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    background: white;
+    min-height: auto;
+    position: absolute;
+    left: 0;
+    top: 0;
+  }
+
+  /* Position and size the form content */
+  .loan-content-paper {
+    position: relative;
+    padding: 2cm !important;
+    margin: 0 !important;
+    box-shadow: none !important;
+    background: white !important;
+    min-height: auto !important;
+    width: 21cm !important;
+    height: 29.7cm !important;
+    overflow: hidden !important;
+  }
+
+  /* Company Header */
+  .loan-content-paper::before {
+    content: 'ROSE PAPER MILL';
+    display: block;
+    text-align: center;
+    font-size: 20pt;
+    font-weight: bold;
+    margin-bottom: 1cm;
+    letter-spacing: 1px;
+    color: #000;
+    font-family: 'Times New Roman', Times, serif;
+  }
+
+  /* Form Title */
+  .form-title {
+    font-size: 16pt !important;
+    text-align: center !important;
+    margin: 0.5cm 0 1cm !important;
+    text-transform: uppercase !important;
+    font-weight: bold !important;
+  }
+
+  /* Section Titles */
+  .MuiTypography-h5 {
+    font-size: 14pt !important;
+    text-align: center !important;
+    margin: 0.5cm 0 !important;
+    text-transform: uppercase !important;
+    font-weight: bold !important;
+  }
+
+  /* Form Fields */
+  .MuiGrid-container {
+    row-gap: 0.3cm !important;
+  }
+
+  .MuiFormControl-root {
+    margin-bottom: 0.2cm !important;
+  }
+
+  .MuiInputLabel-root {
+    font-size: 10pt !important;
+    color: #000 !important;
+  }
+
+  .MuiOutlinedInput-root {
+    font-size: 10pt !important;
+  }
+
+  /* Text content */
+  .print-only {
+    font-size: 10pt !important;
+    line-height: 1.4 !important;
+  }
+
+  /* Monthly Installment Box */
+  .monthly-installment {
+    border: 1px solid #000 !important;
+    padding: 0.5cm !important;
+    margin: 0.5cm 0 !important;
+    text-align: center !important;
+  }
+
+  /* Signature Section */
+  .signature-section {
+    position: absolute !important;
+    bottom: 3cm !important;
+    left: 2cm !important;
+    right: 2cm !important;
+    page-break-inside: avoid !important;
+  }
+
+  .signature-line {
+    border-top: 1px solid #000 !important;
+    padding-top: 0.3cm !important;
+    margin-top: 1.5cm !important;
+    text-align: center !important;
+  }
+
+  /* Hide non-printable elements */
+  .no-print {
+    display: none !important;
+  }
+
+  /* Page Setup */
+  @page {
+    size: A4 portrait;
+    margin: 0;
+  }
+
+  /* Ensure no page breaks within elements */
+  * {
+    page-break-inside: avoid !important;
+  }
+
+  /* Reference Number */
+  .reference-number {
+    position: absolute !important;
+    top: 2cm !important;
+    right: 2cm !important;
+    font-size: 10pt !important;
+  }
+
+  /* Date */
+  .form-date {
+    position: absolute !important;
+    top: 2cm !important;
+    left: 2cm !important;
+    font-size: 10pt !important;
+  }
+}
+
+/* Hide signature section in UI */
+.print-only {
+  display: none;
+}
+
+/* Show signature section only in print */
+@media print {
+  .print-only {
+    display: block;
+  }
+}

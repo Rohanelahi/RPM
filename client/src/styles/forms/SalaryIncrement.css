@@ -1,0 +1,99 @@
+.salary-increment-form {
+  padding: 20px;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.content-paper {
+  min-height: 100vh;
+  background-color: white !important;
+}
+
+/* Print styles */
+@media print {
+  .salary-increment-form {
+    padding: 0;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+
+  .print-only {
+    display: block !important;
+  }
+
+  .content-paper {
+    box-shadow: none !important;
+    min-height: auto !important;
+  }
+
+  /* Ensure proper page breaks */
+  .signature-section {
+    page-break-inside: avoid;
+  }
+}
+
+/* Hide print-only elements when not printing */
+@media screen {
+  .print-only {
+    display: none !important;
+  }
+}
+
+/* Form styling */
+.salary-increment-form .MuiTextField-root {
+  background-color: white;
+}
+
+.salary-increment-form .MuiAutocomplete-root {
+  background-color: white;
+}
+
+/* Disabled fields styling */
+.salary-increment-form .Mui-disabled {
+  background-color: #f5f5f5;
+  border-radius: 4px;
+}
+
+/* Signature section styling */
+.signature-section {
+  margin-top: 2rem;
+}
+
+.signature-section .MuiBox-root {
+  padding-top: 1rem;
+}
+
+/* Loading state styling */
+.salary-increment-form .MuiCircularProgress-root {
+  margin: 0 8px;
+}
+
+/* Form field spacing */
+.salary-increment-form .MuiGrid-item {
+  padding-top: 16px;
+  padding-bottom: 16px;
+}
+
+/* Button styling */
+.salary-increment-form .MuiButton-root {
+  min-width: 120px;
+}
+
+/* Error state styling */
+.salary-increment-form .Mui-error {
+  margin-top: 4px;
+  font-size: 0.75rem;
+}
+
+/* Responsive adjustments */
+@media (max-width: 600px) {
+  .salary-increment-form {
+    padding: 10px;
+  }
+
+  .content-paper {
+    padding: 16px !important;
+  }
+} 

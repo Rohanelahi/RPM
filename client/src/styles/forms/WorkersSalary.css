@@ -1,0 +1,41 @@
+/* Specific styles for Workers Salary Form */
+.workers-salary-container {
+  margin-left: 280px;
+  margin-top: 60px;
+  padding: 24px;
+  min-height: calc(100vh - 60px);
+  background: var(--background-dark);
+  width: calc(100% - 280px);
+}
+
+.workers-salary-paper {
+  background: var(--background-light);
+  border-radius: 12px;
+  box-shadow: var(--shadow-md);
+  padding: 32px;
+}
+
+/* Print styles specific to Workers Salary */
+@media print {
+  .workers-salary-container {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+  }
+
+  .workers-salary-paper {
+    box-shadow: none;
+    padding: 0;
+  }
+
+  /* Landscape mode for workers salary */
+  @page {
+    size: A4 landscape;
+    margin: 1.5cm 1cm;
+  }
+
+  .signature-section {
+    margin-top: 3cm;
+    page-break-inside: avoid;
+  }
+} 

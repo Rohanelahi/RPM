@@ -12,7 +12,7 @@ import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import { format } from 'date-fns';
-import '../../styles/Forms.css';
+import '../../styles/forms/AppointmentForm.css';
 import api from '../../services/api';
 
 const AppointmentForm = () => {
@@ -125,8 +125,8 @@ const AppointmentForm = () => {
   };
 
   return (
-    <div className="page-container">
-      <Paper className="content-paper">
+    <div className="appointment-form-container">
+      <Paper className="appointment-content-paper">
         <Box sx={{ p: 3 }}>
           <Typography variant="h5" sx={{ mb: 4, fontWeight: 600 }}>
             New Employee Appointment

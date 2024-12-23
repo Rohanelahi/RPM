@@ -18,7 +18,7 @@ import {
 import { Search, Refresh } from '@mui/icons-material';
 import { format, parseISO } from 'date-fns';
 import api from '../../services/api';
-import '../../styles/Forms.css';
+import '../../styles/forms/Employees.css';
 
 const Employees = () => {
   const [employees, setEmployees] = useState([]);
@@ -88,9 +88,9 @@ const Employees = () => {
   };
 
   return (
-    <div className="page-container">
-      <Paper sx={{ p: 3 }}>
-        <Box sx={{ mb: 3, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+    <div className="employees-container">
+      <Paper className="employees-paper">
+        <Box className="employees-header">
           <Typography variant="h5" sx={{ fontWeight: 600 }}>
             Employee List
           </Typography>

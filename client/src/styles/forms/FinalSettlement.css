@@ -1,0 +1,103 @@
+.settlement-form-container {
+  margin-left: 280px;
+  margin-top: 60px;
+  padding: 24px;
+  min-height: calc(100vh - 60px);
+  background: var(--background-dark);
+  width: calc(100% - 280px);
+}
+
+.settlement-content-paper {
+  background: var(--background-light);
+  border-radius: 12px;
+  box-shadow: var(--shadow-md);
+  padding: 32px;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+/* Form Fields */
+.MuiTextField-root {
+  background-color: #fff;
+}
+
+.MuiOutlinedInput-root {
+  transition: all 0.3s ease;
+}
+
+.MuiOutlinedInput-root:hover {
+  background-color: #fafafa;
+}
+
+.MuiOutlinedInput-root.Mui-focused {
+  background-color: #ffffff;
+  box-shadow: 0 0 0 2px rgba(25, 118, 210, 0.1);
+}
+
+/* Disabled Fields */
+.MuiTextField-root.Mui-disabled {
+  background-color: #f5f5f5;
+  border-radius: 4px;
+}
+
+/* Hide signature section in UI */
+.print-only {
+  display: none;
+}
+
+/* Print styles */
+@media print {
+  /* Hide everything by default */
+  body * {
+    visibility: hidden;
+  }
+
+  /* Show only the form content */
+  .settlement-content-paper,
+  .settlement-content-paper * {
+    visibility: visible;
+  }
+
+  /* Reset container for print */
+  .settlement-form-container {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    background: white;
+    min-height: auto;
+    position: absolute;
+    left: 0;
+    top: 0;
+  }
+
+  /* Position and size the form content */
+  .settlement-content-paper {
+    position: relative;
+    padding: 2cm !important;
+    margin: 0 !important;
+    box-shadow: none !important;
+    background: white !important;
+    min-height: auto !important;
+  }
+
+  /* Show signature section in print */
+  .print-only {
+    display: block;
+  }
+
+  /* Hide non-printable elements */
+  .no-print {
+    display: none !important;
+  }
+
+  /* Page Setup */
+  @page {
+    size: A4 portrait;
+    margin: 0;
+  }
+
+  /* Ensure no page breaks within elements */
+  * {
+    page-break-inside: avoid !important;
+  }
+} 

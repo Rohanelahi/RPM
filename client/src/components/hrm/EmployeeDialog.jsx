@@ -1,14 +1,21 @@
 import React from 'react';
 import { Dialog, DialogTitle, DialogContent, DialogActions, Button } from '@mui/material';
+import '../../styles/forms/EmployeeDialog.css';
 
 const EmployeeDialog = ({ open, onClose }) => {
   return (
-    <Dialog open={open} onClose={onClose}>
-      <DialogTitle>Employee Details</DialogTitle>
-      <DialogContent>
+    <Dialog 
+      open={open} 
+      onClose={onClose}
+      className="employee-dialog"
+    >
+      <DialogTitle className="employee-dialog-title">
+        Employee Details
+      </DialogTitle>
+      <DialogContent className="employee-dialog-content">
         {/* Dialog content will be added later */}
       </DialogContent>
-      <DialogActions>
+      <DialogActions className="employee-dialog-actions">
         <Button 
           variant="outlined"
           onClick={onClose}

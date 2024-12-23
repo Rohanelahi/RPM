@@ -19,6 +19,9 @@ import {
   KeyboardArrowDown,
   KeyboardArrowUp,
   Payments,
+  Calculate,
+  ExitToApp,
+  TrendingUp,
 } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
 import '../../styles/Sidebar.css';
@@ -34,7 +37,10 @@ const menuItems = [
       { text: 'Employee List', icon: <Assessment />, path: '/hrm/employees' },
       { text: 'Leave Application', icon: <EventNote />, path: '/hrm/leave-application' },
       { text: 'Loan Application', icon: <AccountBalance />, path: '/hrm/loan-application' },
-      { text: 'Salary Calculation', icon: <Payments />, path: '/hrm/salary' }
+      { text: 'Salary Form', icon: <Payments />, path: '/hrm/SalaryForm' },
+      { text: 'Salary Increment', icon: <TrendingUp />, path: '/hrm/salary-increment' },
+      { text: 'Workers Salary', icon: <Calculate />, path: '/hrm/workers-salary' },
+      { text: 'Final Settlement', icon: <ExitToApp />, path: '/hrm/final-settlement' },
     ]
   }
 ];

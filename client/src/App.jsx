@@ -7,6 +7,10 @@ import DailyAttendance from './components/hrm/DailyAttendance';
 import Employees from './components/hrm/Employees';
 import LeaveApplicationForm from './components/hrm/LeaveApplicationForm';
 import LoanApplicationForm from './components/hrm/LoanApplicationForm';
+import SalaryForm from './components/hrm/SalaryForm';
+import WorkersSalaryForm from './components/hrm/WorkersSalaryForm';
+import FinalSettlementForm from './components/hrm/FinalSettlementForm';
+import SalaryIncrementForm from './components/hrm/SalaryIncrementForm';
 
 function App() {
   return (
@@ -19,6 +23,10 @@ function App() {
           <Route path="/hrm/employees" element={<Employees />} />
           <Route path="/hrm/leave-application" element={<LeaveApplicationForm />} />
           <Route path="/hrm/loan-application" element={<LoanApplicationForm />} />
+          <Route path="/hrm/SalaryForm" element={<SalaryForm />} />
+          <Route path="/hrm/workers-salary" element={<WorkersSalaryForm />} />
+          <Route path="/hrm/final-settlement" element={<FinalSettlementForm />} />
+          <Route path="/hrm/salary-increment" element={<SalaryIncrementForm />} />
         </Routes>
       </Layout>
     </Router>

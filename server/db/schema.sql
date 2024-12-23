@@ -92,3 +92,34 @@ CREATE TABLE IF NOT EXISTS loan_installments (
     paid_date DATE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Add view for employee details with department name
+CREATE OR REPLACE VIEW employee_details AS
+SELECT 
+    e.id,
+    e.first_name,
+    e.last_name,
+    e.department_id,
+    d.name as department_name,
+    e.designation,
+    e.joining_date,
+    e.salary,
+    e.phone,
+    e.status,
+    e.created_at
+FROM 
+    employees e
+    LEFT JOIN departments d ON e.department_id = d.id;
+
+-- Add indexes for better query performance
+CREATE INDEX IF NOT EXISTS idx_daily_attendance_employee_date 
+    ON daily_attendance(employee_id, attendance_date);
+
+CREATE INDEX IF NOT EXISTS idx_loan_applications_employee_status 
+    ON loan_applications(employee_id, status);
+
+CREATE INDEX IF NOT EXISTS idx_employees_department 
+    ON employees(department_id);
+
+CREATE INDEX IF NOT EXISTS idx_employees_status 
+    ON employees(status);

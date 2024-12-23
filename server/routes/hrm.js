@@ -3,6 +3,31 @@ const router = express.Router();
 const { addMonths, format } = require('date-fns');
 const pool = require('../db');
 
+// Attach pool to request object
+router.use((req, res, next) => {
+  req.pool = pool;
+  next();
+});
+
+// Get all departments
+router.get('/departments', async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT 
+        id,
+        name,
+        code,
+        created_at
+      FROM departments 
+      ORDER BY name
+    `);
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Error fetching departments:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Get all employees with department info
 router.get('/employees', async (req, res) => {
   try {
@@ -129,7 +154,7 @@ router.post('/leave-applications', async (req, res) => {
 
 // Submit loan application
 router.post('/loans', async (req, res) => {
-  const client = await req.pool.connect();
+  const client = await pool.connect();
   try {
     await client.query('BEGIN');
     
@@ -146,8 +171,8 @@ router.post('/loans', async (req, res) => {
     // Insert loan application
     const result = await client.query(`
       INSERT INTO loan_applications 
-      (employee_id, loan_type, amount, installments, start_month, end_month, monthly_installment)
-      VALUES ($1, $2, $3, $4, $5, $6, $7)
+      (employee_id, loan_type, amount, installments, start_month, end_month, monthly_installment, status)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, 'APPROVED')
       RETURNING id
     `, [employeeId, loanType, amount, installments, startMonth, endMonth, monthlyInstallment]);
 
@@ -155,7 +180,7 @@ router.post('/loans', async (req, res) => {
 
     // Create installment records
     let currentDate = new Date(startMonth);
-    for (let i = 0; i < parseInt(installments); i++) {
+    for (let i = 0; i < installments; i++) {
       await client.query(`
         INSERT INTO loan_installments 
         (loan_application_id, installment_date, amount)
@@ -267,17 +292,6 @@ router.post('/attendance', async (req, res) => {
   }
 });
 
-// Get all departments
-router.get('/departments', async (req, res) => {
-  try {
-    const result = await req.pool.query('SELECT * FROM departments ORDER BY name');
-    res.json(result.rows);
-  } catch (err) {
-    console.error('Error fetching departments:', err);
-    res.status(500).json({ error: err.message });
-  }
-});
-
 // Get monthly attendance for employee
 router.get('/attendance/:employeeId/:startDate/:endDate', async (req, res) => {
   try {
@@ -296,22 +310,232 @@ router.get('/attendance/:employeeId/:startDate/:endDate', async (req, res) => {
   }
 });
 
-// Get employee loans
+// Get employee loans and advances
 router.get('/loans/:employeeId', async (req, res) => {
   try {
     const { employeeId } = req.params;
-    
     const result = await pool.query(`
-      SELECT * FROM loan_applications
-      WHERE employee_id = $1
-      AND status = 'APPROVED'
-      AND end_month >= CURRENT_DATE
+      SELECT 
+        l.*,
+        TO_CHAR(l.start_month, 'YYYY-MM-DD') as start_month,
+        TO_CHAR(l.end_month, 'YYYY-MM-DD') as end_month,
+        (
+          SELECT COUNT(*)
+          FROM loan_installments li
+          WHERE li.loan_application_id = l.id 
+          AND li.paid = false
+        ) as remaining_installments,
+        (
+          SELECT COALESCE(SUM(amount), 0)
+          FROM loan_installments li
+          WHERE li.loan_application_id = l.id 
+          AND li.paid = false
+        ) as remaining_amount,
+        (
+          SELECT COALESCE(SUM(amount), 0)
+          FROM loan_installments li
+          WHERE li.loan_application_id = l.id
+        ) as total_amount
+      FROM loan_applications l
+      WHERE l.employee_id = $1
+      AND l.status = 'APPROVED'
+      AND EXISTS (
+        SELECT 1 
+        FROM loan_installments li 
+        WHERE li.loan_application_id = l.id 
+        AND li.paid = false
+      )
+      ORDER BY l.created_at DESC
     `, [employeeId]);
-    
-    res.json(result.rows);
+
+    // Instead of returning structured response, return flat array for consistency
+    const formattedLoans = result.rows.map(loan => ({
+      id: loan.id,
+      employee_id: loan.employee_id,
+      loan_type: loan.loan_type,
+      amount: parseFloat(loan.amount),
+      installments: parseInt(loan.installments),
+      monthly_installment: parseFloat(loan.monthly_installment),
+      remaining_amount: parseFloat(loan.remaining_amount),
+      remaining_installments: parseInt(loan.remaining_installments),
+      total_amount: parseFloat(loan.total_amount),
+      status: loan.status,
+      start_month: loan.start_month,
+      end_month: loan.end_month
+    }));
+
+    console.log('API Response - Loans:', formattedLoans); // Debug log
+
+    // Return flat array instead of structured object
+    res.json(formattedLoans);
+
   } catch (err) {
     console.error('Error fetching employee loans:', err);
     res.status(500).json({ error: err.message });
+  }
+});
+
+// Get employee by ID
+router.get('/employees/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const result = await pool.query(`
+      SELECT 
+        e.*,
+        d.name as department_name
+      FROM employees e
+      LEFT JOIN departments d ON e.department_id = d.id
+      WHERE e.id = $1
+    `, [id]);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Employee not found' });
+    }
+
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error('Error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Get monthly attendance
+router.get('/attendance/:employeeId/:startDate/:endDate', async (req, res) => {
+  try {
+    const { employeeId, startDate, endDate } = req.params;
+    const result = await pool.query(`
+      SELECT * FROM daily_attendance
+      WHERE employee_id = $1
+      AND attendance_date BETWEEN $2 AND $3
+      ORDER BY attendance_date
+    `, [employeeId, startDate, endDate]);
+
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Submit final settlement
+router.post('/settlements', async (req, res) => {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    
+    const {
+      employeeId,
+      separationType,
+      lastWorkingDate,
+      dueSalary,
+      loanDeductions,
+      advanceDeductions,
+      netSettlement
+    } = req.body;
+
+    // Insert settlement record
+    const result = await client.query(`
+      INSERT INTO final_settlements 
+      (employee_id, separation_type, last_working_date, due_salary, 
+       loan_deductions, advance_deductions, net_settlement)
+      VALUES ($1, $2, $3, $4, $5, $6, $7)
+      RETURNING id
+    `, [
+      employeeId,
+      separationType,
+      lastWorkingDate,
+      dueSalary,
+      loanDeductions,
+      advanceDeductions,
+      netSettlement
+    ]);
+
+    // Update employee status to INACTIVE
+    await client.query(`
+      UPDATE employees 
+      SET status = 'INACTIVE', 
+          termination_date = $2,
+          separation_type = $3
+      WHERE id = $1
+    `, [employeeId, lastWorkingDate, separationType]);
+
+    // Clear remaining loan balances
+    await client.query(`
+      UPDATE loan_applications
+      SET status = 'SETTLED'
+      WHERE employee_id = $1 
+      AND status = 'APPROVED'
+    `, [employeeId]);
+
+    await client.query('COMMIT');
+    res.status(201).json({ 
+      message: 'Final settlement processed successfully',
+      settlementId: result.rows[0].id
+    });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('Error processing final settlement:', err);
+    res.status(500).json({ error: err.message });
+  } finally {
+    client.release();
+  }
+});
+
+// Update employee status
+router.patch('/employees/:id/status', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status } = req.body;
+    
+    await pool.query(`
+      UPDATE employees 
+      SET status = $2
+      WHERE id = $1
+    `, [id, status]);
+
+    res.json({ message: 'Employee status updated successfully' });
+  } catch (err) {
+    console.error('Error updating employee status:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Add salary increment history
+router.post('/salary-increments', async (req, res) => {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    
+    const {
+      employeeId,
+      previousSalary,
+      newSalary,
+      effectiveDate,
+      remarks
+    } = req.body;
+
+    // Insert into salary increment history
+    await client.query(`
+      INSERT INTO salary_increments 
+      (employee_id, previous_salary, new_salary, effective_date, remarks)
+      VALUES ($1, $2, $3, $4, $5)
+    `, [employeeId, previousSalary, newSalary, effectiveDate, remarks]);
+
+    // Update employee salary
+    await client.query(`
+      UPDATE employees 
+      SET salary = $2
+      WHERE id = $1
+    `, [employeeId, newSalary]);
+
+    await client.query('COMMIT');
+    res.status(201).json({ message: 'Salary increment processed successfully' });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('Error processing salary increment:', err);
+    res.status(500).json({ error: err.message });
+  } finally {
+    client.release();
   }
 });
 

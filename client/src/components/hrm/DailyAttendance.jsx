@@ -17,7 +17,7 @@ import {
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
-import '../../styles/Attendance.css';
+import '../../styles/forms/DailyAttendance.css';
 import api from '../../services/api';
 import { format } from 'date-fns';
 
@@ -103,17 +103,17 @@ const DailyAttendance = () => {
   };
 
   return (
-    <div className="page-container">
+    <div className="attendance-container">
       <Paper className="attendance-paper">
         <Box className="attendance-header">
           <Typography variant="h5">Daily Attendance</Typography>
-          <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+          <Box className="attendance-controls">
             <LocalizationProvider dateAdapter={AdapterDateFns}>
               <DatePicker
                 label="Select Date"
                 value={selectedDate}
                 onChange={setSelectedDate}
-                renderInput={(params) => <TextField {...params} />}
+                renderInput={(params) => <TextField {...params} size="small" />}
               />
             </LocalizationProvider>
             <Button 

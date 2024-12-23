@@ -1,0 +1,30 @@
+/* Specific styles for Appointment Form */
+.appointment-form-container {
+  margin-left: 280px;
+  margin-top: 60px;
+  padding: 24px;
+  min-height: calc(100vh - 60px);
+  background: var(--background-dark);
+  width: calc(100% - 280px);
+}
+
+.appointment-content-paper {
+  background: var(--background-light);
+  border-radius: 12px;
+  box-shadow: var(--shadow-md);
+  padding: 32px;
+  transition: all 0.3s ease;
+}
+
+@media print {
+  .appointment-form-container {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+  }
+
+  .appointment-content-paper {
+    box-shadow: none;
+    padding: 0;
+  }
+} 
