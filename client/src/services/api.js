@@ -138,6 +138,20 @@ const api = {
     return response.json();
   },
 
+  // GRN methods
+  getGRNDetails: async (grnNumber) => {
+    try {
+      const response = await axios.get(`${API_URL}/accounts/grn/${grnNumber}`);
+      return response.data;
+    } catch (error) {
+      console.error('API Error:', error);
+      if (error.response?.status === 404) {
+        throw new Error('GRN not found');
+      }
+      throw new Error('Failed to fetch GRN details');
+    }
+  },
+
   // ... any other API methods ...
 };
 

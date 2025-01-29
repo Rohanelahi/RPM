@@ -1,0 +1,20 @@
+/* Regular styles */
+.rpm-ledger-main {
+  width: 100%;
+}
+
+.rpm-ledger-content {
+  width: 100%;
+}
+
+/* Hide print elements on screen */
+.print-only {
+  display: none;
+}
+
+/* Basic print styles for the main view */
+@media print {
+  .no-print {
+    display: none !important;
+  }
+} 

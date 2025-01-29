@@ -1,0 +1,129 @@
+.gate-form {
+  margin-left: 280px;
+  margin-top: 60px;
+  padding: 24px;
+  min-height: calc(100vh - 60px);
+  background: var(--background-dark);
+  width: calc(100% - 280px);
+}
+
+.content-paper {
+  background: var(--background-light);
+  border-radius: 12px;
+  box-shadow: var(--shadow-md);
+  padding: 32px;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+/* Form Fields */
+.MuiTextField-root {
+  background-color: #fff;
+  border-radius: 4px;
+}
+
+.MuiOutlinedInput-root {
+  transition: all 0.3s ease;
+}
+
+.MuiOutlinedInput-root:hover {
+  background-color: #fafafa;
+}
+
+.MuiOutlinedInput-root.Mui-focused {
+  background-color: #ffffff;
+  box-shadow: 0 0 0 2px rgba(25, 118, 210, 0.1);
+}
+
+/* Disabled Fields */
+.MuiTextField-root.Mui-disabled {
+  background-color: #f5f5f5;
+  opacity: 0.8;
+}
+
+/* Section Dividers */
+.MuiDivider-root {
+  margin: 24px 0;
+  background-color: rgba(0, 0, 0, 0.12);
+}
+
+/* Section Headers */
+.MuiTypography-subtitle1 {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+/* Print styles */
+@media print {
+  .gate-form {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    background: white;
+  }
+
+  .content-paper {
+    box-shadow: none;
+    padding: 20px;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+
+  .print-only {
+    display: block !important;
+  }
+
+  /* Print Layout */
+  @page {
+    size: A4;
+    margin: 2cm;
+  }
+
+  /* Company Header for Print */
+  .print-header {
+    text-align: center;
+    margin-bottom: 2cm;
+  }
+
+  .company-name {
+    font-size: 24pt;
+    font-weight: bold;
+    margin-bottom: 0.5cm;
+  }
+
+  .form-title {
+    font-size: 16pt;
+    text-transform: uppercase;
+    margin-bottom: 1cm;
+  }
+
+  /* Table Styles for Print */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 1cm 0;
+  }
+
+  th, td {
+    border: 1px solid #000;
+    padding: 0.3cm;
+    text-align: left;
+  }
+
+  /* Signature Section for Print */
+  .signature-section {
+    margin-top: 2cm;
+    page-break-inside: avoid;
+  }
+
+  .signature-line {
+    border-top: 1px solid #000;
+    width: 33%;
+    display: inline-block;
+    margin: 0 4%;
+    text-align: center;
+    padding-top: 0.5cm;
+  }
+} 
