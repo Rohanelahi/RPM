@@ -16,15 +16,29 @@ import '../../styles/Stock.css';
 const StockOverview = () => {
   const [loading, setLoading] = useState(true);
   const [stockData, setStockData] = useState([]);
+  const [lastUpdate, setLastUpdate] = useState(Date.now());
 
   useEffect(() => {
     fetchStockData();
+    
+    // Set up polling every 30 seconds
+    const interval = setInterval(() => {
+      setLastUpdate(Date.now());
+    }, 30000);
+
+    return () => clearInterval(interval);
   }, []);
+
+  // Fetch data whenever lastUpdate changes
+  useEffect(() => {
+    fetchStockData();
+  }, [lastUpdate]);
 
   const fetchStockData = async () => {
     try {
       setLoading(true);
-      const response = await fetch('http://localhost:5000/api/stock/overview');
+      // Add cache-busting query parameter
+      const response = await fetch(`http://localhost:5000/api/stock/overview?t=${Date.now()}`);
       if (!response.ok) throw new Error('Failed to fetch stock data');
       const data = await response.json();
       setStockData(data);
@@ -33,6 +47,11 @@ const StockOverview = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  // Add manual refresh function
+  const handleRefresh = () => {
+    setLastUpdate(Date.now());
   };
 
   return (

@@ -7,33 +7,62 @@ router.get('/overview', async (req, res) => {
   try {
     const result = await pool.query(
       `SELECT 
-        ge.item_type,
+        combined_stock.item_type,
         SUM(
           CASE 
-            WHEN ge.entry_type = 'PURCHASE_IN' THEN COALESCE(gep.final_quantity, ge.quantity)
-            WHEN ge.entry_type = 'PURCHASE_RETURN' THEN -COALESCE(gep.final_quantity, ge.quantity)
-            WHEN ge.entry_type = 'SALE_OUT' THEN -ge.quantity
-            WHEN ge.entry_type = 'SALE_RETURN' THEN ge.quantity
+            WHEN combined_stock.source_type = 'GATE_ENTRY' THEN
+              CASE 
+                WHEN combined_stock.entry_type = 'PURCHASE_IN' THEN COALESCE(combined_stock.final_quantity, combined_stock.quantity)
+                WHEN combined_stock.entry_type = 'PURCHASE_RETURN' THEN -COALESCE(combined_stock.final_quantity, combined_stock.quantity)
+                WHEN combined_stock.entry_type = 'SALE_OUT' THEN -combined_stock.quantity
+                WHEN combined_stock.entry_type = 'SALE_RETURN' THEN combined_stock.quantity
+              END
+            WHEN combined_stock.source_type = 'STOCK_ADJUSTMENT' THEN combined_stock.quantity
           END
         ) as current_quantity,
-        ge.unit,
-        MAX(ge.date_time) as last_updated
-       FROM gate_entries ge
-       LEFT JOIN gate_entries_pricing gep ON ge.grn_number = gep.grn_number
-       WHERE ge.entry_type IN ('PURCHASE_IN', 'PURCHASE_RETURN', 'SALE_OUT', 'SALE_RETURN')
-       GROUP BY ge.item_type, ge.unit
-       HAVING SUM(
-         CASE 
-           WHEN ge.entry_type = 'PURCHASE_IN' THEN COALESCE(gep.final_quantity, ge.quantity)
-           WHEN ge.entry_type = 'PURCHASE_RETURN' THEN -COALESCE(gep.final_quantity, ge.quantity)
-           WHEN ge.entry_type = 'SALE_OUT' THEN -ge.quantity
-           WHEN ge.entry_type = 'SALE_RETURN' THEN ge.quantity
-         END
-       ) > 0
-       ORDER BY ge.item_type`
+        combined_stock.unit,
+        MAX(combined_stock.date_time) as last_updated
+      FROM (
+        SELECT 
+          ge.item_type,
+          ge.quantity,
+          gep.final_quantity,
+          ge.entry_type,
+          ge.unit,
+          ge.date_time,
+          'GATE_ENTRY' as source_type
+        FROM gate_entries ge
+        LEFT JOIN gate_entries_pricing gep ON ge.grn_number = gep.grn_number
+        WHERE ge.entry_type IN ('PURCHASE_IN', 'PURCHASE_RETURN', 'SALE_OUT', 'SALE_RETURN')
+        
+        UNION ALL
+        
+        SELECT 
+          sa.item_type,
+          sa.quantity,
+          NULL as final_quantity,
+          sa.adjustment_type as entry_type,
+          'KG' as unit,
+          sa.date_time,
+          'STOCK_ADJUSTMENT' as source_type
+        FROM stock_adjustments sa
+      ) combined_stock
+      GROUP BY combined_stock.item_type, combined_stock.unit
+      HAVING SUM(
+        CASE 
+          WHEN combined_stock.source_type = 'GATE_ENTRY' THEN
+            CASE 
+              WHEN combined_stock.entry_type = 'PURCHASE_IN' THEN COALESCE(combined_stock.final_quantity, combined_stock.quantity)
+              WHEN combined_stock.entry_type = 'PURCHASE_RETURN' THEN -COALESCE(combined_stock.final_quantity, combined_stock.quantity)
+              WHEN combined_stock.entry_type = 'SALE_OUT' THEN -combined_stock.quantity
+              WHEN combined_stock.entry_type = 'SALE_RETURN' THEN combined_stock.quantity
+            END
+          WHEN combined_stock.source_type = 'STOCK_ADJUSTMENT' THEN combined_stock.quantity
+        END
+      ) > 0
+      ORDER BY combined_stock.item_type`
     );
 
-    console.log('Stock overview result:', result.rows);
     res.json(result.rows);
   } catch (error) {
     console.error('Error fetching stock overview:', error);

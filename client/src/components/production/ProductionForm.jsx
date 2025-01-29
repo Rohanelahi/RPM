@@ -23,7 +23,7 @@ import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 
-const ProductionForm = () => {
+const ProductionForm = ({ onProductionAdded }) => {
   const [formData, setFormData] = useState({
     date: new Date(),
     paperType: '',
@@ -32,20 +32,34 @@ const ProductionForm = () => {
     boilerFuelType: '',
     boilerFuelQuantity: '',
     boilerFuelCost: '',
-    recipe: [{ raddiType: '', percentageUsed: '', quantityUsed: '', yield: '' }],
+    electricityUnits: '',
+    electricityUnitPrice: '',
+    electricityCost: '0',
+    recipe: [{ raddiType: '', percentageUsed: '', yield: '' }],
     totalYield: ''
   });
 
   const paperTypes = ['SUPER', 'CMP', 'BOARD'];
   const boilerFuelTypes = ['TOORI', 'TUKKA'];
-  const raddiTypes = ['PETTI', 'DABBI', 'CEMENT BAG'];
+  const raddiTypes = ['Petti', 'DABBI', 'CEMENT BAG'];
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: value
-    }));
+    setFormData(prev => {
+      const newState = {
+        ...prev,
+        [name]: value
+      };
+
+      // Calculate electricity cost when either units or unit price changes
+      if (name === 'electricityUnits' || name === 'electricityUnitPrice') {
+        const units = name === 'electricityUnits' ? value : prev.electricityUnits;
+        const unitPrice = name === 'electricityUnitPrice' ? value : prev.electricityUnitPrice;
+        newState.electricityCost = calculateElectricityCost(units, unitPrice);
+      }
+
+      return newState;
+    });
   };
 
   const handleDateChange = (date) => {
@@ -95,7 +109,7 @@ const ProductionForm = () => {
   const addRecipe = () => {
     setFormData(prev => ({
       ...prev,
-      recipe: [...prev.recipe, { raddiType: '', percentageUsed: '', quantityUsed: '', yield: '' }]
+      recipe: [...prev.recipe, { raddiType: '', percentageUsed: '', yield: '' }]
     }));
   };
 
@@ -106,27 +120,112 @@ const ProductionForm = () => {
     }));
   };
 
+  const calculateRaddiQuantities = () => {
+    return formData.recipe.map(item => {
+      if (!item.percentageUsed || !item.yield) return { ...item, quantityUsed: '0' };
+      
+      const totalWeight = parseFloat(formData.totalWeight) || 0;
+      const percentageUsed = parseFloat(item.percentageUsed) || 0;
+      const yieldPercentage = parseFloat(item.yield) || 0;
+      
+      // New formula: (totalWeight + (totalWeight - totalWeight * (yield/100))) * (percentage/100)
+      const wastage = totalWeight - (totalWeight * (yieldPercentage / 100));
+      const totalRequired = totalWeight + wastage;
+      const quantityUsed = totalRequired * (percentageUsed / 100);
+      
+      return {
+        ...item,
+        quantityUsed: quantityUsed.toFixed(2)
+      };
+    });
+  };
+
+  const calculateElectricityCost = (units, unitPrice) => {
+    const calculatedCost = (parseFloat(units) || 0) * (parseFloat(unitPrice) || 0);
+    return calculatedCost.toFixed(2);
+  };
+
+  const checkStockAvailability = async (recipe) => {
+    try {
+      const response = await fetch('http://localhost:5000/api/production/check-stock', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ recipe })
+      });
+
+      if (!response.ok) throw new Error('Failed to check stock');
+      const stockChecks = await response.json();
+
+      const insufficientStock = stockChecks.filter(check => !check.sufficient);
+      if (insufficientStock.length > 0) {
+        const message = insufficientStock.map(item => 
+          `${item.raddiType}: Need ${item.required}kg, Available ${item.available}kg`
+        ).join('\n');
+        throw new Error(`Insufficient stock:\n${message}`);
+      }
+
+      return true;
+    } catch (error) {
+      throw error;
+    }
+  };
+
+  const resetForm = () => {
+    setFormData({
+      date: new Date(),
+      paperType: '',
+      reels: [{ size: '', weight: '' }],
+      totalWeight: '0',
+      boilerFuelType: '',
+      boilerFuelQuantity: '',
+      boilerFuelCost: '',
+      electricityUnits: '',
+      electricityUnitPrice: '',
+      electricityCost: '0',
+      recipe: [{ raddiType: '', percentageUsed: '', yield: '' }],
+      totalYield: ''
+    });
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
+      const recipeWithQuantities = calculateRaddiQuantities();
+      
+      await checkStockAvailability(recipeWithQuantities);
+
+      const submissionData = {
+        ...formData,
+        recipe: recipeWithQuantities
+      };
+
       const response = await fetch('http://localhost:5000/api/production/add', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(formData)
+        body: JSON.stringify(submissionData)
       });
 
       if (!response.ok) {
         throw new Error('Failed to add production record');
       }
 
-      // Reset form or show success message
+      const result = await response.json();
       alert('Production record added successfully');
+      
+      // Reset form after successful submission
+      resetForm();
+      
+      if (onProductionAdded) {
+        onProductionAdded(result.id);
+      }
       
     } catch (error) {
       console.error('Error adding production:', error);
-      alert('Failed to add production record');
+      alert(error.message);
     }
   };
 
@@ -257,6 +356,44 @@ const ProductionForm = () => {
               />
             </Grid>
 
+            {/* Electricity Cost Section */}
+            <Grid item xs={12}>
+              <Typography variant="h6" gutterBottom>
+                Electricity Cost
+              </Typography>
+              <Grid container spacing={3}>
+                <Grid item xs={12} md={4}>
+                  <TextField
+                    fullWidth
+                    label="Units Consumed"
+                    type="number"
+                    name="electricityUnits"
+                    value={formData.electricityUnits}
+                    onChange={handleChange}
+                  />
+                </Grid>
+                <Grid item xs={12} md={4}>
+                  <TextField
+                    fullWidth
+                    label="Unit Price"
+                    type="number"
+                    name="electricityUnitPrice"
+                    value={formData.electricityUnitPrice}
+                    onChange={handleChange}
+                  />
+                </Grid>
+                <Grid item xs={12} md={4}>
+                  <TextField
+                    fullWidth
+                    label="Total Electricity Cost"
+                    type="number"
+                    value={formData.electricityCost}
+                    disabled
+                  />
+                </Grid>
+              </Grid>
+            </Grid>
+
             {/* Recipe Section */}
             <Grid item xs={12}>
               <Typography variant="h6" gutterBottom>
@@ -271,8 +408,8 @@ const ProductionForm = () => {
                     <TableRow>
                       <TableCell>Raddi Type</TableCell>
                       <TableCell>Percentage Used</TableCell>
-                      <TableCell>Quantity Used</TableCell>
                       <TableCell>Yield (%)</TableCell>
+                      <TableCell>Calculated Quantity (kg)</TableCell>
                       <TableCell>Action</TableCell>
                     </TableRow>
                   </TableHead>
@@ -302,18 +439,21 @@ const ProductionForm = () => {
                         <TableCell>
                           <TextField
                             type="number"
-                            value={item.quantityUsed}
-                            onChange={(e) => handleRecipeChange(index, 'quantityUsed', e.target.value)}
-                            fullWidth
-                          />
-                        </TableCell>
-                        <TableCell>
-                          <TextField
-                            type="number"
                             value={item.yield}
                             onChange={(e) => handleRecipeChange(index, 'yield', e.target.value)}
                             fullWidth
                           />
+                        </TableCell>
+                        <TableCell>
+                          {item.percentageUsed && item.yield ? 
+                            (() => {
+                              const totalWeight = parseFloat(formData.totalWeight);
+                              const wastage = totalWeight - (totalWeight * (parseFloat(item.yield) / 100));
+                              const totalRequired = totalWeight + wastage;
+                              return (totalRequired * (parseFloat(item.percentageUsed) / 100)).toFixed(2);
+                            })()
+                            : '0'
+                          }
                         </TableCell>
                         <TableCell>
                           <IconButton

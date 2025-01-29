@@ -223,18 +223,18 @@ const Sidebar = () => {
             text: 'Stock Management',
             icon: <InventoryIcon />,
             submenu: [
-              { 
-                text: 'Stock Overview', 
-                icon: <InventoryIcon />, 
-                path: '/stock/overview' 
-              },
-              { 
-                text: 'Stock History', 
-                icon: <History />, 
-                path: '/stock/history' 
-              }
+              { text: 'Stock Overview', icon: <InventoryIcon />, path: '/stock/overview' },
+              { text: 'Stock History', icon: <History />, path: '/stock/history' }
             ]
           },
+          {
+            text: 'Production',
+            icon: <FactoryIcon />,
+            submenu: [
+              { text: 'Add Production', icon: <AddIcon />, path: '/production/add' },
+              { text: 'Production History', icon: <ListIcon />, path: '/production/history' }
+            ]
+          }
         ];
       
       case 'GATE':
