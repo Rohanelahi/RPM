@@ -23,49 +23,93 @@ router.post('/in', async (req, res) => {
     
     const {
       grnNumber,
-      itemId,
-      quantity,
-      unit,
       vendorId,
       vehicleNumber,
       driverName,
       dateTime,
-      remarks
+      remarks,
+      items  // Array of items from the frontend
     } = req.body;
 
-    // Create store entry
-    const storeEntry = await client.query(
-      `INSERT INTO store_entries (
-        grn_number, entry_type, item_id, quantity, unit,
-        vendor_id, vehicle_number, driver_name, date_time, remarks
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-      RETURNING id`,
-      [grnNumber, 'STORE_IN', itemId, quantity, unit,
-       vendorId, vehicleNumber, driverName, dateTime, remarks]
-    );
+    // Generate a unique GRN number
+    let uniqueGRN = grnNumber;
+    let increment = 0;
+    let isUnique = false;
 
-    // Create pricing entry for pending processing
-    await client.query(
-      `INSERT INTO pricing_entries (
-        entry_type, reference_id, status, quantity, unit
-      ) VALUES ($1, $2, $3, $4, $5)`,
-      ['STORE_PURCHASE', storeEntry.rows[0].id, 'PENDING', quantity, unit]
-    );
+    while (!isUnique) {
+      try {
+        const suffix = increment === 0 ? '' : `-${increment}`;
+        uniqueGRN = `${grnNumber}${suffix}`;
+        
+        // Check if GRN exists
+        const existingGRN = await client.query(
+          'SELECT id FROM store_entries WHERE grn_number = $1 LIMIT 1',
+          [uniqueGRN]
+        );
 
-    // Update store item stock
-    await client.query(
-      `UPDATE store_items 
-       SET current_stock = current_stock + $1
-       WHERE id = $2`,
-      [quantity, itemId]
-    );
+        if (existingGRN.rows.length === 0) {
+          isUnique = true;
+        } else {
+          increment++;
+          if (increment > 999) {
+            throw new Error('Unable to generate unique GRN number');
+          }
+        }
+      } catch (err) {
+        if (err.code === '23505') { // Unique violation error code
+          increment++;
+          if (increment > 999) {
+            throw new Error('Unable to generate unique GRN number');
+          }
+          continue;
+        }
+        throw err;
+      }
+    }
+
+    // Process each item with a unique sub-GRN
+    for (const [index, item] of items.entries()) {
+      const itemGRN = `${uniqueGRN}-${(index + 1).toString().padStart(2, '0')}`;
+      
+      // Create store entry
+      const storeEntry = await client.query(
+        `INSERT INTO store_entries (
+          grn_number, entry_type, item_id, quantity, unit,
+          vendor_id, vehicle_number, driver_name, date_time, remarks
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        RETURNING id`,
+        [itemGRN, 'STORE_IN', item.itemId, item.quantity, item.unit,
+         vendorId, vehicleNumber, driverName, dateTime, remarks]
+      );
+
+      // Create pricing entry
+      await client.query(
+        `INSERT INTO pricing_entries (
+          entry_type, reference_id, status, quantity, unit
+        ) VALUES ($1, $2, $3, $4, $5)`,
+        ['STORE_PURCHASE', storeEntry.rows[0].id, 'PENDING', item.quantity, item.unit]
+      );
+
+      // Update store item stock
+      await client.query(
+        `UPDATE store_items 
+         SET current_stock = current_stock + $1
+         WHERE id = $2`,
+        [item.quantity, item.itemId]
+      );
+    }
 
     await client.query('COMMIT');
-    res.json({ message: 'Store in entry created successfully' });
+    res.json({ 
+      message: 'Store in entries created successfully',
+      grnNumber: uniqueGRN 
+    });
   } catch (error) {
     await client.query('ROLLBACK');
     console.error('Error in store in entry:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ 
+      error: error.message || 'Internal server error'
+    });
   } finally {
     client.release();
   }

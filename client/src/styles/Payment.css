@@ -1,0 +1,83 @@
+.payment-container {
+  padding: 20px;
+  max-width: 1200px;
+  margin: 20px 10px 10px 300px;
+}
+
+.payment-paper {
+  padding: 24px;
+  margin-bottom: 24px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.payment-title {
+  color: #1976d2;
+  margin-bottom: 24px;
+  font-weight: 500;
+}
+
+.payment-form {
+  width: 100%;
+}
+
+.payment-field {
+  margin-bottom: 16px;
+}
+
+.payment-select {
+  width: 100%;
+}
+
+.payment-amount {
+  font-family: 'Roboto Mono', monospace;
+}
+
+.payment-remarks {
+  margin-top: 16px;
+}
+
+.payment-submit-button {
+  margin-top: 24px !important;
+  min-width: 150px;
+}
+
+.payment-submit-button.received {
+  background-color: #2e7d32 !important;
+}
+
+.payment-submit-button.issued {
+  background-color: #d32f2f !important;
+}
+
+/* Loading state */
+.payment-loading {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 400px;
+}
+
+/* Responsive adjustments */
+@media (max-width: 960px) {
+  .payment-container {
+    margin-left: 10px;
+  }
+}
+
+@media (max-width: 600px) {
+  .payment-container {
+    padding: 10px;
+  }
+  
+  .payment-paper {
+    padding: 16px;
+  }
+}
+
+/* Print styles */
+@media print {
+  .payment-container {
+    margin: 0;
+    padding: 20px;
+  }
+} 

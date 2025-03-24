@@ -17,17 +17,18 @@ import {
   FormControl,
   InputLabel,
   Select,
+  Stack,
 } from '@mui/material';
-import { Delete as DeleteIcon, Add as AddIcon } from '@mui/icons-material';
+import { Delete as DeleteIcon, Add as AddIcon, Print } from '@mui/icons-material';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
+import { format } from 'date-fns';
 
 const ProductionForm = ({ onProductionAdded }) => {
   const [formData, setFormData] = useState({
     date: new Date(),
     paperType: '',
-    reels: [{ size: '', weight: '' }],
     totalWeight: '0',
     boilerFuelType: '',
     boilerFuelQuantity: '',
@@ -39,8 +40,10 @@ const ProductionForm = ({ onProductionAdded }) => {
     totalYield: ''
   });
 
+  const [isPrinted, setIsPrinted] = useState(false);
+
   const paperTypes = ['SUPER', 'CMP', 'BOARD'];
-  const boilerFuelTypes = ['TOORI', 'TUKKA'];
+  const boilerFuelTypes = ['Boiler Fuel (Toori)', 'Boiler Fuel (Tukka)'];
   const raddiTypes = ['Petti', 'DABBI', 'CEMENT BAG'];
 
   const handleChange = (e) => {
@@ -69,40 +72,12 @@ const ProductionForm = ({ onProductionAdded }) => {
     }));
   };
 
-  const handleReelChange = (index, field, value) => {
-    const newReels = [...formData.reels];
-    newReels[index][field] = value;
-    setFormData(prev => ({
-      ...prev,
-      reels: newReels,
-      totalWeight: calculateTotalWeight(newReels)
-    }));
-  };
-
-  const calculateTotalWeight = (reels) => {
-    return reels.reduce((sum, reel) => sum + (parseFloat(reel.weight) || 0), 0).toString();
-  };
-
   const handleRecipeChange = (index, field, value) => {
     const newRecipe = [...formData.recipe];
     newRecipe[index][field] = value;
     setFormData(prev => ({
       ...prev,
       recipe: newRecipe
-    }));
-  };
-
-  const addReel = () => {
-    setFormData(prev => ({
-      ...prev,
-      reels: [...prev.reels, { size: '', weight: '' }]
-    }));
-  };
-
-  const removeReel = (index) => {
-    setFormData(prev => ({
-      ...prev,
-      reels: prev.reels.filter((_, i) => i !== index)
     }));
   };
 
@@ -176,7 +151,6 @@ const ProductionForm = ({ onProductionAdded }) => {
     setFormData({
       date: new Date(),
       paperType: '',
-      reels: [{ size: '', weight: '' }],
       totalWeight: '0',
       boilerFuelType: '',
       boilerFuelQuantity: '',
@@ -187,6 +161,156 @@ const ProductionForm = ({ onProductionAdded }) => {
       recipe: [{ raddiType: '', percentageUsed: '', yield: '' }],
       totalYield: ''
     });
+  };
+
+  const handlePrint = () => {
+    const currentDate = format(formData.date, 'dd/MM/yyyy');
+    const printWindow = window.open('', '_blank');
+    
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Production Form</title>
+          <style>
+            body {
+              font-family: Arial, sans-serif;
+              margin: 2cm;
+            }
+            .header {
+              text-align: center;
+              margin-bottom: 2cm;
+            }
+            .company-name {
+              font-size: 24pt;
+              font-weight: bold;
+              margin-bottom: 0.5cm;
+            }
+            .document-title {
+              font-size: 16pt;
+              text-transform: uppercase;
+              margin-bottom: 1cm;
+            }
+            table {
+              width: 100%;
+              border-collapse: collapse;
+              margin-bottom: 1cm;
+            }
+            th, td {
+              border: 1px solid #000;
+              padding: 8px;
+              text-align: left;
+            }
+            th {
+              background-color: #f0f0f0;
+            }
+            .signatures {
+              margin-top: 2cm;
+            }
+            .signature-grid {
+              display: grid;
+              grid-template-columns: repeat(3, 1fr);
+              gap: 1cm;
+            }
+            .signature-box {
+              text-align: center;
+            }
+            .signature-line {
+              margin-top: 1cm;
+              border-top: 1px solid #000;
+              padding-top: 0.5cm;
+            }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <div class="company-name">ROSE PAPER MILL</div>
+            <div class="document-title">Production Form</div>
+            <div>Date: ${currentDate}</div>
+          </div>
+
+          <table>
+            <tr>
+              <th colspan="2">Basic Information</th>
+            </tr>
+            <tr>
+              <td><strong>Paper Type:</strong></td>
+              <td>${formData.paperType}</td>
+            </tr>
+            <tr>
+              <td><strong>Total Weight:</strong></td>
+              <td>${formData.totalWeight} kg</td>
+            </tr>
+          </table>
+
+          <table>
+            <tr>
+              <th colspan="4">Recipe</th>
+            </tr>
+            <tr>
+              <th>Raddi Type</th>
+              <th>Percentage Used</th>
+              <th>Yield (%)</th>
+              <th>Quantity (kg)</th>
+            </tr>
+            ${formData.recipe.map(item => {
+              const totalWeight = parseFloat(formData.totalWeight);
+              const wastage = totalWeight - (totalWeight * (parseFloat(item.yield) / 100));
+              const totalRequired = totalWeight + wastage;
+              const quantity = totalRequired * (parseFloat(item.percentageUsed) / 100);
+              return `
+                <tr>
+                  <td>${item.raddiType}</td>
+                  <td>${item.percentageUsed}%</td>
+                  <td>${item.yield}%</td>
+                  <td>${quantity.toFixed(2)}</td>
+                </tr>
+              `;
+            }).join('')}
+          </table>
+
+          <table>
+            <tr>
+              <th colspan="2">Electricity Details</th>
+            </tr>
+            <tr>
+              <td><strong>Units Consumed:</strong></td>
+              <td>${formData.electricityUnits}</td>
+            </tr>
+            <tr>
+              <td><strong>Unit Price:</strong></td>
+              <td>Rs. ${formData.electricityUnitPrice}</td>
+            </tr>
+            <tr>
+              <td><strong>Total Cost:</strong></td>
+              <td>Rs. ${formData.electricityCost}</td>
+            </tr>
+          </table>
+
+          <div class="signatures">
+            <div class="signature-grid">
+              <div class="signature-box">
+                <div class="signature-line">Production Manager</div>
+              </div>
+              <div class="signature-box">
+                <div class="signature-line">Store Manager</div>
+              </div>
+              <div class="signature-box">
+                <div class="signature-line">Director</div>
+              </div>
+            </div>
+          </div>
+        </body>
+      </html>
+    `);
+
+    printWindow.document.close();
+    printWindow.focus();
+    setTimeout(() => {
+      printWindow.print();
+      printWindow.close();
+      setIsPrinted(true);
+    }, 250);
   };
 
   const handleSubmit = async (e) => {
@@ -216,8 +340,8 @@ const ProductionForm = ({ onProductionAdded }) => {
       const result = await response.json();
       alert('Production record added successfully');
       
-      // Reset form after successful submission
       resetForm();
+      setIsPrinted(false);
       
       if (onProductionAdded) {
         onProductionAdded(result.id);
@@ -265,58 +389,16 @@ const ProductionForm = ({ onProductionAdded }) => {
               </FormControl>
             </Grid>
 
-            {/* Reels Section */}
+            {/* Total Weight Section */}
             <Grid item xs={12}>
-              <Typography variant="h6" gutterBottom>
-                Reels
-                <IconButton color="primary" onClick={addReel}>
-                  <AddIcon />
-                </IconButton>
-              </Typography>
-              <TableContainer>
-                <Table>
-                  <TableHead>
-                    <TableRow>
-                      <TableCell>Size</TableCell>
-                      <TableCell>Weight (kg)</TableCell>
-                      <TableCell>Action</TableCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {formData.reels.map((reel, index) => (
-                      <TableRow key={index}>
-                        <TableCell>
-                          <TextField
-                            value={reel.size}
-                            onChange={(e) => handleReelChange(index, 'size', e.target.value)}
-                            fullWidth
-                          />
-                        </TableCell>
-                        <TableCell>
-                          <TextField
-                            type="number"
-                            value={reel.weight}
-                            onChange={(e) => handleReelChange(index, 'weight', e.target.value)}
-                            fullWidth
-                          />
-                        </TableCell>
-                        <TableCell>
-                          <IconButton
-                            color="error"
-                            onClick={() => removeReel(index)}
-                            disabled={formData.reels.length === 1}
-                          >
-                            <DeleteIcon />
-                          </IconButton>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </TableContainer>
-              <Typography variant="subtitle1" sx={{ mt: 2, fontWeight: 'bold' }}>
-                Total Weight: {formData.totalWeight} kg
-              </Typography>
+              <TextField
+                fullWidth
+                label="Total Weight Produced (kg)"
+                type="number"
+                name="totalWeight"
+                value={formData.totalWeight}
+                onChange={handleChange}
+              />
             </Grid>
 
             {/* Boiler Fuel Section */}
@@ -473,14 +555,24 @@ const ProductionForm = ({ onProductionAdded }) => {
 
             {/* Submit Button */}
             <Grid item xs={12}>
-              <Button
-                type="submit"
-                variant="contained"
-                color="primary"
-                size="large"
-              >
-                Add Production Record
-              </Button>
+              <Stack direction="row" spacing={2} justifyContent="flex-end">
+                <Button
+                  variant="outlined"
+                  startIcon={<Print />}
+                  onClick={handlePrint}
+                >
+                  Print
+                </Button>
+                <Button
+                  type="submit"
+                  variant="contained"
+                  color="primary"
+                  size="large"
+                  disabled={!isPrinted}
+                >
+                  Add Production Record
+                </Button>
+              </Stack>
             </Grid>
           </Grid>
         </form>

@@ -17,12 +17,14 @@ import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import { Print } from '@mui/icons-material';
 import '../../styles/forms/GateForm.css';
 import useAccounts from '../../hooks/useAccounts';
+import { format } from 'date-fns';
 
 const PurchaseReturnForm = () => {
   const [loading, setLoading] = useState(false);
   const { accounts: suppliers, loading: suppliersLoading } = useAccounts('SUPPLIER');
   const [purchaseGRNs, setPurchaseGRNs] = useState([]);
   const [selectedPurchase, setSelectedPurchase] = useState(null);
+  const [isPrinted, setIsPrinted] = useState(false);
   
   const [formData, setFormData] = useState({
     returnNumber: '',
@@ -216,7 +218,172 @@ const PurchaseReturnForm = () => {
   };
 
   const handlePrint = () => {
-    // Print functionality will be added similar to other forms
+    const printWindow = window.open('', '_blank');
+    const currentDate = format(new Date(), 'dd/MM/yyyy');
+    const selectedSupplier = suppliers.find(s => s.id === formData.supplierId);
+
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Purchase Return Gate Pass</title>
+          <style>
+            @page { size: A4; margin: 0; }
+            body { 
+              margin: 2cm;
+              font-family: Arial, sans-serif;
+              color: #000;
+              line-height: 1.6;
+            }
+            .header {
+              text-align: center;
+              margin-bottom: 1cm;
+            }
+            .company-name {
+              font-size: 24pt;
+              font-weight: bold;
+              margin-bottom: 0.5cm;
+            }
+            .document-title {
+              font-size: 16pt;
+              text-transform: uppercase;
+              margin-bottom: 1cm;
+            }
+            table {
+              width: 100%;
+              border-collapse: collapse;
+              margin-bottom: 1cm;
+            }
+            th, td {
+              border: 1px solid #000;
+              padding: 8px;
+              text-align: left;
+            }
+            th {
+              background-color: #f0f0f0;
+            }
+            .signatures {
+              margin-top: 2cm;
+            }
+            .signature-grid {
+              display: grid;
+              grid-template-columns: repeat(3, 1fr);
+              gap: 1cm;
+            }
+            .signature-box {
+              text-align: center;
+            }
+            .signature-line {
+              margin-top: 1cm;
+              border-top: 1px solid #000;
+              padding-top: 0.5cm;
+            }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <div class="company-name">ACME PAPER PRODUCTS</div>
+            <div class="document-title">Purchase Return Gate Pass</div>
+          </div>
+
+          <table>
+            <tr>
+              <th colspan="2">Basic Information</th>
+            </tr>
+            <tr>
+              <td><strong>Return Number:</strong></td>
+              <td>${formData.returnNumber}</td>
+            </tr>
+            <tr>
+              <td><strong>Date:</strong></td>
+              <td>${currentDate}</td>
+            </tr>
+            <tr>
+              <td><strong>Supplier:</strong></td>
+              <td>${selectedSupplier?.account_name || 'N/A'}</td>
+            </tr>
+            <tr>
+              <td><strong>Purchase GRN:</strong></td>
+              <td>${formData.purchaseGRN}</td>
+            </tr>
+          </table>
+
+          <table>
+            <tr>
+              <th colspan="2">Vehicle Information</th>
+            </tr>
+            <tr>
+              <td><strong>Vehicle Number:</strong></td>
+              <td>${formData.vehicleNumber}</td>
+            </tr>
+            <tr>
+              <td><strong>Driver Name:</strong></td>
+              <td>${formData.driverName || 'N/A'}</td>
+            </tr>
+          </table>
+
+          <table>
+            <tr>
+              <th colspan="2">Item Details</th>
+            </tr>
+            <tr>
+              <td><strong>Item Type:</strong></td>
+              <td>${formData.itemType}</td>
+            </tr>
+            <tr>
+              <td><strong>Original Quantity:</strong></td>
+              <td>${formData.originalQuantity} ${formData.unit}</td>
+            </tr>
+            <tr>
+              <td><strong>Return Quantity:</strong></td>
+              <td>${formData.returnQuantity} ${formData.unit}</td>
+            </tr>
+            <tr>
+              <td><strong>Return Reason:</strong></td>
+              <td>${formData.returnReason}</td>
+            </tr>
+            ${formData.remarks ? `
+            <tr>
+              <td><strong>Remarks:</strong></td>
+              <td>${formData.remarks}</td>
+            </tr>
+            ` : ''}
+          </table>
+
+          <div class="signatures">
+            <div class="signature-grid">
+              <div class="signature-box">
+                <div class="signature-line">Gate Officer</div>
+              </div>
+              <div class="signature-box">
+                <div class="signature-line">Supplier</div>
+              </div>
+              <div class="signature-box">
+                <div class="signature-line">Store Manager</div>
+              </div>
+            </div>
+          </div>
+        </body>
+      </html>
+    `);
+
+    printWindow.document.close();
+    printWindow.focus();
+    setTimeout(() => {
+      printWindow.print();
+      printWindow.close();
+      setIsPrinted(true);
+    }, 250);
+  };
+
+  const handleKeyPress = (event, nextFieldId) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      const nextField = document.getElementById(nextFieldId);
+      if (nextField) {
+        nextField.focus();
+      }
+    }
   };
 
   return (
@@ -260,9 +427,10 @@ const PurchaseReturnForm = () => {
                   onChange={(e) => setFormData(prev => ({
                     ...prev,
                     supplierId: e.target.value,
-                    purchaseGRN: '' // Reset GRN when supplier changes
+                    purchaseGRN: ''
                   }))}
                   disabled={suppliersLoading}
+                  onKeyPress={(e) => handleKeyPress(e, 'purchaseGRN')}
                 >
                   {suppliers.map((supplier) => (
                     <MenuItem key={supplier.id} value={supplier.id}>
@@ -281,6 +449,7 @@ const PurchaseReturnForm = () => {
                   value={formData.purchaseGRN}
                   onChange={(e) => handleGRNSelect(e.target.value)}
                   disabled={!formData.supplierId || loading}
+                  onKeyPress={(e) => handleKeyPress(e, 'vehicleNumber')}
                 >
                   {purchaseGRNs.map((grn) => (
                     <MenuItem key={grn.grn_number} value={grn.grn_number}>
@@ -300,6 +469,7 @@ const PurchaseReturnForm = () => {
                     ...prev,
                     vehicleNumber: e.target.value.toUpperCase()
                   }))}
+                  onKeyPress={(e) => handleKeyPress(e, 'driverName')}
                 />
               </Grid>
 
@@ -312,6 +482,7 @@ const PurchaseReturnForm = () => {
                     ...prev,
                     driverName: e.target.value
                   }))}
+                  onKeyPress={(e) => handleKeyPress(e, 'itemType')}
                 />
               </Grid>
 
@@ -351,6 +522,7 @@ const PurchaseReturnForm = () => {
                     ...prev,
                     itemType: e.target.value
                   }))}
+                  onKeyPress={(e) => handleKeyPress(e, 'unit')}
                 >
                   {itemTypes.map((option) => (
                     <MenuItem key={option} value={option}>
@@ -371,6 +543,7 @@ const PurchaseReturnForm = () => {
                     ...prev,
                     unit: e.target.value
                   }))}
+                  onKeyPress={(e) => handleKeyPress(e, 'originalQuantity')}
                 >
                   {units.map((option) => (
                     <MenuItem key={option} value={option}>
@@ -391,6 +564,7 @@ const PurchaseReturnForm = () => {
                     ...prev,
                     originalQuantity: e.target.value
                   }))}
+                  onKeyPress={(e) => handleKeyPress(e, 'returnQuantity')}
                 />
               </Grid>
 
@@ -405,6 +579,7 @@ const PurchaseReturnForm = () => {
                     ...prev,
                     returnQuantity: e.target.value
                   }))}
+                  onKeyPress={(e) => handleKeyPress(e, 'returnReason')}
                 />
               </Grid>
 
@@ -419,6 +594,7 @@ const PurchaseReturnForm = () => {
                     ...prev,
                     returnReason: e.target.value
                   }))}
+                  onKeyPress={(e) => handleKeyPress(e, 'remarks')}
                 >
                   {returnReasons.map((option) => (
                     <MenuItem key={option} value={option}>
@@ -454,7 +630,7 @@ const PurchaseReturnForm = () => {
                   <Button
                     type="submit"
                     variant="contained"
-                    disabled={loading}
+                    disabled={loading || !isPrinted}
                   >
                     {loading ? <CircularProgress size={24} /> : 'Submit'}
                   </Button>

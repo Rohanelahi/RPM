@@ -26,9 +26,6 @@ const attendanceStatuses = [
   'Present',
   'Absent',
   'Half Day',
-  'On Leave',
-  'Holiday',
-  'Weekend',
 ];
 
 const DailyAttendance = () => {
@@ -58,8 +55,8 @@ const DailyAttendance = () => {
               name: `${emp.first_name} ${emp.last_name}`,
               department: emp.department_name,
               status: 'Present',
-              in_time: '09:00',
-              out_time: '17:00',
+              in_time: emp.department_name === 'Admin' ? '09:00' : '07:00',
+              out_time: emp.department_name === 'Admin' ? '17:00' : '19:00',
               overtime: '0',
               remarks: ''
             }));
@@ -77,13 +74,57 @@ const DailyAttendance = () => {
     fetchAttendanceData();
   }, [selectedDate, canEdit]);
 
+  const validateTimeEntry = (record, field, value) => {
+    const isAdmin = record.department === 'Admin';
+    const defaultInTime = isAdmin ? '09:00' : '07:00';
+    const defaultOutTime = isAdmin ? '17:00' : '19:00';
+
+    if (field === 'in_time') {
+      if (value < (isAdmin ? '09:00' : '07:00')) {
+        return defaultInTime;
+      }
+    } else if (field === 'out_time') {
+      if (value < record.in_time) {
+        return defaultOutTime;
+      }
+    }
+    return value;
+  };
+
+  const calculateSalaryForDay = (record) => {
+    const dailySalary = parseFloat(record.daily_salary) / 30;
+    switch (record.status) {
+      case 'Half Day':
+        return dailySalary / 2;
+      case 'Present':
+        return dailySalary;
+      default:
+        return 0;
+    }
+  };
+
   const handleAttendanceChange = (employeeId, field, value) => {
     if (!canEdit) return;
     
     setAttendanceData(prev =>
-      prev.map(record =>
-        record.employee_id === employeeId ? { ...record, [field]: value } : record
-      )
+      prev.map(record => {
+        if (record.employee_id === employeeId) {
+          const updatedRecord = { ...record, [field]: value };
+          
+          // Recalculate salary when status changes
+          if (field === 'status') {
+            updatedRecord.salary_for_day = calculateSalaryForDay(updatedRecord);
+          }
+          
+          // Validate time entries
+          if (field === 'in_time' || field === 'out_time') {
+            updatedRecord[field] = validateTimeEntry(record, field, value);
+          }
+          
+          return updatedRecord;
+        }
+        return record;
+      })
     );
   };
 
@@ -148,6 +189,7 @@ const DailyAttendance = () => {
                 <TableCell>In Time</TableCell>
                 <TableCell>Out Time</TableCell>
                 <TableCell>Overtime (hrs)</TableCell>
+                <TableCell>Salary for Day</TableCell>
                 <TableCell>Remarks</TableCell>
               </TableRow>
             </TableHead>
@@ -217,6 +259,15 @@ const DailyAttendance = () => {
                         />
                       ) : (
                         record.overtime
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {record.status === 'Half Day' ? (
+                        <Typography color="textSecondary">
+                          Half Day - ₹{(record.salary_for_day || 0).toFixed(2)}
+                        </Typography>
+                      ) : (
+                        record.salary_for_day ? `₹${record.salary_for_day.toFixed(2)}` : '₹0.00'
                       )}
                     </TableCell>
                     <TableCell>

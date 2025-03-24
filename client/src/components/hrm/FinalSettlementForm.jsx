@@ -49,6 +49,7 @@ const FinalSettlementForm = () => {
 
   const [employees, setEmployees] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [isPrinted, setIsPrinted] = useState(false);
 
   useEffect(() => {
     const fetchEmployees = async () => {
@@ -221,14 +222,12 @@ const FinalSettlementForm = () => {
     }
 
     try {
-      // Update employee status
       await api.updateEmployee(formData.employeeId, {
         status: 'INACTIVE',
         separation_type: formData.separationType,
         separation_date: format(formData.lastWorkingDate, 'yyyy-MM-dd')
       });
 
-      // Clear loans/advances if any
       await api.clearEmployeeLoans(formData.employeeId);
 
       alert('Settlement processed successfully');
@@ -249,6 +248,7 @@ const FinalSettlementForm = () => {
         loans: [],
         advances: []
       });
+      setIsPrinted(false);
     } catch (error) {
       console.error('Error processing settlement:', error);
       alert('Error processing settlement');
@@ -397,9 +397,11 @@ const FinalSettlementForm = () => {
 
     printWindow.document.close();
     printWindow.focus();
+
     setTimeout(() => {
       printWindow.print();
       printWindow.close();
+      setIsPrinted(true);
     }, 250);
   };
 
@@ -616,7 +618,7 @@ const FinalSettlementForm = () => {
                   variant="contained"
                   color="primary"
                   onClick={handleUpdate}
-                  disabled={!formData.employeeId || !formData.lastWorkingDate || !formData.separationType}
+                  disabled={!formData.employeeId || !formData.lastWorkingDate || !formData.separationType || !isPrinted}
                 >
                   Process Settlement
                 </Button>

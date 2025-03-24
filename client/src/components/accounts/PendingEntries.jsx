@@ -21,8 +21,10 @@ import {
   Tooltip
 } from '@mui/material';
 import { Refresh } from '@mui/icons-material';
+import { useAuth } from '../../context/AuthContext';
 
 const PendingEntries = () => {
+  const { user } = useAuth();
   const [entries, setEntries] = useState([]);
   const [loading, setLoading] = useState(false);
   const [accounts, setAccounts] = useState([]);
@@ -44,7 +46,7 @@ const PendingEntries = () => {
   const fetchPendingEntries = async () => {
     try {
       setLoading(true);
-      const response = await fetch('http://localhost:5000/api/accounts/pending-entries');
+      const response = await fetch(`http://localhost:5000/api/accounts/pending-entries?userRole=${user.role}`);
       if (!response.ok) throw new Error('Failed to fetch entries');
       const data = await response.json();
       
@@ -157,7 +159,8 @@ const PendingEntries = () => {
           pricePerUnit: parseFloat(formData.pricePerUnit),
           cutWeight: parseFloat(formData.cutWeight) || 0,
           totalAmount: totalAmount,
-          finalQuantity: finalQuantity
+          finalQuantity: finalQuantity,
+          processedBy: user.role
         }),
       });
 

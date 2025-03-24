@@ -97,6 +97,11 @@ const menuItems = [
     submenu: [
       { text: 'History', icon: <History />, path: '/maintenance/history' }
     ]
+  },
+  {
+    text: 'Income Statement',
+    icon: <Assessment />,
+    path: '/income-statement'
   }
 ];
 
@@ -161,43 +166,10 @@ const Sidebar = () => {
         return [
           { text: 'Dashboard', icon: <Dashboard />, path: '/' },
           {
-            text: 'Gate',
-            icon: <Security />,
-            submenu: [
-              { 
-                text: 'Gate In', 
-                icon: <Input />, 
-                submenu: [
-                  { text: 'Purchase', icon: <ShoppingCart />, path: '/gate/in/purchase' },
-                  { text: 'Sale Return', icon: <ShoppingCart />, path: '/gate/in/sale-return' },
-                  { text: 'Store In', icon: <Inventory />, path: '/gate/in/store' }
-                ]
-              },
-              { 
-                text: 'Gate Out', 
-                icon: <Output />, 
-                submenu: [
-                  { text: 'Purchase Return', icon: <ShoppingCart />, path: '/gate/out/purchase-return' },
-                  { text: 'Sale Out', icon: <ShoppingCart />, path: '/gate/out/sale' },
-                  { text: 'Store Out', icon: <Inventory />, path: '/gate/out/store' }
-                ]
-              },
-              { text: 'Daily Attendance', icon: <AccessTime />, path: '/gate/attendance' }
-            ]
-          },
-          {
             text: 'HRM',
             icon: <People />,
             submenu: [
-              { text: 'New Appointment', icon: <PersonAdd />, path: '/hrm/appointment' },
-              { text: 'Daily Attendance', icon: <AccessTime />, path: '/hrm/attendance' },
-              { text: 'Employee List', icon: <Assessment />, path: '/hrm/employees' },
-              { text: 'Leave Application', icon: <EventNote />, path: '/hrm/leave-application' },
-              { text: 'Loan Application', icon: <AccountBalance />, path: '/hrm/loan-application' },
-              { text: 'Salary Form', icon: <Payments />, path: '/hrm/SalaryForm' },
-              { text: 'Salary Increment', icon: <TrendingUp />, path: '/hrm/salary-increment' },
               { text: 'Workers Salary', icon: <Calculate />, path: '/hrm/workers-salary' },
-              { text: 'Final Settlement', icon: <ExitToApp />, path: '/hrm/final-settlement' },
             ]
           },
           {
@@ -220,19 +192,38 @@ const Sidebar = () => {
             ]
           },
           {
-            text: 'Stock Management',
-            icon: <InventoryIcon />,
-            submenu: [
-              { text: 'Stock Overview', icon: <InventoryIcon />, path: '/stock/overview' },
-              { text: 'Stock History', icon: <History />, path: '/stock/history' }
-            ]
-          },
-          {
             text: 'Production',
             icon: <FactoryIcon />,
             submenu: [
-              { text: 'Add Production', icon: <AddIcon />, path: '/production/add' },
               { text: 'Production History', icon: <ListIcon />, path: '/production/history' }
+            ]
+          },
+          {
+            text: 'Income Statement',
+            icon: <Assessment />,
+            path: '/income-statement'
+          },
+          {
+            text: 'Expenses',
+            icon: <Calculate />,
+            submenu: [
+              { text: 'Expense History', icon: <History />, path: '/accounts/expenses/history' }
+            ]
+          },
+          {
+            text: 'Bank Manager',
+            icon: <AccountBalance />,
+            path: '/accounts/bank-manager'
+          },
+          {
+            text: 'Reports',
+            icon: <Assessment />,
+            submenu: [
+              { text: 'Purchase Summary', icon: <History />, path: '/reports/purchase-summary' },
+              { text: 'Sale Summary', icon: <History />, path: '/reports/sale-summary' },
+              { text: 'Daily Activity', icon: <EventNote />, path: '/reports/daily-activity' },
+              { text: 'Returns Summary', icon: <History />, path: '/reports/returns-summary' },
+              { text: 'Cash Flow Summary', icon: <TrendingUp />, path: '/reports/cash-flow' },
             ]
           }
         ];
@@ -262,6 +253,14 @@ const Sidebar = () => {
                 ]
               },
               { text: 'Daily Attendance', icon: <AccessTime />, path: '/gate/attendance' }
+            ]
+          },
+          {
+            text: 'Reports',
+            icon: <Assessment />,
+            submenu: [
+              { text: 'Purchase Summary', icon: <History />, path: '/reports/purchase-summary' },
+              { text: 'Sale Summary', icon: <History />, path: '/reports/sale-summary' },
             ]
           }
         ];
@@ -300,6 +299,15 @@ const Sidebar = () => {
             path: '/accounts'
           },
           {
+            text: 'Payments',
+            icon: <Payments />,
+            submenu: [
+              { text: 'Payment Received', icon: <Input />, path: '/accounts/payments/received' },
+              { text: 'Payment Issued', icon: <Output />, path: '/accounts/payments/issued' },
+              { text: 'Payment History', icon: <History />, path: '/accounts/payments/history' }
+            ]
+          },
+          {
             text: 'Production',
             icon: <FactoryIcon />,
             submenu: [
@@ -315,6 +323,52 @@ const Sidebar = () => {
               }
             ]
           },
+          {
+            text: 'Expenses',
+            icon: <Calculate />,
+            submenu: [
+              { text: 'Add Expense', icon: <AddIcon />, path: '/accounts/expenses/add' },
+              { text: 'Expense History', icon: <History />, path: '/accounts/expenses/history' }
+            ]
+          },
+          {
+            text: 'Income Statement',
+            icon: <Assessment />,
+            path: '/income-statement'
+          },
+          {
+            text: 'Bank Manager',
+            icon: <AccountBalance />,
+            path: '/accounts/bank-manager'
+          },
+          {
+            text: 'Reports',
+            icon: <Assessment />,
+            submenu: [
+              { text: 'Purchase Summary', icon: <History />, path: '/reports/purchase-summary' },
+              { text: 'Sale Summary', icon: <History />, path: '/reports/sale-summary' },
+              { text: 'Daily Activity', icon: <EventNote />, path: '/reports/daily-activity' },
+              { text: 'Returns Summary', icon: <History />, path: '/reports/returns-summary' },
+              { text: 'Cash Flow Summary', icon: <TrendingUp />, path: '/reports/cash-flow' },
+            ]
+          }
+        ];
+      
+      case 'TAX':
+        return [
+          {
+            text: 'Accounts',
+            icon: <AccountBalance />,
+            path: '/accounts'
+          },
+          {
+            text: 'Payments',
+            icon: <Payments />,
+            submenu: [
+              { text: 'Received', icon: <Input />, path: '/accounts/payments/received' },
+              { text: 'Issued', icon: <Output />, path: '/accounts/payments/issued' }
+            ]
+          }
         ];
       
       default:

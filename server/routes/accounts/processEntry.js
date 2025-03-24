@@ -8,7 +8,7 @@ router.post('/process-entry', async (req, res) => {
   try {
     await client.query('BEGIN');
     
-    const { entryId, pricePerUnit, cutWeight, totalAmount, finalQuantity } = req.body;
+    const { entryId, pricePerUnit, cutWeight, totalAmount, finalQuantity, processedBy } = req.body;
     
     // 1. Get the pricing entry with account info
     const { rows: [pricing] } = await client.query(
@@ -36,9 +36,10 @@ router.post('/process-entry', async (req, res) => {
            status = 'PROCESSED',
            processed_at = CURRENT_TIMESTAMP,
            cut_weight = $3,
-           final_quantity = $4
-       WHERE id = $5`,
-      [pricePerUnit, totalAmount, cutWeight, finalQuantity, entryId]
+           final_quantity = $4,
+           processed_by_role = $5
+       WHERE id = $6`,
+      [pricePerUnit, totalAmount, cutWeight, finalQuantity, processedBy, entryId]
     );
 
     // 3. Update account balance

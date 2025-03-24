@@ -19,8 +19,7 @@ import '../../styles/forms/LoanApplication.css';
 import api from '../../services/api';
 
 const loanTypes = [
-  { value: 'loan', label: 'Loan' },
-  { value: 'advance', label: 'Advance' },
+  { value: 'loan', label: 'Loan' }
 ];
 
 const LoanApplicationForm = () => {
@@ -37,6 +36,7 @@ const LoanApplicationForm = () => {
 
   const [employees, setEmployees] = useState([]);
   const [formData, setFormData] = useState(initialFormState);
+  const [isPrinted, setIsPrinted] = useState(false);
 
   useEffect(() => {
     const fetchEmployees = async () => {
@@ -276,6 +276,7 @@ const LoanApplicationForm = () => {
     setTimeout(() => {
       printWindow.print();
       printWindow.close();
+      setIsPrinted(true);
     }, 250);
   };
 
@@ -284,6 +285,17 @@ const LoanApplicationForm = () => {
       return (parseFloat(formData.amount) / parseInt(formData.installments)).toFixed(2);
     }
     return '0.00';
+  };
+
+  // Add this new function to handle enter key
+  const handleKeyPress = (event, nextFieldId) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      const nextField = document.getElementById(nextFieldId);
+      if (nextField) {
+        nextField.focus();
+      }
+    }
   };
 
   return (
@@ -298,9 +310,11 @@ const LoanApplicationForm = () => {
             <Grid container spacing={2}>
               <Grid item xs={12} sm={6}>
                 <Autocomplete
+                  id="employee-id"
                   options={employees}
                   getOptionLabel={(option) => `${option.id} - ${option.first_name} ${option.last_name}`}
                   onChange={handleEmployeeChange}
+                  onKeyPress={(e) => handleKeyPress(e, 'loan-type')}
                   renderInput={(params) => (
                     <TextField
                       {...params}
@@ -334,11 +348,13 @@ const LoanApplicationForm = () => {
               
               <Grid item xs={12} sm={6}>
                 <TextField
+                  id="loan-type"
                   fullWidth
                   select
                   label="Type"
                   value={formData.loanType}
                   onChange={handleChange('loanType')}
+                  onKeyPress={(e) => handleKeyPress(e, 'loan-amount')}
                   required
                 >
                   {loanTypes.map((option) => (
@@ -351,11 +367,13 @@ const LoanApplicationForm = () => {
               
               <Grid item xs={12} sm={6}>
                 <TextField
+                  id="loan-amount"
                   fullWidth
                   label="Amount"
                   type="number"
                   value={formData.amount}
                   onChange={handleChange('amount')}
+                  onKeyPress={(e) => handleKeyPress(e, 'installments')}
                   required
                   InputProps={{
                     startAdornment: 'PKR ',
@@ -365,11 +383,13 @@ const LoanApplicationForm = () => {
               
               <Grid item xs={12} sm={6}>
                 <TextField
+                  id="installments"
                   fullWidth
                   label="Number of Installments"
                   type="number"
                   value={formData.installments}
                   onChange={handleChange('installments')}
+                  onKeyPress={(e) => handleKeyPress(e, 'start-month')}
                   required
                 />
               </Grid>
@@ -377,12 +397,18 @@ const LoanApplicationForm = () => {
               <Grid item xs={12} sm={6}>
                 <LocalizationProvider dateAdapter={AdapterDateFns}>
                   <DatePicker
+                    id="start-month"
                     label="Start Month"
                     views={['year', 'month']}
                     value={formData.startMonth}
                     onChange={handleDateChange}
                     renderInput={(params) => (
-                      <TextField {...params} fullWidth required />
+                      <TextField 
+                        {...params} 
+                        fullWidth 
+                        required 
+                        onKeyPress={(e) => handleKeyPress(e, 'print-button')}
+                      />
                     )}
                   />
                 </LocalizationProvider>
@@ -441,15 +467,19 @@ const LoanApplicationForm = () => {
               <Grid item xs={12} className="no-print">
                 <Stack direction="row" spacing={2} justifyContent="flex-end">
                   <Button
+                    id="print-button"
                     variant="outlined"
                     startIcon={<Print />}
                     onClick={handlePrint}
+                    onKeyPress={(e) => handleKeyPress(e, 'submit-button')}
                   >
                     Print
                   </Button>
                   <Button
+                    id="submit-button"
                     type="submit"
                     variant="contained"
+                    disabled={!isPrinted}
                   >
                     Submit Application
                   </Button>

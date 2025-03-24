@@ -1,0 +1,159 @@
+.bank-manager-container {
+  padding: 32px;
+  margin-left: 240px;
+  background-color: #fafafa;
+  min-height: 100vh;
+  margin-top: 24px;
+}
+
+.bank-manager-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 32px;
+}
+
+.bank-manager-header h2 {
+  font-size: 28px;
+  font-weight: 600;
+  color: #1a1a1a;
+  letter-spacing: -0.5px;
+}
+
+.bank-manager-tabs {
+  background-color: #fff;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  margin-bottom: 24px;
+  overflow: hidden;
+}
+
+.MuiTabs-root {
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.bank-accounts-table {
+  background-color: #fff;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  overflow: hidden;
+}
+
+.table-header {
+  background-color: #fafafa;
+}
+
+.table-header th {
+  font-weight: 600;
+  font-size: 15px;
+  color: #1a1a1a;
+  padding: 16px;
+  border-bottom: 1px solid #f0f0f0;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.MuiTableCell-root {
+  padding: 16px;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.form-modal {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 480px;
+  background-color: #fff;
+  border-radius: 12px;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.12);
+  padding: 32px;
+}
+
+.form-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 32px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.form-header h6 {
+  font-size: 22px;
+  font-weight: 600;
+  color: #1a1a1a;
+  letter-spacing: -0.5px;
+}
+
+.form-content {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 16px;
+  margin-top: 32px;
+  padding-top: 16px;
+  border-top: 1px solid #f0f0f0;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.add-button-header {
+  background-color: #1a1a1a !important;
+  color: white !important;
+  border-radius: 8px !important;
+  padding: 8px 16px !important;
+  font-weight: 500 !important;
+  text-transform: none !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  transition: all 0.3s ease;
+}
+
+.add-button-header:hover {
+  background-color: #000 !important;
+  transform: translateY(-1px);
+}
+
+.add-button {
+  display: none;
+}
+
+.status-chip {
+  border-radius: 16px;
+  padding: 4px 12px;
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.status-chip.active {
+  background-color: #e8f5e9;
+  color: #2e7d32;
+}
+
+.status-chip.inactive {
+  background-color: #ffebee;
+  color: #c62828;
+}
+
+.balance-cell {
+  font-weight: 500;
+  font-family: 'Roboto Mono', monospace;
+}
+
+.balance-cell.positive {
+  color: #1a1a1a;
+}
+
+.balance-cell.negative {
+  color: #1a1a1a;
+  opacity: 0.7;
+} 

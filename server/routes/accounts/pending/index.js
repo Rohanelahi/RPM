@@ -18,9 +18,11 @@ router.use('/pending', storeReturns);
 // Get all pending entries (combined)
 router.get('/pending-entries', async (req, res) => {
   try {
+    const { userRole } = req.query;
+
     // Get gate entries
-    const gateResult = await pool.query(
-      `SELECT 
+    const gateQuery = `
+      SELECT 
         gep.id as pricing_id,
         gep.entry_type,
         gep.grn_number,
@@ -66,8 +68,10 @@ router.get('/pending-entries', async (req, res) => {
          WHEN gr.return_type = 'PURCHASE_RETURN' THEN ge.supplier_id
          ELSE gep.account_id
        END = a.id
-       WHERE gep.status = 'PENDING'`
-    );
+       WHERE gep.status = 'PENDING'
+       ${userRole === 'TAX' ? 'AND (gep.processed_by_role IS NULL OR gep.processed_by_role = \'TAX\')' : ''}`;
+
+    const gateResult = await pool.query(gateQuery);
 
     // Get store purchase entries
     const storeResult = await pool.query(
@@ -88,7 +92,8 @@ router.get('/pending-entries', async (req, res) => {
        JOIN store_entries se ON pe.reference_id = se.id
        JOIN store_items si ON se.item_id = si.id
        JOIN accounts v ON se.vendor_id = v.id
-       WHERE pe.status = 'PENDING' AND pe.entry_type = 'STORE_PURCHASE'`
+       WHERE pe.status = 'PENDING' 
+       AND pe.entry_type = 'STORE_PURCHASE'`
     );
 
     // Add store returns to the query

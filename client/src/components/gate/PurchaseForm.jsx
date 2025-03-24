@@ -21,6 +21,7 @@ import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import { Print } from '@mui/icons-material';
 import '../../styles/forms/GateForm.css';
 import useAccounts from '../../hooks/useAccounts';
+import { format } from 'date-fns';
 
 const PurchaseForm = () => {
   const [loading, setLoading] = useState(false);
@@ -45,6 +46,8 @@ const PurchaseForm = () => {
     unit: '',
     remarks: ''
   });
+
+  const [isPrinted, setIsPrinted] = useState(false);
 
   const itemTypes = [
     'Petti',
@@ -158,7 +161,176 @@ const PurchaseForm = () => {
   };
 
   const handlePrint = () => {
-    window.print();
+    const printWindow = window.open('', '_blank');
+    const currentDate = format(new Date(), 'dd/MM/yyyy');
+    const selectedSupplier = suppliers.find(s => s.id === formData.supplierId);
+
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Gate In - Purchase Entry</title>
+          <style>
+            @page { size: A4; margin: 0; }
+            body { 
+              margin: 2cm;
+              font-family: Arial, sans-serif;
+              color: #000;
+              line-height: 1.6;
+            }
+            .header {
+              text-align: center;
+              margin-bottom: 2cm;
+            }
+            .company-name {
+              font-size: 24pt;
+              font-weight: bold;
+              margin-bottom: 0.5cm;
+            }
+            .document-title {
+              font-size: 16pt;
+              text-transform: uppercase;
+              margin: 1cm 0;
+            }
+            .details-grid {
+              display: grid;
+              grid-template-columns: repeat(2, 1fr);
+              gap: 1cm;
+              margin-bottom: 1cm;
+            }
+            .detail-item {
+              margin-bottom: 0.5cm;
+            }
+            .label {
+              font-weight: bold;
+              color: #000 !important;
+            }
+            .value {
+              margin-top: 0.2cm;
+              color: #000 !important;
+            }
+            table {
+              width: 100%;
+              border-collapse: collapse;
+              margin: 1cm 0;
+              color: #000 !important;
+            }
+            th, td {
+              border: 1px solid #000 !important;
+              padding: 0.5cm;
+              text-align: left;
+            }
+            th {
+              background-color: #f0f0f0 !important;
+              color: #000 !important;
+              font-weight: bold;
+              -webkit-print-color-adjust: exact;
+              print-color-adjust: exact;
+            }
+            .signatures {
+              margin-top: 2cm;
+            }
+            .signature-grid {
+              display: grid;
+              grid-template-columns: repeat(3, 1fr);
+              gap: 1cm;
+            }
+            .signature-box {
+              text-align: center;
+            }
+            .signature-line {
+              border-top: 1px solid #000;
+              padding-top: 0.5cm;
+            }
+
+            /* Ensure black borders print clearly */
+            table, th, td {
+              border-color: #000 !important;
+            }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <div class="company-name">Rose Paper Mill</div>
+            <div class="document-title">Gate In - Purchase Entry</div>
+          </div>
+
+          <div class="details-grid">
+            <div class="detail-item">
+              <div class="label">GRN Number:</div>
+              <div class="value">${formData.grnNumber}</div>
+            </div>
+            <div class="detail-item">
+              <div class="label">Date:</div>
+              <div class="value">${currentDate}</div>
+            </div>
+            <div class="detail-item">
+              <div class="label">Supplier:</div>
+              <div class="value">${selectedSupplier?.account_name || ''}</div>
+            </div>
+            <div class="detail-item">
+              <div class="label">Vehicle Number:</div>
+              <div class="value">${formData.vehicleNumber}</div>
+            </div>
+          </div>
+
+          <table>
+            <thead>
+              <tr>
+                <th>Description</th>
+                <th>Details</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Item Type</td>
+                <td>${formData.itemType}</td>
+              </tr>
+              <tr>
+                <td>Supplier Quantity</td>
+                <td>${formData.supplierQuantity} ${formData.unit}</td>
+              </tr>
+              <tr>
+                <td>Received Quantity</td>
+                <td>${formData.receivedQuantity} ${formData.unit}</td>
+              </tr>
+              <tr>
+                <td>Final Quantity</td>
+                <td>${formData.finalQuantity} ${formData.unit}</td>
+              </tr>
+              ${formData.remarks ? `
+                <tr>
+                  <td>Remarks</td>
+                  <td>${formData.remarks}</td>
+                </tr>
+              ` : ''}
+            </tbody>
+          </table>
+
+          <div class="signatures">
+            <div class="signature-grid">
+              <div class="signature-box">
+                <div class="signature-line">Gate Officer</div>
+              </div>
+              <div class="signature-box">
+                <div class="signature-line">Supplier</div>
+              </div>
+              <div class="signature-box">
+                <div class="signature-line">Store Manager</div>
+              </div>
+            </div>
+          </div>
+        </body>
+      </html>
+    `);
+
+    printWindow.document.close();
+    printWindow.focus();
+    setTimeout(() => {
+      printWindow.print();
+      printWindow.close();
+      setIsPrinted(true);
+    }, 250);
   };
 
   const handleSubmit = async (e) => {
@@ -220,6 +392,17 @@ const PurchaseForm = () => {
     }
   };
 
+  // Add this function to handle enter key
+  const handleKeyPress = (event, nextFieldId) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      const nextField = document.getElementById(nextFieldId);
+      if (nextField) {
+        nextField.focus();
+      }
+    }
+  };
+
   return (
     <div className="gate-form">
       <Paper className="content-paper">
@@ -256,6 +439,7 @@ const PurchaseForm = () => {
                     ...prev,
                     vehicleNumber: e.target.value
                   }))}
+                  onKeyPress={(e) => handleKeyPress(e, 'driverName')}
                 />
               </Grid>
 
@@ -268,6 +452,7 @@ const PurchaseForm = () => {
                     ...prev,
                     driverName: e.target.value
                   }))}
+                  onKeyPress={(e) => handleKeyPress(e, 'supplierId')}
                 />
               </Grid>
 
@@ -284,6 +469,7 @@ const PurchaseForm = () => {
                       supplierId: e.target.value
                     }))}
                     disabled={suppliersLoading}
+                    onKeyPress={(e) => handleKeyPress(e, 'itemType')}
                   >
                     {suppliers.map((supplier) => (
                       <MenuItem key={supplier.id} value={supplier.id}>
@@ -428,7 +614,8 @@ const PurchaseForm = () => {
                   <Button
                     type="submit"
                     variant="contained"
-                    disabled={loading}
+                    color="primary"
+                    disabled={loading || !isPrinted}
                   >
                     {loading ? <CircularProgress size={24} /> : 'Submit'}
                   </Button>

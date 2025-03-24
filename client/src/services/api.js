@@ -142,6 +142,7 @@ const api = {
   getGRNDetails: async (grnNumber) => {
     try {
       const response = await axios.get(`${API_URL}/accounts/grn/${grnNumber}`);
+      console.log('GRN API Response:', response.data);
       return response.data;
     } catch (error) {
       console.error('API Error:', error);
@@ -152,7 +153,60 @@ const api = {
     }
   },
 
-  // ... any other API methods ...
+  updateGRNDetails: async (grnNumber, updateData) => {
+    try {
+      const response = await axios.put(`${API_URL}/accounts/grn/${grnNumber}`, updateData);
+      console.log('GRN Update Response:', response.data);
+      return response.data;
+    } catch (error) {
+      console.error('API Error:', error);
+      throw new Error('Failed to update GRN details');
+    }
+  },
+
+  // Update the post method
+  async post(endpoint, data) {
+    try {
+      const response = await axios.post(`${API_URL}${endpoint}`, data);
+      return response.data;
+    } catch (error) {
+      console.error('API Post Error:', error);
+      throw error;
+    }
+  },
+
+  // Update the get method
+  async get(endpoint) {
+    try {
+      const response = await axios.get(`${API_URL}${endpoint}`);
+      return response.data;
+    } catch (error) {
+      console.error('API Get Error:', error);
+      throw error;
+    }
+  },
+
+  // Fix the verifyPassword method
+  verifyPassword: async (password) => {
+    try {
+      const response = await axios.post(`${API_URL}/hrm/verify-password`, { password });
+      return response.data;
+    } catch (error) {
+      console.error('Error verifying password:', error);
+      throw error;
+    }
+  },
+
+  // Update the deleteEmployee method to use axios and the correct URL
+  deleteEmployee: async (employeeId) => {
+    try {
+      const response = await axios.delete(`${API_URL}/hrm/employees/${employeeId}`);
+      return response.data;
+    } catch (error) {
+      console.error('Error deleting employee:', error);
+      throw new Error('Failed to delete employee');
+    }
+  },
 };
 
 export default api; 

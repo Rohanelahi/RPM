@@ -17,12 +17,14 @@ import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import { Print } from '@mui/icons-material';
 import '../../styles/forms/GateForm.css';
 import useAccounts from '../../hooks/useAccounts';
+import { format } from 'date-fns';
 
 const SaleReturnForm = () => {
   const [loading, setLoading] = useState(false);
   const { accounts: customers, loading: customersLoading } = useAccounts('CUSTOMER');
   const [saleGRNs, setSaleGRNs] = useState([]);
   const [selectedSale, setSelectedSale] = useState(null);
+  const [isPrinted, setIsPrinted] = useState(false);
   
   const [formData, setFormData] = useState({
     returnNumber: '',
@@ -41,12 +43,7 @@ const SaleReturnForm = () => {
   });
 
   const paperTypes = [
-    'White Paper',
-    'Kraft Paper',
-    'Newspaper',
-    'Books',
-    'Mixed Paper',
-    'Other'
+    'SUPER', 'CMP', 'BOARD'
   ];
 
   const vehicleTypes = [
@@ -218,8 +215,176 @@ const SaleReturnForm = () => {
   };
 
   const handlePrint = () => {
-    // Print functionality will be added
-    console.log('Printing...');
+    const printWindow = window.open('', '_blank');
+    const currentDate = format(new Date(), 'dd/MM/yyyy');
+    const selectedCustomer = customers.find(c => c.id === formData.purchaserId);
+
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Sale Return Gate Pass</title>
+          <style>
+            @page { size: A4; margin: 0; }
+            body { 
+              margin: 2cm;
+              font-family: Arial, sans-serif;
+              color: #000;
+              line-height: 1.6;
+            }
+            .header {
+              text-align: center;
+              margin-bottom: 1cm;
+            }
+            .company-name {
+              font-size: 24pt;
+              font-weight: bold;
+              margin-bottom: 0.5cm;
+            }
+            .document-title {
+              font-size: 16pt;
+              text-transform: uppercase;
+              margin-bottom: 1cm;
+            }
+            table {
+              width: 100%;
+              border-collapse: collapse;
+              margin-bottom: 1cm;
+            }
+            th, td {
+              border: 1px solid #000;
+              padding: 8px;
+              text-align: left;
+            }
+            th {
+              background-color: #f0f0f0;
+            }
+            .signatures {
+              margin-top: 2cm;
+            }
+            .signature-grid {
+              display: grid;
+              grid-template-columns: repeat(3, 1fr);
+              gap: 1cm;
+            }
+            .signature-box {
+              text-align: center;
+            }
+            .signature-line {
+              margin-top: 1cm;
+              border-top: 1px solid #000;
+              padding-top: 0.5cm;
+            }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <div class="company-name">Rose Paper Mill</div>
+            <div class="document-title">Sale Return Gate Pass</div>
+          </div>
+
+          <table>
+            <tr>
+              <th colspan="2">Basic Information</th>
+            </tr>
+            <tr>
+              <td><strong>Return Number:</strong></td>
+              <td>${formData.returnNumber}</td>
+            </tr>
+            <tr>
+              <td><strong>Date:</strong></td>
+              <td>${currentDate}</td>
+            </tr>
+            <tr>
+              <td><strong>Customer:</strong></td>
+              <td>${selectedCustomer?.account_name || 'N/A'}</td>
+            </tr>
+            <tr>
+              <td><strong>Sale GRN:</strong></td>
+              <td>${formData.saleGRN}</td>
+            </tr>
+          </table>
+
+          <table>
+            <tr>
+              <th colspan="2">Vehicle Information</th>
+            </tr>
+            <tr>
+              <td><strong>Vehicle Type:</strong></td>
+              <td>${formData.vehicleType}</td>
+            </tr>
+            <tr>
+              <td><strong>Vehicle Number:</strong></td>
+              <td>${formData.vehicleNumber}</td>
+            </tr>
+            <tr>
+              <td><strong>Driver Name:</strong></td>
+              <td>${formData.driverName || 'N/A'}</td>
+            </tr>
+          </table>
+
+          <table>
+            <tr>
+              <th colspan="2">Item Details</th>
+            </tr>
+            <tr>
+              <td><strong>Paper Type:</strong></td>
+              <td>${formData.paperType}</td>
+            </tr>
+            <tr>
+              <td><strong>Original Quantity:</strong></td>
+              <td>${formData.originalQuantity} ${formData.unit}</td>
+            </tr>
+            <tr>
+              <td><strong>Return Quantity:</strong></td>
+              <td>${formData.returnQuantity} ${formData.unit}</td>
+            </tr>
+            <tr>
+              <td><strong>Return Reason:</strong></td>
+              <td>${formData.returnReason}</td>
+            </tr>
+            ${formData.remarks ? `
+            <tr>
+              <td><strong>Remarks:</strong></td>
+              <td>${formData.remarks}</td>
+            </tr>
+            ` : ''}
+          </table>
+
+          <div class="signatures">
+            <div class="signature-grid">
+              <div class="signature-box">
+                <div class="signature-line">Gate Officer</div>
+              </div>
+              <div class="signature-box">
+                <div class="signature-line">Customer</div>
+              </div>
+              <div class="signature-box">
+                <div class="signature-line">Store Manager</div>
+              </div>
+            </div>
+          </div>
+        </body>
+      </html>
+    `);
+
+    printWindow.document.close();
+    printWindow.focus();
+    setTimeout(() => {
+      printWindow.print();
+      printWindow.close();
+      setIsPrinted(true);
+    }, 250);
+  };
+
+  const handleKeyPress = (event, nextFieldId) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      const nextField = document.getElementById(nextFieldId);
+      if (nextField) {
+        nextField.focus();
+      }
+    }
   };
 
   return (
@@ -258,9 +423,10 @@ const SaleReturnForm = () => {
                   onChange={(e) => setFormData(prev => ({
                     ...prev,
                     purchaserId: e.target.value,
-                    saleGRN: '' // Reset GRN when customer changes
+                    saleGRN: ''
                   }))}
                   disabled={customersLoading}
+                  onKeyPress={(e) => handleKeyPress(e, 'saleGRN')}
                 >
                   {customers.map((customer) => (
                     <MenuItem key={customer.id} value={customer.id}>
@@ -279,6 +445,7 @@ const SaleReturnForm = () => {
                   value={formData.saleGRN}
                   onChange={(e) => handleGRNSelect(e.target.value)}
                   disabled={!formData.purchaserId || loading}
+                  onKeyPress={(e) => handleKeyPress(e, 'vehicleType')}
                 >
                   {saleGRNs.map((grn) => (
                     <MenuItem key={grn.grn_number} value={grn.grn_number}>
@@ -324,6 +491,7 @@ const SaleReturnForm = () => {
                     ...prev,
                     vehicleType: e.target.value
                   }))}
+                  onKeyPress={(e) => handleKeyPress(e, 'vehicleNumber')}
                 >
                   {vehicleTypes.map((type) => (
                     <MenuItem key={type} value={type}>
@@ -343,6 +511,7 @@ const SaleReturnForm = () => {
                     ...prev,
                     vehicleNumber: e.target.value.toUpperCase()
                   }))}
+                  onKeyPress={(e) => handleKeyPress(e, 'driverName')}
                 />
               </Grid>
 
@@ -355,6 +524,7 @@ const SaleReturnForm = () => {
                     ...prev,
                     driverName: e.target.value
                   }))}
+                  onKeyPress={(e) => handleKeyPress(e, 'returnQuantity')}
                 />
               </Grid>
 
@@ -432,6 +602,7 @@ const SaleReturnForm = () => {
                     ...prev,
                     returnQuantity: e.target.value
                   }))}
+                  onKeyPress={(e) => handleKeyPress(e, 'returnReason')}
                 />
               </Grid>
 
@@ -446,6 +617,7 @@ const SaleReturnForm = () => {
                     ...prev,
                     returnReason: e.target.value
                   }))}
+                  onKeyPress={(e) => handleKeyPress(e, 'remarks')}
                 >
                   {returnReasons.map((reason) => (
                     <MenuItem key={reason} value={reason}>
@@ -481,9 +653,9 @@ const SaleReturnForm = () => {
                   <Button
                     type="submit"
                     variant="contained"
-                    disabled={loading}
+                    disabled={loading || !isPrinted}
                   >
-                    {loading ? <CircularProgress size={24} /> : 'Submit'}
+                    {loading ? <CircularProgress size={24} /> : 'Submit Return'}
                   </Button>
                 </Stack>
               </Grid>

@@ -26,6 +26,17 @@ import StockOverview from './components/stock/StockOverview';
 import StockHistory from './components/stock/StockHistory';
 import ProductionForm from './components/production/ProductionForm';
 import ProductionHistory from './components/production/ProductionHistory';
+import IncomeStatementForm from './components/accounts/IncomeStatementForm';
+import PaymentReceived from './components/accounts/PaymentReceived';
+import PaymentIssued from './components/accounts/PaymentIssued';
+import PaymentHistory from './components/accounts/PaymentHistory';
+import ExpenseForm from './components/accounts/ExpenseForm';
+import ExpenseHistory from './components/accounts/ExpenseHistory';
+import BankManager from './components/accounts/BankManager';
+import SaleSummary from './components/reports/SaleSummary';
+import DailyActivityReport from './components/reports/DailyActivityReport';
+import ReturnsSummary from './components/reports/ReturnsSummary';
+import CashFlowSummary from './components/reports/CashFlowSummary';
 
 // Protected Route component
 const ProtectedRoute = ({ children, allowedRoles }) => {
@@ -51,7 +62,7 @@ function App() {
           
           {/* Protected Dashboard */}
           <Route path="/" element={
-            <ProtectedRoute allowedRoles={['GATE', 'STORE', 'ACCOUNTS', 'DIRECTOR']}>
+            <ProtectedRoute allowedRoles={['STORE', 'ACCOUNTS', 'DIRECTOR', 'GATE']}>
               <Dashboard />
             </ProtectedRoute>
           } />
@@ -75,7 +86,7 @@ function App() {
 
           {/* Protected Gate Routes */}
           <Route path="/gate/*" element={
-            <ProtectedRoute allowedRoles={['GATE', 'DIRECTOR']}>
+            <ProtectedRoute allowedRoles={['GATE']}>
               <Routes>
                 <Route path="in/purchase" element={<PurchaseForm />} />
                 <Route path="in/sale-return" element={<SaleReturnForm />} />
@@ -101,9 +112,15 @@ function App() {
 
           {/* Protected Accounts Routes */}
           <Route path="/accounts/*" element={
-            <ProtectedRoute allowedRoles={['ACCOUNTS', 'DIRECTOR']}>
+            <ProtectedRoute allowedRoles={['ACCOUNTS', 'DIRECTOR', 'TAX']}>
               <Routes>
                 <Route path="/" element={<Accounts />} />
+                <Route path="payments/received" element={<PaymentReceived />} />
+                <Route path="payments/issued" element={<PaymentIssued />} />
+                <Route path="payments/history" element={<PaymentHistory />} />
+                <Route path="expenses/add" element={<ExpenseForm />} />
+                <Route path="expenses/history" element={<ExpenseHistory />} />
+                <Route path="bank-manager" element={<BankManager />} />
               </Routes>
             </ProtectedRoute>
           } />
@@ -117,12 +134,15 @@ function App() {
             </ProtectedRoute>
           } />
 
-          {/* Add new Stock Routes */}
-          <Route path="/stock/*" element={
-            <ProtectedRoute allowedRoles={['DIRECTOR']}>
+          {/* Protected Reports Routes */}
+          <Route path="/reports/*" element={
+            <ProtectedRoute allowedRoles={['ACCOUNTS', 'DIRECTOR']}>
               <Routes>
-                <Route path="overview" element={<StockOverview />} />
-                <Route path="history" element={<StockHistory />} />
+                <Route path="purchase-summary" element={<StockHistory />} />
+                <Route path="sale-summary" element={<SaleSummary />} />
+                <Route path="daily-activity" element={<DailyActivityReport />} />
+                <Route path="returns-summary" element={<ReturnsSummary />} />
+                <Route path="cash-flow" element={<CashFlowSummary />} />
               </Routes>
             </ProtectedRoute>
           } />
@@ -134,6 +154,13 @@ function App() {
                 <Route path="add" element={<ProductionForm />} />
                 <Route path="history" element={<ProductionHistory />} />
               </Routes>
+            </ProtectedRoute>
+          } />
+
+          {/* Add Income Statement Route */}
+          <Route path="/income-statement" element={
+            <ProtectedRoute allowedRoles={['ACCOUNTS', 'DIRECTOR']}>
+              <IncomeStatementForm />
             </ProtectedRoute>
           } />
 

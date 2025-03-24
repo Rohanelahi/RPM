@@ -40,6 +40,9 @@ const LoginPage = () => {
         case 'DIRECTOR':
           navigate('/dashboard');
           break;
+        case 'TAX':
+          navigate('/accounts'); // TAX users go directly to accounts
+          break;
         default:
           navigate('/');
       }

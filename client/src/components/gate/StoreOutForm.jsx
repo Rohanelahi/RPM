@@ -16,12 +16,14 @@ import { DateTimePicker } from '@mui/x-date-pickers/DateTimePicker';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import { Print } from '@mui/icons-material';
 import '../../styles/forms/GateForm.css';
+import { format } from 'date-fns';
 
 const StoreOutForm = () => {
   const [loading, setLoading] = useState(false);
   const [vendors, setVendors] = useState([]);
   const [grnList, setGrnList] = useState([]);
   const [selectedGRN, setSelectedGRN] = useState(null);
+  const [isPrinted, setIsPrinted] = useState(false);
   
   const [formData, setFormData] = useState({
     vendorId: '',
@@ -202,6 +204,157 @@ const StoreOutForm = () => {
     }
   };
 
+  const handlePrint = () => {
+    const printWindow = window.open('', '_blank');
+    const currentDate = format(new Date(), 'dd/MM/yyyy');
+    const selectedVendor = vendors.find(v => v.id === formData.vendorId);
+
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Store Out Gate Pass</title>
+          <style>
+            @page { size: A4; margin: 0; }
+            body { 
+              margin: 2cm;
+              font-family: Arial, sans-serif;
+              color: #000;
+              line-height: 1.6;
+            }
+            .header {
+              text-align: center;
+              margin-bottom: 1cm;
+            }
+            .company-name {
+              font-size: 24pt;
+              font-weight: bold;
+              margin-bottom: 0.5cm;
+            }
+            .document-title {
+              font-size: 16pt;
+              text-transform: uppercase;
+              margin-bottom: 1cm;
+            }
+            table {
+              width: 100%;
+              border-collapse: collapse;
+              margin-bottom: 1cm;
+            }
+            th, td {
+              border: 1px solid #000;
+              padding: 8px;
+              text-align: left;
+            }
+            th {
+              background-color: #f0f0f0;
+            }
+            .signatures {
+              margin-top: 2cm;
+            }
+            .signature-grid {
+              display: grid;
+              grid-template-columns: repeat(3, 1fr);
+              gap: 1cm;
+            }
+            .signature-box {
+              text-align: center;
+            }
+            .signature-line {
+              margin-top: 1cm;
+              border-top: 1px solid #000;
+              padding-top: 0.5cm;
+            }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <div class="company-name">Rose Paper Mill</div>
+            <div class="document-title">Store Out Gate Pass</div>
+          </div>
+
+          <table>
+            <tr>
+              <th colspan="2">Basic Information</th>
+            </tr>
+            <tr>
+              <td><strong>GRN Number:</strong></td>
+              <td>${formData.grnNumber}</td>
+            </tr>
+            <tr>
+              <td><strong>Date:</strong></td>
+              <td>${currentDate}</td>
+            </tr>
+            <tr>
+              <td><strong>Original GRN:</strong></td>
+              <td>${selectedGRN?.grn_number || 'N/A'}</td>
+            </tr>
+            <tr>
+              <td><strong>Vendor:</strong></td>
+              <td>${selectedVendor?.account_name || 'N/A'}</td>
+            </tr>
+          </table>
+
+          <table>
+            <tr>
+              <th colspan="2">Item Details</th>
+            </tr>
+            <tr>
+              <td><strong>Item Name:</strong></td>
+              <td>${formData.itemName || 'N/A'}</td>
+            </tr>
+            <tr>
+              <td><strong>Original Quantity:</strong></td>
+              <td>${formData.originalQuantity} ${formData.unit}</td>
+            </tr>
+            <tr>
+              <td><strong>Out Quantity:</strong></td>
+              <td>${formData.quantity} ${formData.unit}</td>
+            </tr>
+            ${formData.remarks ? `
+            <tr>
+              <td><strong>Remarks:</strong></td>
+              <td>${formData.remarks}</td>
+            </tr>
+            ` : ''}
+          </table>
+
+          <div class="signatures">
+            <div class="signature-grid">
+              <div class="signature-box">
+                <div class="signature-line">Gate Officer</div>
+              </div>
+              <div class="signature-box">
+                <div class="signature-line">Vendor</div>
+              </div>
+              <div class="signature-box">
+                <div class="signature-line">Store Manager</div>
+              </div>
+            </div>
+          </div>
+        </body>
+      </html>
+    `);
+
+    printWindow.document.close();
+    printWindow.focus();
+    setTimeout(() => {
+      printWindow.print();
+      printWindow.close();
+      setIsPrinted(true);
+    }, 250);
+  };
+
+  const handleKeyPress = (event, nextFieldId) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      const nextField = document.getElementById(nextFieldId);
+      if (nextField) {
+        nextField.focus();
+      }
+    }
+  };
+
   return (
     <LocalizationProvider dateAdapter={AdapterDateFns}>
       <div className="gate-form">
@@ -224,12 +377,14 @@ const StoreOutForm = () => {
 
                 <Grid item xs={12} md={6}>
                   <TextField
+                    id="vendorId"
                     fullWidth
                     select
                     label="Select Vendor"
                     value={formData.vendorId}
                     onChange={(e) => fetchVendorGRNs(e.target.value)}
                     disabled={loading}
+                    onKeyPress={(e) => handleKeyPress(e, 'grnNumber')}
                   >
                     {vendors.map((vendor) => (
                       <MenuItem key={vendor.id} value={vendor.id}>
@@ -242,20 +397,17 @@ const StoreOutForm = () => {
                 {formData.vendorId && (
                   <Grid item xs={12} md={6}>
                     <TextField
+                      id="grnNumber"
                       fullWidth
                       select
                       label="GRN Number"
                       value={formData.grnNumber}
                       onChange={(e) => fetchGRNDetails(e.target.value)}
                       disabled={loading || !grnList.length}
-                      error={!grnList.length}
-                      helperText={!grnList.length ? "No GRNs available for this vendor" : ""}
+                      onKeyPress={(e) => handleKeyPress(e, 'quantity')}
                     >
                       {grnList.map((grn) => (
-                        <MenuItem 
-                          key={grn.grn_number} 
-                          value={grn.grn_number}
-                        >
+                        <MenuItem key={grn.grn_number} value={grn.grn_number}>
                           {`${grn.grn_number} - ${grn.item_name} (Available: ${grn.quantity - grn.returned_quantity} ${grn.unit || ''})`}
                         </MenuItem>
                       ))}
@@ -330,6 +482,7 @@ const StoreOutForm = () => {
 
                     <Grid item xs={12} md={6}>
                       <TextField
+                        id="quantity"
                         fullWidth
                         type="number"
                         label="Return Quantity"
@@ -346,15 +499,13 @@ const StoreOutForm = () => {
                             formData.originalQuantity - formData.returnedQuantity
                           )
                         }}
-                        helperText={`Maximum returnable: ${Math.min(
-                          formData.currentStock,
-                          formData.originalQuantity - formData.returnedQuantity
-                        )}`}
+                        onKeyPress={(e) => handleKeyPress(e, 'remarks')}
                       />
                     </Grid>
 
                     <Grid item xs={12}>
                       <TextField
+                        id="remarks"
                         fullWidth
                         label="Remarks"
                         multiline
@@ -372,11 +523,18 @@ const StoreOutForm = () => {
                 <Grid item xs={12}>
                   <Stack direction="row" spacing={2} justifyContent="flex-end">
                     <Button
+                      variant="outlined"
+                      startIcon={<Print />}
+                      onClick={handlePrint}
+                    >
+                      Print
+                    </Button>
+                    <Button
                       type="submit"
                       variant="contained"
-                      disabled={loading || !selectedGRN || !formData.quantity}
+                      disabled={loading || !isPrinted}
                     >
-                      {loading ? <CircularProgress size={24} /> : 'Submit Return'}
+                      {loading ? <CircularProgress size={24} /> : 'Submit'}
                     </Button>
                   </Stack>
                 </Grid>

@@ -24,11 +24,8 @@ import { useAuth } from '../../context/AuthContext';
 
 const attendanceStatuses = [
   'Present',
-  'Absent',
+  'Absent', 
   'Half Day',
-  'On Leave',
-  'Holiday',
-  'Weekend',
 ];
 
 const DailyAttendance = () => {
@@ -77,13 +74,47 @@ const DailyAttendance = () => {
     fetchAttendanceData();
   }, [selectedDate, canEdit]);
 
+  const calculateHoursWorked = (inTime, outTime) => {
+    if (!inTime || !outTime) return 0;
+    
+    const [inHours, inMinutes] = inTime.split(':').map(Number);
+    const [outHours, outMinutes] = outTime.split(':').map(Number);
+    
+    let totalMinutes = (outHours * 60 + outMinutes) - (inHours * 60 + inMinutes);
+    if (totalMinutes < 0) {
+      totalMinutes += 24 * 60; // Add 24 hours worth of minutes for overnight shifts
+    }
+    
+    return parseFloat((totalMinutes / 60).toFixed(2));
+  };
+
   const handleAttendanceChange = (employeeId, field, value) => {
     if (!canEdit) return;
     
     setAttendanceData(prev =>
-      prev.map(record =>
-        record.employee_id === employeeId ? { ...record, [field]: value } : record
-      )
+      prev.map(record => {
+        if (record.employee_id === employeeId) {
+          const updatedRecord = { ...record, [field]: value };
+          
+          // Calculate hours worked when time or status changes
+          if (field === 'in_time' || field === 'out_time' || field === 'status') {
+            if (updatedRecord.status === 'Absent') {
+              updatedRecord.hours_worked = 0;
+            } else if (updatedRecord.status === 'Half Day') {
+              const standardHours = record.department === 'Admin' ? 8 : 12;
+              updatedRecord.hours_worked = standardHours / 2;
+            } else if (updatedRecord.status === 'Present') {
+              updatedRecord.hours_worked = calculateHoursWorked(
+                updatedRecord.in_time,
+                updatedRecord.out_time
+              );
+            }
+          }
+          
+          return updatedRecord;
+        }
+        return record;
+      })
     );
   };
 
@@ -99,7 +130,9 @@ const DailyAttendance = () => {
         in_time: record.in_time,
         out_time: record.out_time,
         overtime: record.overtime,
-        remarks: record.remarks
+        remarks: record.remarks,
+        hours_worked: record.hours_worked || 0, // Make sure hours_worked is included
+        department: record.department // Include department for standard hours calculation
       }));
 
       await api.saveAttendance(formattedDate, attendanceRecords);
@@ -149,6 +182,8 @@ const DailyAttendance = () => {
                 <TableCell>Out Time</TableCell>
                 <TableCell>Overtime (hrs)</TableCell>
                 <TableCell>Remarks</TableCell>
+                <TableCell>Hours Worked</TableCell>
+                <TableCell>Standard Hours</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -229,6 +264,12 @@ const DailyAttendance = () => {
                       ) : (
                         record.remarks
                       )}
+                    </TableCell>
+                    <TableCell>
+                      {record.hours_worked}
+                    </TableCell>
+                    <TableCell>
+                      {record.department === 'Admin' ? 8 : 12}
                     </TableCell>
                   </TableRow>
                 ))

@@ -34,8 +34,51 @@
     margin: 1.5cm 1cm;
   }
 
-  .signature-section {
-    margin-top: 3cm;
+  /* Remove the old signature styles */
+  .final-signature-section {
+    display: none !important;
+  }
+
+  /* New signature styles */
+  .print-wrapper {
+    position: relative;
+    min-height: 100vh;
+  }
+
+  .content-wrapper {
+    padding-bottom: 4cm;
+  }
+
+  .signature-section-print {
+    position: absolute;
+    bottom: 0;
+    left: 2cm;
+    right: 2cm;
+    margin-top: 2cm;
+    page-break-before: avoid;
     page-break-inside: avoid;
+  }
+
+  /* Ensure tables don't break across pages inappropriately */
+  table {
+    page-break-inside: auto;
+  }
+
+  tr {
+    page-break-inside: avoid;
+    page-break-after: auto;
+  }
+
+  thead {
+    display: table-header-group;
+  }
+
+  tfoot {
+    display: table-footer-group;
+  }
+
+  /* Hide elements that shouldn't be printed */
+  .no-print {
+    display: none !important;
   }
 } 

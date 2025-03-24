@@ -33,6 +33,7 @@ const LeaveApplicationForm = () => {
 
   const [employees, setEmployees] = useState([]);
   const [formData, setFormData] = useState(initialFormState);
+  const [isPrinted, setIsPrinted] = useState(false);
 
   useEffect(() => {
     const fetchEmployees = async () => {
@@ -262,6 +263,7 @@ const LeaveApplicationForm = () => {
     setTimeout(() => {
       printWindow.print();
       printWindow.close();
+      setIsPrinted(true);
     }, 250);
   };
 
@@ -412,6 +414,7 @@ const LeaveApplicationForm = () => {
                   <Button
                     type="submit"
                     variant="contained"
+                    disabled={!isPrinted}
                   >
                     Submit Application
                   </Button>

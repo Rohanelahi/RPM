@@ -21,6 +21,7 @@ import '../../styles/forms/SalaryIncrement.css';
 const SalaryIncrementForm = () => {
   const [employees, setEmployees] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [isPrinted, setIsPrinted] = useState(false);
   const [formData, setFormData] = useState({
     employeeId: null,
     employeeName: '',
@@ -261,6 +262,7 @@ const SalaryIncrementForm = () => {
     setTimeout(() => {
       printWindow.print();
       printWindow.close();
+      setIsPrinted(true);
     }, 250);
   };
 
@@ -385,7 +387,7 @@ const SalaryIncrementForm = () => {
                   variant="contained"
                   color="primary"
                   onClick={handleSubmit}
-                  disabled={loading || !formData.employeeId || !formData.newSalary || !formData.effectiveDate}
+                  disabled={loading || !formData.employeeId || !formData.newSalary || !formData.effectiveDate || !isPrinted}
                 >
                   {loading ? <CircularProgress size={24} /> : 'Save Changes'}
                 </Button>

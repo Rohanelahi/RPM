@@ -38,7 +38,9 @@ const SalaryForm = () => {
     presentDays: 0,
     absentDays: 0,
     totalWorkingDays: 0,
-    netSalary: 0
+    netSalary: 0,
+    halfDayDates: [],
+    absentDates: []
   });
   const [loanDetails, setLoanDetails] = useState({
     loans: [],
@@ -98,32 +100,20 @@ const SalaryForm = () => {
         api.getEmployeeLoans(employee.id)
       ]);
 
-      // Debug logs
-      console.log('Loans fetched:', loans);
-      console.log('Selected month:', format(selectedMonth, 'yyyy-MM-dd'));
+      // Get detailed attendance records
+      const halfDayRecords = attendance
+        .filter(a => a.status === 'Half Day')
+        .map(a => format(new Date(a.attendance_date), 'dd/MM/yyyy'));
 
-      // Filter active loans for the current month
-      const activeLoans = (loans || []).filter(loan => {
-        const startMonth = startOfMonth(new Date(loan.start_month));
-        const endMonth = endOfMonth(new Date(loan.end_month));
-        const currentMonth = selectedMonth;
-
-        return (
-          loan.status === 'APPROVED' &&
-          startMonth <= endOfMonth(currentMonth) && 
-          endMonth >= startOfMonth(currentMonth)
-        );
-      });
-
-      // Separate loans and advances
-      setLoanDetails({
-        loans: activeLoans.filter(loan => loan.loan_type === 'loan'),
-        advances: activeLoans.filter(loan => loan.loan_type === 'advance')
-      });
+      const absentRecords = attendance
+        .filter(a => a.status === 'Absent')
+        .map(a => format(new Date(a.attendance_date), 'dd/MM/yyyy'));
 
       // Calculate attendance
       const presentDays = attendance.filter(a => a.status === 'Present').length;
-      const absentDays = attendance.filter(a => a.status === 'Absent').length;
+      const halfDays = attendance.filter(a => a.status === 'Half Day').length;
+      const effectivePresentDays = presentDays + (halfDays * 0.5);
+      const absentDays = daysInMonth - effectivePresentDays;
 
       // Calculate overtime
       const totalOvertime = attendance.reduce((sum, day) => {
@@ -140,26 +130,17 @@ const SalaryForm = () => {
       const overtimeRate = hourlyRate * 1.5; // 1.5x for overtime
 
       // Calculate salary components
-      const basicSalary = dailyRate * presentDays;
+      const basicSalary = dailyRate * effectivePresentDays;
       const overtimeAmount = totalOvertime * overtimeRate;
 
-      // Calculate deductions with debug logs
-      const loanDeductions = activeLoans
+      // Calculate deductions
+      const loanDeductions = loans
         .filter(loan => loan.loan_type === 'loan')
-        .reduce((sum, loan) => {
-          console.log('Loan deduction:', loan.monthly_installment);
-          return sum + parseFloat(loan.monthly_installment);
-        }, 0);
+        .reduce((sum, loan) => sum + parseFloat(loan.monthly_installment), 0);
 
-      const advanceDeductions = activeLoans
+      const advanceDeductions = loans
         .filter(loan => loan.loan_type === 'advance')
-        .reduce((sum, loan) => {
-          console.log('Advance deduction:', loan.monthly_installment);
-          return sum + parseFloat(loan.monthly_installment);
-        }, 0);
-
-      console.log('Total loan deductions:', loanDeductions);
-      console.log('Total advance deductions:', advanceDeductions);
+        .reduce((sum, loan) => sum + parseFloat(loan.monthly_installment), 0);
 
       // Calculate net salary
       const netSalary = basicSalary + overtimeAmount - loanDeductions - advanceDeductions;
@@ -170,10 +151,12 @@ const SalaryForm = () => {
         overtimeAmount: Math.round(overtimeAmount),
         loanDeductions: Math.round(loanDeductions),
         advanceDeductions: Math.round(advanceDeductions),
-        presentDays,
+        presentDays: effectivePresentDays,
         absentDays,
         totalWorkingDays: daysInMonth,
-        netSalary: Math.round(netSalary)
+        netSalary: Math.round(netSalary),
+        halfDayDates: halfDayRecords,
+        absentDates: absentRecords
       });
     } catch (error) {
       console.error('Error calculating salary:', error);
@@ -594,13 +577,39 @@ const SalaryForm = () => {
                     >
                       Print
                     </Button>
-                    <Button
-                      type="submit"
-                      variant="contained"
-                    >
-                      Submit
-                    </Button>
                   </Stack>
+                </Grid>
+
+                <Grid item xs={12} className="no-print">
+                  <Box sx={{ mt: 3 }}>
+                    <Paper sx={{ p: 2 }}>
+                      <Typography variant="h6" sx={{ mb: 2 }}>
+                        Attendance Details
+                      </Typography>
+                      
+                      {salaryDetails.halfDayDates.length > 0 && (
+                        <Box sx={{ mb: 2 }}>
+                          <Typography variant="subtitle1" color="primary">
+                            Half Days ({salaryDetails.halfDayDates.length}):
+                          </Typography>
+                          <Typography>
+                            {salaryDetails.halfDayDates.join(', ')}
+                          </Typography>
+                        </Box>
+                      )}
+
+                      {salaryDetails.absentDates.length > 0 && (
+                        <Box>
+                          <Typography variant="subtitle1" color="error">
+                            Absent Days ({salaryDetails.absentDates.length}):
+                          </Typography>
+                          <Typography>
+                            {salaryDetails.absentDates.join(', ')}
+                          </Typography>
+                        </Box>
+                      )}
+                    </Paper>
+                  </Box>
                 </Grid>
               </>
             )}

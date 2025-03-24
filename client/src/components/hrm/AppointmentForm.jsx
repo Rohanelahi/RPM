@@ -26,6 +26,8 @@ const AppointmentForm = () => {
     joiningDate: null,
     salary: '',
     phone: '',
+    emergencyContactName: '',
+    emergencyContactPhone: '',
   });
 
   // Fetch departments from database
@@ -75,7 +77,8 @@ const AppointmentForm = () => {
     try {
       // Validate required fields
       if (!formData.firstName || !formData.lastName || !formData.department || 
-          !formData.designation || !formData.joiningDate || !formData.salary || !formData.phone) {
+          !formData.designation || !formData.joiningDate || !formData.salary || 
+          !formData.phone || !formData.emergencyContactName || !formData.emergencyContactPhone) {
         throw new Error('Please fill in all required fields');
       }
 
@@ -94,7 +97,9 @@ const AppointmentForm = () => {
         designation: formData.designation,
         joiningDate: format(formData.joiningDate, 'yyyy-MM-dd'),
         salary: parseFloat(formData.salary),
-        phone: formData.phone
+        phone: formData.phone,
+        emergencyContactName: formData.emergencyContactName,
+        emergencyContactPhone: formData.emergencyContactPhone
       };
 
       console.log('Submitting employee data:', employeeData);
@@ -116,6 +121,8 @@ const AppointmentForm = () => {
         joiningDate: null,
         salary: '',
         phone: '',
+        emergencyContactName: '',
+        emergencyContactPhone: '',
       });
 
     } catch (error) {
@@ -224,6 +231,26 @@ const AppointmentForm = () => {
                   label="Phone"
                   value={formData.phone}
                   onChange={handleChange('phone')}
+                  required
+                />
+              </Grid>
+              
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  fullWidth
+                  label="Emergency Contact Name"
+                  value={formData.emergencyContactName}
+                  onChange={handleChange('emergencyContactName')}
+                  required
+                />
+              </Grid>
+              
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  fullWidth
+                  label="Emergency Contact Number"
+                  value={formData.emergencyContactPhone}
+                  onChange={handleChange('emergencyContactPhone')}
                   required
                 />
               </Grid>

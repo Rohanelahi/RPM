@@ -112,6 +112,24 @@
     text-align: left;
   }
 
+  th {
+    background-color: #f0f0f0 !important;
+    color: #000 !important;
+    font-weight: bold;
+  }
+
+  /* Ensure black borders print clearly */
+  table, th, td {
+    border-color: #000 !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  /* Ensure text is black */
+  table {
+    color: #000 !important;
+  }
+
   /* Signature Section for Print */
   .signature-section {
     margin-top: 2cm;

@@ -17,10 +17,12 @@ import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import { Print } from '@mui/icons-material';
 import '../../styles/forms/GateForm.css';
 import useAccounts from '../../hooks/useAccounts';
+import { format } from 'date-fns';
 
 const SaleOutForm = () => {
   const [loading, setLoading] = useState(false);
   const { accounts: customers, loading: customersLoading } = useAccounts('CUSTOMER');
+  const [isPrinted, setIsPrinted] = useState(false);
 
   const [formData, setFormData] = useState({
     grnNumber: '',
@@ -36,12 +38,7 @@ const SaleOutForm = () => {
   });
 
   const paperTypes = [
-    'White Paper',
-    'Kraft Paper',
-    'Newspaper',
-    'Books',
-    'Mixed Paper',
-    'Other'
+   'SUPER', 'CMP', 'BOARD'
   ];
 
   const vehicleTypes = [
@@ -150,7 +147,164 @@ const SaleOutForm = () => {
   };
 
   const handlePrint = () => {
-    // Print functionality will be added
+    const printWindow = window.open('', '_blank');
+    const currentDate = format(new Date(), 'dd/MM/yyyy');
+    const selectedCustomer = customers.find(c => c.id === formData.customerId);
+
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Sale Out Gate Pass</title>
+          <style>
+            @page { size: A4; margin: 0; }
+            body { 
+              margin: 2cm;
+              font-family: Arial, sans-serif;
+              color: #000;
+              line-height: 1.6;
+            }
+            .header {
+              text-align: center;
+              margin-bottom: 1cm;
+            }
+            .company-name {
+              font-size: 24pt;
+              font-weight: bold;
+              margin-bottom: 0.5cm;
+            }
+            .document-title {
+              font-size: 16pt;
+              text-transform: uppercase;
+              margin-bottom: 1cm;
+            }
+            table {
+              width: 100%;
+              border-collapse: collapse;
+              margin-bottom: 1cm;
+            }
+            th, td {
+              border: 1px solid #000;
+              padding: 8px;
+              text-align: left;
+            }
+            th {
+              background-color: #f0f0f0;
+            }
+            .signatures {
+              margin-top: 2cm;
+            }
+            .signature-grid {
+              display: grid;
+              grid-template-columns: repeat(3, 1fr);
+              gap: 1cm;
+            }
+            .signature-box {
+              text-align: center;
+            }
+            .signature-line {
+              margin-top: 1cm;
+              border-top: 1px solid #000;
+              padding-top: 0.5cm;
+            }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <div class="company-name">Rose Paper Mill</div>
+            <div class="document-title">Sale Out Gate Pass</div>
+          </div>
+
+          <table>
+            <tr>
+              <th colspan="2">Basic Information</th>
+            </tr>
+            <tr>
+              <td><strong>GRN Number:</strong></td>
+              <td>${formData.grnNumber}</td>
+            </tr>
+            <tr>
+              <td><strong>Date:</strong></td>
+              <td>${currentDate}</td>
+            </tr>
+            <tr>
+              <td><strong>Customer:</strong></td>
+              <td>${selectedCustomer?.account_name || 'N/A'}</td>
+            </tr>
+          </table>
+
+          <table>
+            <tr>
+              <th colspan="2">Vehicle Information</th>
+            </tr>
+            <tr>
+              <td><strong>Vehicle Type:</strong></td>
+              <td>${formData.vehicleType}</td>
+            </tr>
+            <tr>
+              <td><strong>Vehicle Number:</strong></td>
+              <td>${formData.vehicleNumber}</td>
+            </tr>
+            <tr>
+              <td><strong>Driver Name:</strong></td>
+              <td>${formData.driverName || 'N/A'}</td>
+            </tr>
+          </table>
+
+          <table>
+            <tr>
+              <th colspan="2">Item Details</th>
+            </tr>
+            <tr>
+              <td><strong>Paper Type:</strong></td>
+              <td>${formData.paperType}</td>
+            </tr>
+            <tr>
+              <td><strong>Quantity:</strong></td>
+              <td>${formData.quantity} ${formData.unit}</td>
+            </tr>
+            ${formData.remarks ? `
+            <tr>
+              <td><strong>Remarks:</strong></td>
+              <td>${formData.remarks}</td>
+            </tr>
+            ` : ''}
+          </table>
+
+          <div class="signatures">
+            <div class="signature-grid">
+              <div class="signature-box">
+                <div class="signature-line">Gate Officer</div>
+              </div>
+              <div class="signature-box">
+                <div class="signature-line">Customer</div>
+              </div>
+              <div class="signature-box">
+                <div class="signature-line">Store Manager</div>
+              </div>
+            </div>
+          </div>
+        </body>
+      </html>
+    `);
+
+    printWindow.document.close();
+    printWindow.focus();
+    setTimeout(() => {
+      printWindow.print();
+      printWindow.close();
+      setIsPrinted(true);
+    }, 250);
+  };
+
+  const handleKeyPress = (event, nextFieldId) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      const nextField = document.getElementById(nextFieldId);
+      if (nextField) {
+        nextField.focus();
+      }
+    }
   };
 
   return (
@@ -191,6 +345,7 @@ const SaleOutForm = () => {
                     customerId: e.target.value
                   }))}
                   disabled={customersLoading}
+                  onKeyPress={(e) => handleKeyPress(e, 'paperType')}
                 >
                   {customers.map((customer) => (
                     <MenuItem key={customer.id} value={customer.id}>
@@ -211,6 +366,7 @@ const SaleOutForm = () => {
                     ...prev,
                     paperType: e.target.value
                   }))}
+                  onKeyPress={(e) => handleKeyPress(e, 'vehicleType')}
                 >
                   {paperTypes.map((type) => (
                     <MenuItem key={type} value={type}>
@@ -361,7 +517,7 @@ const SaleOutForm = () => {
                   <Button
                     type="submit"
                     variant="contained"
-                    disabled={loading}
+                    disabled={loading || !isPrinted}
                   >
                     {loading ? <CircularProgress size={24} /> : 'Submit'}
                   </Button>

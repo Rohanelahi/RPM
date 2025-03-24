@@ -11,6 +11,12 @@ const inventoryRouter = require('./routes/store/inventory');
 const departmentsRoute = require('./routes/departments');
 const stockRoutes = require('./routes/stock');
 const productionRoutes = require('./routes/production');
+const scheduleMonthlyAverages = require('./cron/stockAverages');
+const bankAccountsRouter = require('./routes/accounts/bankAccounts');
+const saleReportsRoutes = require('./routes/reports/saleReports');
+const dailyActivityReportsRoutes = require('./routes/reports/dailyActivityReports');
+const returnsSummaryRoutes = require('./routes/reports/returnsSummary');
+const cashFlowRoutes = require('./routes/reports/cashFlow');
 
 const app = express();
 
@@ -33,13 +39,25 @@ app.use('/api/store', inventoryRouter);
 app.use('/api', departmentsRoute);
 app.use('/api/stock', stockRoutes);
 app.use('/api/production', productionRoutes);
+app.use('/api/reports', saleReportsRoutes);
+app.use('/api/reports', dailyActivityReportsRoutes);
+app.use('/api/reports', returnsSummaryRoutes);
+app.use('/api/reports', cashFlowRoutes);
+
+// Mount the payments routes
+app.use('/api/payments', require('./routes/accounts/payments'));
+
+// Add the bank accounts routes
+app.use('/api/accounts', bankAccountsRouter);
+
+// Initialize cron jobs
+scheduleMonthlyAverages();
 
 // Error handling middleware
 app.use((err, req, res, next) => {
   console.error('Error:', err);
   res.status(err.status || 500).json({ 
-    error: err.message || 'Something went wrong!',
-    stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
+    error: err.message || 'Something went wrong!'
   });
 });
 
@@ -51,8 +69,9 @@ app.use((req, res) => {
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
-  console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
 });
+
+module.exports = app;
 
 // Handle unhandled promise rejections
 process.on('unhandledRejection', (err) => {

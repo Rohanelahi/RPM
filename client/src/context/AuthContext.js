@@ -23,6 +23,12 @@ const USERS = {
     username: 'director',
     password: 'director123',
     role: 'DIRECTOR'
+  },
+  tax: {
+    username: 'tax',
+    password: 'tax123',
+    role: 'TAX',
+    name: 'Tax Officer'
   }
 };
 

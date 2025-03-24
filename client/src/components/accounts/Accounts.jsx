@@ -45,25 +45,112 @@ const GRNDetails = () => {
   const [grnNumber, setGrnNumber] = useState('');
   const [grnData, setGrnData] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editedData, setEditedData] = useState(null);
 
   const handleSearch = async () => {
     if (!grnNumber.trim()) {
-      alert('Please enter a GRN number');
+      setError('Please enter a GRN number');
       return;
     }
 
     try {
       setLoading(true);
+      setError(null);
       const data = await api.getGRNDetails(grnNumber);
-      setGrnData(data);
+      console.log('Received GRN data:', data);
+      if (data) {
+        setGrnData(data);
+      }
     } catch (error) {
       console.error('Error:', error);
-      alert(error.message || 'Failed to fetch GRN details');
+      setError(error.message || 'Failed to fetch GRN details');
       setGrnData(null);
     } finally {
       setLoading(false);
     }
   };
+
+  const handleEdit = () => {
+    setEditedData({ ...grnData });
+    setIsEditing(true);
+  };
+
+  const handleCancel = () => {
+    setEditedData(null);
+    setIsEditing(false);
+  };
+
+  const handleSave = async () => {
+    try {
+      setLoading(true);
+      const updatedData = await api.updateGRNDetails(grnNumber, {
+        cut_weight: editedData.cut_weight,
+        price_per_unit: editedData.price_per_unit,
+        final_quantity: editedData.final_quantity,
+        total_amount: editedData.total_amount
+      });
+      setGrnData({ ...grnData, ...updatedData });
+      setIsEditing(false);
+      setEditedData(null);
+    } catch (error) {
+      setError(error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleInputChange = (field) => (event) => {
+    const newValue = parseFloat(event.target.value) || 0;
+    const updatedData = { ...editedData };
+    
+    switch (field) {
+      case 'cut_weight':
+        updatedData.cut_weight = newValue;
+        // Update final quantity: original quantity - cut weight
+        updatedData.final_quantity = (grnData.quantity || 0) - newValue;
+        // Update total amount based on new final quantity
+        updatedData.total_amount = updatedData.final_quantity * (updatedData.price_per_unit || 0);
+        break;
+
+      case 'price_per_unit':
+        updatedData.price_per_unit = newValue;
+        // Update total amount based on new price
+        updatedData.total_amount = (updatedData.final_quantity || 0) * newValue;
+        break;
+
+      case 'final_quantity':
+        updatedData.final_quantity = newValue;
+        // Update cut weight based on new final quantity
+        updatedData.cut_weight = (grnData.quantity || 0) - newValue;
+        // Update total amount based on new final quantity
+        updatedData.total_amount = newValue * (updatedData.price_per_unit || 0);
+        break;
+
+      case 'total_amount':
+        updatedData.total_amount = newValue;
+        // Update price per unit based on new total amount
+        if (updatedData.final_quantity > 0) {
+          updatedData.price_per_unit = newValue / updatedData.final_quantity;
+        }
+        break;
+
+      default:
+        updatedData[field] = newValue;
+    }
+
+    // Round all numbers to 2 decimal places
+    Object.keys(updatedData).forEach(key => {
+      if (typeof updatedData[key] === 'number') {
+        updatedData[key] = Math.round(updatedData[key] * 100) / 100;
+      }
+    });
+
+    setEditedData(updatedData);
+  };
+
+  console.log('Current grnData:', grnData);
 
   const handlePrint = () => {
     const printWindow = window.open('', '_blank');
@@ -117,16 +204,12 @@ const GRNDetails = () => {
                 <td>${grnData.item_type}</td>
               </tr>
               <tr>
-                <th>Gross Weight</th>
-                <td>${grnData.gross_weight} ${grnData.unit}</td>
-              </tr>
-              <tr>
-                <th>Tare Weight</th>
-                <td>${grnData.tare_weight} ${grnData.unit}</td>
-              </tr>
-              <tr>
                 <th>Net Quantity</th>
-                <td>${grnData.quantity} ${grnData.unit}</td>
+                <td>${grnData.final_quantity || grnData.quantity} ${grnData.unit}</td>
+              </tr>
+              <tr>
+                <th>Cut Weight</th>
+                <td>${grnData.cut_weight ? `${grnData.cut_weight} ${grnData.unit}` : `0 ${grnData.unit}`}</td>
               </tr>
               ${grnData.price_per_unit ? `
                 <tr>
@@ -161,6 +244,8 @@ const GRNDetails = () => {
           value={grnNumber}
           onChange={(e) => setGrnNumber(e.target.value)}
           size="small"
+          error={!!error}
+          helperText={error}
         />
         <Button
           variant="contained"
@@ -184,74 +269,156 @@ const GRNDetails = () => {
       {loading && <CircularProgress />}
 
       {grnData && (
-        <TableContainer component={Paper}>
-          <Table>
-            <TableBody>
-              <TableRow>
-                <TableCell component="th" sx={{ fontWeight: 'bold', width: '200px' }}>Date</TableCell>
-                <TableCell>{new Date(grnData.date_time).toLocaleDateString()}</TableCell>
-              </TableRow>
-              <TableRow>
-                <TableCell component="th" sx={{ fontWeight: 'bold' }}>GRN Number</TableCell>
-                <TableCell>{grnData.grn_number}</TableCell>
-              </TableRow>
-              <TableRow>
-                <TableCell component="th" sx={{ fontWeight: 'bold' }}>Entry Type</TableCell>
-                <TableCell>{grnData.entry_type}</TableCell>
-              </TableRow>
-              <TableRow>
-                <TableCell component="th" sx={{ fontWeight: 'bold' }}>Supplier/Purchaser</TableCell>
-                <TableCell>{grnData.supplier_name}</TableCell>
-              </TableRow>
-              <TableRow>
-                <TableCell component="th" sx={{ fontWeight: 'bold' }}>Vehicle Number</TableCell>
-                <TableCell>{grnData.vehicle_number}</TableCell>
-              </TableRow>
-              <TableRow>
-                <TableCell component="th" sx={{ fontWeight: 'bold' }}>Vehicle Type</TableCell>
-                <TableCell>{grnData.vehicle_type}</TableCell>
-              </TableRow>
-              <TableRow>
-                <TableCell component="th" sx={{ fontWeight: 'bold' }}>Driver Name</TableCell>
-                <TableCell>{grnData.driver_name}</TableCell>
-              </TableRow>
-              <TableRow>
-                <TableCell component="th" sx={{ fontWeight: 'bold' }}>Item Type</TableCell>
-                <TableCell>{grnData.item_type}</TableCell>
-              </TableRow>
-              <TableRow>
-                <TableCell component="th" sx={{ fontWeight: 'bold' }}>Gross Weight</TableCell>
-                <TableCell>{grnData.gross_weight} {grnData.unit}</TableCell>
-              </TableRow>
-              <TableRow>
-                <TableCell component="th" sx={{ fontWeight: 'bold' }}>Tare Weight</TableCell>
-                <TableCell>{grnData.tare_weight} {grnData.unit}</TableCell>
-              </TableRow>
-              <TableRow>
-                <TableCell component="th" sx={{ fontWeight: 'bold' }}>Net Quantity</TableCell>
-                <TableCell>{grnData.quantity} {grnData.unit}</TableCell>
-              </TableRow>
-              {grnData.price_per_unit && (
-                <>
-                  <TableRow>
-                    <TableCell component="th" sx={{ fontWeight: 'bold' }}>Price per Unit</TableCell>
-                    <TableCell>Rs. {grnData.price_per_unit}</TableCell>
-                  </TableRow>
-                  <TableRow>
-                    <TableCell component="th" sx={{ fontWeight: 'bold' }}>Total Amount</TableCell>
-                    <TableCell>Rs. {grnData.total_amount}</TableCell>
-                  </TableRow>
-                </>
-              )}
-              {grnData.remarks && (
+        <Box>
+          <Box sx={{ display: 'flex', gap: 2, mb: 2 }}>
+            {!isEditing ? (
+              <Button
+                variant="contained"
+                onClick={handleEdit}
+                color="primary"
+              >
+                Edit Details
+              </Button>
+            ) : (
+              <>
+                <Button
+                  variant="contained"
+                  onClick={handleSave}
+                  color="primary"
+                >
+                  Save Changes
+                </Button>
+                <Button
+                  variant="outlined"
+                  onClick={handleCancel}
+                >
+                  Cancel
+                </Button>
+              </>
+            )}
+          </Box>
+
+          <TableContainer component={Paper}>
+            <Table>
+              <TableBody>
                 <TableRow>
-                  <TableCell component="th" sx={{ fontWeight: 'bold' }}>Remarks</TableCell>
-                  <TableCell>{grnData.remarks}</TableCell>
+                  <TableCell component="th" sx={{ fontWeight: 'bold', width: '200px' }}>Date</TableCell>
+                  <TableCell>{new Date(grnData.date_time).toLocaleDateString()}</TableCell>
                 </TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </TableContainer>
+                <TableRow>
+                  <TableCell component="th" sx={{ fontWeight: 'bold' }}>GRN Number</TableCell>
+                  <TableCell>{grnData.grn_number}</TableCell>
+                </TableRow>
+                <TableRow>
+                  <TableCell component="th" sx={{ fontWeight: 'bold' }}>Entry Type</TableCell>
+                  <TableCell>{grnData.entry_type}</TableCell>
+                </TableRow>
+                <TableRow>
+                  <TableCell component="th" sx={{ fontWeight: 'bold' }}>Supplier/Purchaser</TableCell>
+                  <TableCell>{grnData.supplier_name}</TableCell>
+                </TableRow>
+                <TableRow>
+                  <TableCell component="th" sx={{ fontWeight: 'bold' }}>Vehicle Number</TableCell>
+                  <TableCell>{grnData.vehicle_number}</TableCell>
+                </TableRow>
+                <TableRow>
+                  <TableCell component="th" sx={{ fontWeight: 'bold' }}>Vehicle Type</TableCell>
+                  <TableCell>{grnData.vehicle_type}</TableCell>
+                </TableRow>
+                <TableRow>
+                  <TableCell component="th" sx={{ fontWeight: 'bold' }}>Driver Name</TableCell>
+                  <TableCell>{grnData.driver_name}</TableCell>
+                </TableRow>
+                <TableRow>
+                  <TableCell component="th" sx={{ fontWeight: 'bold' }}>Item Type</TableCell>
+                  <TableCell>{grnData.item_type}</TableCell>
+                </TableRow>
+                <TableRow>
+                  <TableCell component="th" sx={{ fontWeight: 'bold' }}>Original Quantity</TableCell>
+                  <TableCell>{grnData.quantity} {grnData.unit}</TableCell>
+                </TableRow>
+                <TableRow>
+                  <TableCell component="th" sx={{ fontWeight: 'bold' }}>Cut Weight</TableCell>
+                  <TableCell>
+                    {isEditing ? (
+                      <TextField
+                        value={editedData.cut_weight || ''}
+                        onChange={handleInputChange('cut_weight')}
+                        type="number"
+                        size="small"
+                        InputProps={{
+                          endAdornment: <span>{grnData.unit}</span>
+                        }}
+                      />
+                    ) : (
+                      `${grnData.cut_weight || 0} ${grnData.unit}`
+                    )}
+                  </TableCell>
+                </TableRow>
+                <TableRow>
+                  <TableCell component="th" sx={{ fontWeight: 'bold' }}>Final Quantity</TableCell>
+                  <TableCell>
+                    {isEditing ? (
+                      <TextField
+                        value={editedData.final_quantity || ''}
+                        onChange={handleInputChange('final_quantity')}
+                        type="number"
+                        size="small"
+                        InputProps={{
+                          endAdornment: <span>{grnData.unit}</span>
+                        }}
+                      />
+                    ) : (
+                      `${grnData.final_quantity || grnData.quantity} ${grnData.unit}`
+                    )}
+                  </TableCell>
+                </TableRow>
+                <TableRow>
+                  <TableCell component="th" sx={{ fontWeight: 'bold' }}>Price per Unit</TableCell>
+                  <TableCell>
+                    {isEditing ? (
+                      <TextField
+                        value={editedData.price_per_unit || ''}
+                        onChange={handleInputChange('price_per_unit')}
+                        type="number"
+                        size="small"
+                        InputProps={{
+                          startAdornment: <span>Rs.</span>
+                        }}
+                      />
+                    ) : (
+                      `Rs. ${grnData.price_per_unit || 0}`
+                    )}
+                  </TableCell>
+                </TableRow>
+                <TableRow>
+                  <TableCell component="th" sx={{ fontWeight: 'bold' }}>Total Amount</TableCell>
+                  <TableCell>
+                    {isEditing ? (
+                      <TextField
+                        value={editedData.total_amount || ''}
+                        onChange={handleInputChange('total_amount')}
+                        type="number"
+                        size="small"
+                        InputProps={{
+                          startAdornment: <span>Rs.</span>
+                        }}
+                      />
+                    ) : (
+                      `Rs. ${grnData.total_amount || 0}`
+                    )}
+                  </TableCell>
+                </TableRow>
+                {grnData.remarks && (
+                  <TableRow>
+                    <TableCell component="th" sx={{ fontWeight: 'bold' }}>Remarks</TableCell>
+                    <TableCell>{grnData.remarks}</TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        </Box>
       )}
     </Box>
   );

@@ -14,31 +14,31 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
+  IconButton,
 } from '@mui/material';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { DateTimePicker } from '@mui/x-date-pickers/DateTimePicker';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
-import { Print, Add as AddIcon } from '@mui/icons-material';
+import { Print, Add as AddIcon, Delete as DeleteIcon } from '@mui/icons-material';
 import '../../styles/forms/GateForm.css';
+import { format } from 'date-fns';
 
 const StoreInForm = () => {
   const [loading, setLoading] = useState(false);
   const [storeItems, setStoreItems] = useState([]);
   const [vendors, setVendors] = useState([]);
   const [newItemDialogOpen, setNewItemDialogOpen] = useState(false);
+  const [isPrinted, setIsPrinted] = useState(false);
+  
+  const [selectedItems, setSelectedItems] = useState([]);
   
   const [formData, setFormData] = useState({
     grnNumber: '',
-    itemId: '',
-    itemName: '',
-    itemCode: '',
-    quantity: '',
-    unit: '',
     vendorId: '',
     vehicleNumber: '',
     driverName: '',
     dateTime: new Date(),
-    remarks: '',
+    remarks: ''
   });
 
   const [newItemData, setNewItemData] = useState({
@@ -101,32 +101,54 @@ const StoreInForm = () => {
     fetchStoreItems();
   }, []);
 
-  // Add useEffect to fetch vendors
-  useEffect(() => {
-    const fetchVendors = async () => {
-      try {
-        const response = await fetch('http://localhost:5000/api/accounts/list?type=VENDOR');
-        if (!response.ok) throw new Error('Failed to fetch vendors');
-        const data = await response.json();
-        setVendors(data);
-      } catch (error) {
-        console.error('Error fetching vendors:', error);
-      }
-    };
+  // Update the fetchVendors function with the correct endpoint
+  const fetchVendors = async () => {
+    try {
+      const response = await fetch('http://localhost:5000/api/accounts/vendors');
+      if (!response.ok) throw new Error('Failed to fetch vendors');
+      const data = await response.json();
+      setVendors(data);
+    } catch (error) {
+      console.error('Error:', error);
+      alert('Failed to fetch vendors');
+    }
+  };
 
+  // Make sure both fetch calls are in useEffect
+  useEffect(() => {
     fetchVendors();
+    fetchStoreItems();
   }, []);
+
+  const handleAddItem = () => {
+    const selectedItem = storeItems.find(item => item.id === formData.itemId);
+    if (selectedItem && formData.quantity && formData.unit) {
+      setSelectedItems(prev => [...prev, {
+        itemId: selectedItem.id,
+        itemName: selectedItem.item_name,
+        itemCode: selectedItem.item_code,
+        quantity: formData.quantity,
+        unit: formData.unit
+      }]);
+      
+      // Clear item selection fields
+      setFormData(prev => ({
+        ...prev,
+        itemId: '',
+        quantity: '',
+        unit: ''
+      }));
+    }
+  };
+
+  const handleRemoveItem = (index) => {
+    setSelectedItems(prev => prev.filter((_, i) => i !== index));
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
       setLoading(true);
-
-      // Find the selected item to include its details
-      const selectedItem = storeItems.find(item => item.id === formData.itemId);
-
-      // Format the description similar to purchase/sale entries
-      const description = `Store Purchase: ${selectedItem?.item_name} ${formData.quantity} ${formData.unit} @ Rs.${formData.price_per_unit || 0}/unit`;
 
       const response = await fetch('http://localhost:5000/api/store/in', {
         method: 'POST',
@@ -135,11 +157,11 @@ const StoreInForm = () => {
         },
         body: JSON.stringify({
           ...formData,
-          quantity: Number(formData.quantity),
-          item_name: selectedItem?.item_name,
-          item_code: selectedItem?.item_code,
-          item_unit: selectedItem?.unit,
-          description: description  // Add formatted description
+          items: selectedItems.map(item => ({
+            itemId: item.itemId,
+            quantity: Number(item.quantity),
+            unit: item.unit
+          }))
         }),
       });
 
@@ -147,21 +169,6 @@ const StoreInForm = () => {
         const errorData = await response.json();
         throw new Error(errorData.error || 'Something went wrong');
       }
-
-      // Reset form after successful submission
-      setFormData({
-        grnNumber: '',
-        itemId: '',
-        quantity: '',
-        unit: '',
-        vendorId: '',
-        vehicleNumber: '',
-        driverName: '',
-        dateTime: new Date(),
-        remarks: '',
-        itemName: '',
-        itemCode: ''
-      });
 
       // Generate new GRN number
       const generateGRN = () => {
@@ -173,12 +180,29 @@ const StoreInForm = () => {
         return `STI-${year}${month}${day}-${random}`;
       };
 
-      setFormData(prev => ({
-        ...prev,
-        grnNumber: generateGRN()
-      }));
+      // Reset form with new GRN
+      setFormData({
+        grnNumber: generateGRN(),
+        vendorId: '',
+        vehicleNumber: '',
+        driverName: '',
+        dateTime: new Date(),
+        remarks: '',
+        itemId: '',
+        quantity: '',
+        unit: ''
+      });
+      
+      // Clear selected items
+      setSelectedItems([]);
+      
+      // Reset print status
+      setIsPrinted(false);
 
-      alert('Store in entry created successfully');
+      // Refresh store items list
+      await fetchStoreItems();
+
+      alert('Store in entries created successfully');
     } catch (error) {
       console.error('Error submitting form:', error);
       alert(error.message);
@@ -188,7 +212,168 @@ const StoreInForm = () => {
   };
 
   const handlePrint = () => {
-    window.print();
+    const printWindow = window.open('', '_blank');
+    const currentDate = format(new Date(), 'dd/MM/yyyy');
+    const selectedVendor = vendors.find(v => v.id === formData.vendorId);
+
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Store In Gate Pass</title>
+          <style>
+            @page { size: A4; margin: 0; }
+            body { 
+              margin: 2cm;
+              font-family: Arial, sans-serif;
+              color: #000;
+              line-height: 1.6;
+            }
+            .header {
+              text-align: center;
+              margin-bottom: 1cm;
+            }
+            .company-name {
+              font-size: 24pt;
+              font-weight: bold;
+              margin-bottom: 0.5cm;
+            }
+            .document-title {
+              font-size: 16pt;
+              text-transform: uppercase;
+              margin-bottom: 1cm;
+            }
+            table {
+              width: 100%;
+              border-collapse: collapse;
+              margin-bottom: 1cm;
+            }
+            th, td {
+              border: 1px solid #000;
+              padding: 8px;
+              text-align: left;
+            }
+            th {
+              background-color: #f0f0f0;
+            }
+            .items-table th {
+              text-align: center;
+            }
+            .items-table td {
+              text-align: center;
+            }
+            .signatures {
+              margin-top: 2cm;
+            }
+            .signature-grid {
+              display: grid;
+              grid-template-columns: repeat(3, 1fr);
+              gap: 1cm;
+            }
+            .signature-box {
+              text-align: center;
+            }
+            .signature-line {
+              margin-top: 1cm;
+              border-top: 1px solid #000;
+              padding-top: 0.5cm;
+            }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <div class="company-name">Rose Paper Mill</div>
+            <div class="document-title">Store In Gate Pass</div>
+          </div>
+
+          <table>
+            <tr>
+              <th colspan="2">Basic Information</th>
+            </tr>
+            <tr>
+              <td><strong>GRN Number:</strong></td>
+              <td>${formData.grnNumber}</td>
+            </tr>
+            <tr>
+              <td><strong>Date:</strong></td>
+              <td>${currentDate}</td>
+            </tr>
+            <tr>
+              <td><strong>Vendor:</strong></td>
+              <td>${selectedVendor?.name || 'N/A'}</td>
+            </tr>
+          </table>
+
+          <table>
+            <tr>
+              <th colspan="2">Vehicle Information</th>
+            </tr>
+            <tr>
+              <td><strong>Vehicle Number:</strong></td>
+              <td>${formData.vehicleNumber}</td>
+            </tr>
+            <tr>
+              <td><strong>Driver Name:</strong></td>
+              <td>${formData.driverName || 'N/A'}</td>
+            </tr>
+          </table>
+
+          <table class="items-table">
+            <tr>
+              <th colspan="4">Item Details</th>
+            </tr>
+            <tr>
+              <th>Sr. No.</th>
+              <th>Item Name</th>
+              <th>Quantity</th>
+              <th>Unit</th>
+            </tr>
+            ${selectedItems.map((item, index) => `
+              <tr>
+                <td>${index + 1}</td>
+                <td>${item.itemName}</td>
+                <td>${item.quantity}</td>
+                <td>${item.unit}</td>
+              </tr>
+            `).join('')}
+          </table>
+
+          ${formData.remarks ? `
+          <table>
+            <tr>
+              <th colspan="2">Additional Information</th>
+            </tr>
+            <tr>
+              <td><strong>Remarks:</strong></td>
+              <td>${formData.remarks}</td>
+            </tr>
+          </table>
+          ` : ''}
+
+          <div class="signatures">
+            <div class="signature-grid">
+              <div class="signature-box">
+                <div class="signature-line">Gate Officer</div>
+              </div>
+              <div class="signature-box">
+                <div class="signature-line">Vendor</div>
+              </div>
+              <div class="signature-box">
+                <div class="signature-line">Store Manager</div>
+              </div>
+            </div>
+          </div>
+        </body>
+      </html>
+    `);
+
+    printWindow.document.close();
+    printWindow.focus();
+    setTimeout(() => {
+      printWindow.print();
+      printWindow.close();
+      setIsPrinted(true);
+    }, 250);
   };
 
   const handleAddNewItem = async () => {
@@ -226,8 +411,19 @@ const StoreInForm = () => {
         throw new Error(errorData.error || 'Failed to add item');
       }
 
+      const newItem = await response.json();
+      
       // Refresh items list
       await fetchStoreItems();
+      
+      // Set the newly created item as selected
+      setFormData(prev => ({
+        ...prev,
+        itemId: newItem.id,
+        itemName: newItem.item_name,
+        itemCode: newItem.item_code,
+        unit: newItem.unit
+      }));
       
       // Reset form and close dialog
       setNewItemData({ itemName: '' });
@@ -239,6 +435,33 @@ const StoreInForm = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleKeyPress = (event, nextFieldId) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      const nextField = document.getElementById(nextFieldId);
+      if (nextField) {
+        nextField.focus();
+      }
+    }
+  };
+
+  const handleItemChange = (e) => {
+    const value = e.target.value;
+    if (value === 'add_new') {
+      setNewItemDialogOpen(true);
+      return;
+    }
+
+    const selectedItem = storeItems.find(item => item.id === value);
+    setFormData(prev => ({
+      ...prev,
+      itemId: value,
+      unit: selectedItem?.unit || '',
+      itemName: selectedItem?.item_name || '',
+      itemCode: selectedItem?.item_code || ''
+    }));
   };
 
   return (
@@ -254,113 +477,22 @@ const StoreInForm = () => {
               <Grid container spacing={3}>
                 <Grid item xs={12} md={6}>
                   <TextField
-                    fullWidth
-                    label="GRN Number"
-                    value={formData.grnNumber}
-                    disabled
-                  />
-                </Grid>
-
-                <Grid item xs={12} md={6}>
-                  <DateTimePicker
-                    label="Date & Time"
-                    value={formData.dateTime}
-                    onChange={(newValue) => setFormData(prev => ({
-                      ...prev,
-                      dateTime: newValue
-                    }))}
-                    renderInput={(params) => <TextField {...params} fullWidth />}
-                  />
-                </Grid>
-
-                <Grid item xs={12}>
-                  <Divider sx={{ my: 2 }} />
-                </Grid>
-
-                <Grid item xs={12} md={6}>
-                  <Stack direction="row" spacing={1}>
-                    <TextField
-                      fullWidth
-                      select
-                      label="Item"
-                      required
-                      value={formData.itemId}
-                      onChange={(e) => {
-                        const selectedItem = storeItems.find(item => item.id === e.target.value);
-                        setFormData(prev => ({
-                          ...prev,
-                          itemId: e.target.value,
-                          unit: selectedItem?.unit || '',
-                          itemName: selectedItem?.item_name || '',
-                          itemCode: selectedItem?.item_code || ''
-                        }));
-                      }}
-                    >
-                      {storeItems.map((item) => (
-                        <MenuItem key={item.id} value={item.id}>
-                          {`${item.item_name} (${item.item_code})`}
-                        </MenuItem>
-                      ))}
-                    </TextField>
-                    <Button
-                      variant="contained"
-                      onClick={() => setNewItemDialogOpen(true)}
-                      sx={{ minWidth: 'auto', px: 2 }}
-                    >
-                      <AddIcon />
-                    </Button>
-                  </Stack>
-                </Grid>
-
-                <Grid item xs={12} md={4}>
-                  <TextField
-                    fullWidth
-                    type="number"
-                    label="Quantity"
-                    required
-                    value={formData.quantity}
-                    onChange={(e) => setFormData(prev => ({
-                      ...prev,
-                      quantity: e.target.value
-                    }))}
-                  />
-                </Grid>
-
-                <Grid item xs={12} md={2}>
-                  <TextField
+                    id="vendorId"
                     fullWidth
                     select
-                    label="Unit"
-                    required
-                    value={formData.unit}
-                    onChange={(e) => setFormData(prev => ({
-                      ...prev,
-                      unit: e.target.value
-                    }))}
-                  >
-                    {units.map((unit) => (
-                      <MenuItem key={unit} value={unit}>
-                        {unit}
-                      </MenuItem>
-                    ))}
-                  </TextField>
-                </Grid>
-
-                <Grid item xs={12} md={6}>
-                  <TextField
-                    fullWidth
-                    select
-                    label="Vendor"
+                    label="Select Vendor"
                     required
                     value={formData.vendorId}
                     onChange={(e) => setFormData(prev => ({
                       ...prev,
                       vendorId: e.target.value
                     }))}
+                    disabled={loading}
+                    onKeyPress={(e) => handleKeyPress(e, 'vehicleNumber')}
                   >
                     {vendors.map((vendor) => (
                       <MenuItem key={vendor.id} value={vendor.id}>
-                        {vendor.account_name}
+                        {vendor.name}
                       </MenuItem>
                     ))}
                   </TextField>
@@ -368,6 +500,7 @@ const StoreInForm = () => {
 
                 <Grid item xs={12} md={6}>
                   <TextField
+                    id="vehicleNumber"
                     fullWidth
                     label="Vehicle Number"
                     value={formData.vehicleNumber}
@@ -375,11 +508,13 @@ const StoreInForm = () => {
                       ...prev,
                       vehicleNumber: e.target.value.toUpperCase()
                     }))}
+                    onKeyPress={(e) => handleKeyPress(e, 'driverName')}
                   />
                 </Grid>
 
                 <Grid item xs={12} md={6}>
                   <TextField
+                    id="driverName"
                     fullWidth
                     label="Driver Name"
                     value={formData.driverName}
@@ -391,7 +526,114 @@ const StoreInForm = () => {
                 </Grid>
 
                 <Grid item xs={12}>
+                  <Paper variant="outlined" sx={{ p: 2, mb: 2 }}>
+                    <Grid container spacing={2}>
+                      <Grid item xs={12} md={4}>
+                        <TextField
+                          id="itemId"
+                          fullWidth
+                          select
+                          label="Select Item"
+                          value={formData.itemId}
+                          onChange={handleItemChange}
+                          disabled={loading}
+                        >
+                          <MenuItem value="add_new" sx={{ 
+                            color: 'primary.main',
+                            fontWeight: 'bold'
+                          }}>
+                            <Stack direction="row" spacing={1} alignItems="center">
+                              <AddIcon />
+                              <span>Add New Item</span>
+                            </Stack>
+                          </MenuItem>
+                          <Divider />
+                          {storeItems.map((item) => (
+                            <MenuItem key={item.id} value={item.id}>
+                              {item.item_name}
+                            </MenuItem>
+                          ))}
+                        </TextField>
+                      </Grid>
+
+                      <Grid item xs={12} md={3}>
+                        <TextField
+                          fullWidth
+                          type="number"
+                          label="Quantity"
+                          value={formData.quantity}
+                          onChange={(e) => setFormData(prev => ({
+                            ...prev,
+                            quantity: e.target.value
+                          }))}
+                        />
+                      </Grid>
+
+                      <Grid item xs={12} md={3}>
+                        <TextField
+                          fullWidth
+                          select
+                          label="Unit"
+                          value={formData.unit}
+                          onChange={(e) => setFormData(prev => ({
+                            ...prev,
+                            unit: e.target.value
+                          }))}
+                        >
+                          {units.map((unit) => (
+                            <MenuItem key={unit} value={unit}>
+                              {unit}
+                            </MenuItem>
+                          ))}
+                        </TextField>
+                      </Grid>
+
+                      <Grid item xs={12} md={2}>
+                        <Button
+                          fullWidth
+                          variant="contained"
+                          onClick={handleAddItem}
+                          disabled={!formData.itemId || !formData.quantity || !formData.unit}
+                          sx={{ height: '100%' }}
+                        >
+                          Add Item
+                        </Button>
+                      </Grid>
+                    </Grid>
+                  </Paper>
+
+                  {selectedItems.length > 0 && (
+                    <Paper variant="outlined" sx={{ p: 2, mb: 2 }}>
+                      <Typography variant="subtitle1" sx={{ mb: 2 }}>
+                        Selected Items
+                      </Typography>
+                      <Grid container spacing={2}>
+                        {selectedItems.map((item, index) => (
+                          <Grid item xs={12} key={index}>
+                            <Paper variant="outlined" sx={{ p: 1 }}>
+                              <Stack direction="row" justifyContent="space-between" alignItems="center">
+                                <Typography>
+                                  {item.itemName} - {item.quantity} {item.unit}
+                                </Typography>
+                                <IconButton 
+                                  size="small" 
+                                  color="error"
+                                  onClick={() => handleRemoveItem(index)}
+                                >
+                                  <DeleteIcon />
+                                </IconButton>
+                              </Stack>
+                            </Paper>
+                          </Grid>
+                        ))}
+                      </Grid>
+                    </Paper>
+                  )}
+                </Grid>
+
+                <Grid item xs={12}>
                   <TextField
+                    id="remarks"
                     fullWidth
                     label="Remarks"
                     multiline
@@ -410,13 +652,14 @@ const StoreInForm = () => {
                       variant="outlined"
                       startIcon={<Print />}
                       onClick={handlePrint}
+                      disabled={selectedItems.length === 0}
                     >
                       Print
                     </Button>
                     <Button
                       type="submit"
                       variant="contained"
-                      disabled={loading}
+                      disabled={loading || !isPrinted || selectedItems.length === 0}
                     >
                       {loading ? <CircularProgress size={24} /> : 'Submit'}
                     </Button>
@@ -428,7 +671,6 @@ const StoreInForm = () => {
         </Paper>
       </div>
 
-      {/* Simplified Add New Item Dialog */}
       <Dialog 
         open={newItemDialogOpen} 
         onClose={() => setNewItemDialogOpen(false)}
@@ -448,6 +690,12 @@ const StoreInForm = () => {
                 itemName: e.target.value
               }))}
               autoFocus
+              onKeyPress={(e) => {
+                if (e.key === 'Enter' && newItemData.itemName) {
+                  e.preventDefault();
+                  handleAddNewItem();
+                }
+              }}
             />
           </Box>
         </DialogContent>

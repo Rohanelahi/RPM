@@ -5,7 +5,7 @@ const pool = require('../../db');
 // Get ledger entries
 router.get('/ledger', async (req, res) => {
   try {
-    const { accountId, startDate, endDate } = req.query;
+    const { accountId, startDate, endDate, userRole } = req.query;
 
     // Validate dates
     if (!startDate || !endDate) {
@@ -37,55 +37,98 @@ router.get('/ledger', async (req, res) => {
       return res.status(404).json({ error: 'Account not found' });
     }
 
-    // Get all transactions for the period with transaction type and additional details
-    const { rows: transactions } = await pool.query(
-      `SELECT 
-        t.id,
-        t.transaction_date::timestamp,
-        t.reference_no,
-        t.entry_type,
-        t.amount,
-        t.description,
-        CASE 
-          WHEN t.description = 'STORE_RETURN' THEN 
-            (SELECT item_name FROM store_returns WHERE return_grn = t.reference_no)
-          ELSE COALESCE(t.item_name, si.item_name)
-        END as item_name,
-        CASE 
-          WHEN t.description = 'STORE_RETURN' THEN 
-            (SELECT quantity FROM store_returns WHERE return_grn = t.reference_no)
-          WHEN gep.final_quantity IS NOT NULL THEN gep.final_quantity
-          ELSE COALESCE(t.quantity, sr.quantity)
-        END as quantity,
-        CASE
-          WHEN t.description = 'STORE_RETURN' THEN 
-            (SELECT unit FROM store_returns WHERE return_grn = t.reference_no)
-          ELSE COALESCE(t.unit, si.unit)
-        END as unit,
-        t.price_per_unit,
-        CASE 
-          WHEN t.description LIKE '%PURCHASE%' AND t.description NOT LIKE '%PURCHASE_RETURN%' THEN 'DEBIT'
-          WHEN t.description LIKE '%PURCHASE_RETURN%' THEN 'CREDIT'
-          WHEN t.description LIKE '%SALE_RETURN%' THEN 'DEBIT'
-          ELSE t.entry_type
-        END as adjusted_entry_type,
+    // Modify the transactions query to handle payment entries correctly
+    const transactionQuery = `
+      WITH all_transactions AS (
+        -- Regular transactions
+        SELECT 
+          t.id,
+          t.transaction_date,
+          t.reference_no,
+          t.description,
+          t.amount,
+          CASE
+            WHEN t.description LIKE '%Purchase against GRN%' THEN 'CREDIT'
+            WHEN t.entry_type LIKE '%PURCHASE%' THEN 'CREDIT'
+            WHEN t.entry_type = 'STORE_RETURN' THEN 'DEBIT'
+            WHEN t.entry_type LIKE '%SALE%' THEN 'DEBIT'
+            WHEN t.description LIKE '%Sale%' THEN 'DEBIT'
+            ELSE t.entry_type
+          END as type,
+          t.item_name,
+          t.quantity,
+          t.unit,
+          t.price_per_unit,
+          t.account_id
+        FROM transactions t
+        WHERE t.account_id = $1
+        
+        UNION ALL
+        
+        -- Payment transactions
+        SELECT 
+          p.id,
+          p.payment_date as transaction_date,
+          p.voucher_no as reference_no,
+          CASE 
+            WHEN p.payment_type = 'RECEIVED' THEN 
+              CASE 
+                WHEN p.payment_mode = 'ONLINE' THEN
+                  'Payment received from ' || p.receiver_name || ' via ' || p.payment_mode || 
+                  CASE 
+                    WHEN ba.bank_name IS NOT NULL THEN ' (' || ba.bank_name || ')'
+                    ELSE ''
+                  END
+                ELSE
+                  'Payment received from ' || p.receiver_name || ' via ' || p.payment_mode
+              END
+            ELSE 
+              CASE 
+                WHEN p.payment_mode = 'ONLINE' THEN
+                  'Payment issued to ' || p.receiver_name || ' via ' || p.payment_mode || 
+                  CASE 
+                    WHEN ba.bank_name IS NOT NULL THEN ' (' || ba.bank_name || ')'
+                    ELSE ''
+                  END
+                ELSE
+                  'Payment issued to ' || p.receiver_name || ' via ' || p.payment_mode
+              END
+          END as description,
+          p.amount,
+          CASE 
+            WHEN p.payment_type = 'RECEIVED' THEN 'CREDIT'
+            ELSE 'DEBIT'
+          END as type,
+          NULL as item_name,
+          NULL as quantity,
+          NULL as unit,
+          NULL as price_per_unit,
+          p.account_id
+        FROM payments p
+        LEFT JOIN bank_accounts ba ON ba.id = p.bank_account_id
+        WHERE p.account_id = $1
+      )
+      SELECT 
+        t.*,
         COALESCE(ge.quantity, gr.return_quantity) as weight,
         COALESCE(ge.item_type, ge2.item_type) as item_type,
         COALESCE(ge.paper_type, ge2.paper_type) as paper_type,
         COALESCE(ge.unit, ge2.unit) as gate_unit,
-        COALESCE(gep.price_per_unit, t.price_per_unit) as final_price_per_unit
-       FROM transactions t
-       LEFT JOIN gate_entries ge ON t.reference_no = ge.grn_number
-       LEFT JOIN gate_returns gr ON t.reference_no = gr.return_number
-       LEFT JOIN gate_entries ge2 ON gr.original_grn_number = ge2.grn_number
-       LEFT JOIN gate_entries_pricing gep ON t.reference_no = gep.grn_number
-       LEFT JOIN store_entries se ON t.reference_no = se.grn_number
-       LEFT JOIN store_items si ON se.item_id = si.id
-       LEFT JOIN store_returns sr ON t.reference_no = sr.return_grn
-       WHERE t.account_id = $1
-       AND t.transaction_date >= $2::timestamp
-       AND t.transaction_date <= $3::timestamp
-       ORDER BY t.transaction_date, t.id`,
+        gep.total_amount as final_total_amount,
+        gep.price_per_unit as final_price_per_unit
+      FROM all_transactions t
+      LEFT JOIN gate_entries ge ON t.reference_no = ge.grn_number
+      LEFT JOIN gate_returns gr ON t.reference_no = gr.return_number
+      LEFT JOIN gate_entries ge2 ON gr.original_grn_number = ge2.grn_number
+      LEFT JOIN gate_entries_pricing gep ON t.reference_no = gep.grn_number
+      WHERE t.transaction_date >= $2::timestamp
+      AND t.transaction_date <= $3::timestamp
+      ${userRole === 'TAX' ? 'AND EXISTS (SELECT 1 FROM payments p WHERE p.voucher_no = t.reference_no AND p.processed_by_role = \'TAX\')' : ''}
+      ORDER BY t.transaction_date ASC, t.id ASC
+    `;
+
+    const { rows: transactions } = await pool.query(
+      transactionQuery,
       [accountId, formattedStartDate, formattedEndDate]
     );
 
@@ -104,18 +147,18 @@ router.get('/ledger', async (req, res) => {
         id: t.id,
         date: t.transaction_date,
         reference: t.reference_no,
-        type: t.adjusted_entry_type,
-        amount: t.amount,
+        type: t.type,
+        amount: t.final_total_amount || t.amount,
         description: t.description,
         item_name: t.item_name,
         quantity: t.quantity,
         unit: t.unit,
-        price_per_unit: t.final_price_per_unit,
+        price_per_unit: t.final_price_per_unit || t.price_per_unit,
         weight: t.weight,
         item_type: t.item_type,
         paper_type: t.paper_type,
         gate_unit: t.gate_unit,
-        entry_type: t.entry_type
+        entry_type: t.type
       }))
     };
 

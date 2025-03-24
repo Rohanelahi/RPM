@@ -22,6 +22,7 @@ import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import { format, startOfMonth } from 'date-fns';
 import { Print } from '@mui/icons-material';
 import '../../styles/Ledger.css';
+import { useAuth } from '../../context/AuthContext';
 
 const Ledger = () => {
   const [loading, setLoading] = useState(false);
@@ -33,6 +34,7 @@ const Ledger = () => {
     startDate: startOfMonth(new Date()),
     endDate: new Date()
   });
+  const { user } = useAuth();
 
   useEffect(() => {
     fetchAccounts();
@@ -57,28 +59,38 @@ const Ledger = () => {
   };
 
   const formatTransactionDetails = (transaction) => {
-    console.log('Formatting transaction:', transaction); // Debug log
+    // For payment transactions, show description as is (bank name is already included)
+    if (transaction.description?.includes('Payment received from') || 
+        transaction.description?.includes('Payment issued to')) {
+      return transaction.description;
+    }
     
-    // Helper function to format quantity without decimals
+    // Helper functions
     const formatQuantity = (qty) => Math.round(parseFloat(qty)).toString();
+    const formatPrice = (price) => parseFloat(price).toFixed(2);
     
     // Special handling for store returns
     if (transaction.description === 'STORE_RETURN') {
-      return `Return: ${formatQuantity(transaction.quantity)} ${transaction.unit} of ${transaction.item_name} @ Rs.${transaction.price_per_unit}/${transaction.unit}`;
+      return `Return: ${formatQuantity(transaction.quantity)} ${transaction.unit} of ${transaction.item_name} @ Rs.${formatPrice(transaction.price_per_unit)}/${transaction.unit}`;
+    }
+    
+    // Special handling for sales
+    if (transaction.entry_type?.includes('SALE') || transaction.description?.includes('Sale')) {
+      return `Sale: ${formatQuantity(transaction.quantity)} ${transaction.unit} of ${transaction.item_name} @ Rs.${formatPrice(transaction.price_per_unit)}/${transaction.unit}`;
     }
     
     // Keep existing logic for all other cases
     if (transaction.reference?.startsWith('STI-')) {
-      return `${formatQuantity(transaction.quantity)} ${transaction.unit} of ${transaction.item_name} @ Rs.${transaction.price_per_unit}/${transaction.unit}`;
+      return `${formatQuantity(transaction.quantity)} ${transaction.unit} of ${transaction.item_name} @ Rs.${formatPrice(transaction.price_per_unit)}/${transaction.unit}`;
     }
     
     // Special handling for purchase entries
     if (transaction.description?.includes('Purchase against GRN')) {
-      return `${formatQuantity(transaction.quantity)} ${transaction.gate_unit || transaction.unit || 'unit'} of ${transaction.item_type || transaction.paper_type} @ Rs.${transaction.price_per_unit}/${transaction.gate_unit || transaction.unit || 'unit'}`;
+      return `${formatQuantity(transaction.quantity)} ${transaction.gate_unit || transaction.unit || 'unit'} of ${transaction.item_type || transaction.paper_type} @ Rs.${formatPrice(transaction.price_per_unit)}/${transaction.gate_unit || transaction.unit || 'unit'}`;
     }
     
     if (transaction.weight && (transaction.item_type || transaction.paper_type)) {
-      return `${formatQuantity(transaction.weight)} ${transaction.gate_unit || transaction.unit || 'unit'} of ${transaction.item_type || transaction.paper_type}${transaction.price_per_unit ? ` @ Rs.${transaction.price_per_unit}/${transaction.gate_unit || transaction.unit || 'unit'}` : ''}`;
+      return `${formatQuantity(transaction.weight)} ${transaction.gate_unit || transaction.unit || 'unit'} of ${transaction.item_type || transaction.paper_type}${transaction.price_per_unit ? ` @ Rs.${formatPrice(transaction.price_per_unit)}/${transaction.gate_unit || transaction.unit || 'unit'}` : ''}`;
     }
     
     if (transaction.description) {
@@ -114,7 +126,8 @@ const Ledger = () => {
         `http://localhost:5000/api/accounts/ledger?` + 
         `accountId=${selectedAccount}&` +
         `startDate=${formattedStartDate}&` +
-        `endDate=${formattedEndDate}`
+        `endDate=${formattedEndDate}&` +
+        `userRole=${user.role}`
       );
       
       if (!response.ok) throw new Error('Failed to fetch transactions');
@@ -165,12 +178,13 @@ const Ledger = () => {
     for (let i = 0; i <= index; i++) {
       const transaction = transactions[i];
       if (transaction.type === 'DEBIT') {
-        balance -= transaction.amount; // All debits decrease balance
+        balance -= transaction.amount;
       } else if (transaction.type === 'CREDIT') {
-        balance += transaction.amount; // All credits increase balance
+        balance += transaction.amount;
       }
     }
-    return balance.toFixed(2);
+    const suffix = balance >= 0 ? ' CR' : ' DB';
+    return `${Math.abs(balance).toFixed(2)}${suffix}`;
   };
 
   const calculateTotals = () => {
@@ -178,10 +192,10 @@ const Ledger = () => {
     return transactions.reduce((acc, t) => {
       if (t.type === 'DEBIT') {
         acc.totalDebits += t.amount;
-        finalBalance -= t.amount;
+        finalBalance -= t.amount; // Payments (DEBIT) decrease balance
       } else if (t.type === 'CREDIT') {
         acc.totalCredits += t.amount;
-        finalBalance += t.amount;
+        finalBalance += t.amount; // Purchases (CREDIT) increase balance
       }
       return { ...acc, finalBalance };
     }, { totalDebits: 0, totalCredits: 0, finalBalance });
@@ -315,20 +329,16 @@ const Ledger = () => {
             <tbody>
               <tr>
                 <td colspan="5">Opening Balance</td>
-                <td class="amount-cell">${accountDetails.opening_balance.toFixed(2)}</td>
+                <td class="amount-cell">
+                  Rs.${Math.abs(accountDetails.opening_balance).toFixed(2)}
+                  ${accountDetails.opening_balance >= 0 ? ' CR' : ' DB'}
+                </td>
               </tr>
               ${transactions.map((transaction, index) => `
                 <tr>
                   <td>${formatDateTime(transaction.date, transaction.entry_type)}</td>
                   <td>${transaction.reference}</td>
-                  <td>${transaction.entry_type === 'STORE_RETURN'
-                    ? transaction.reference
-                    : transaction.reference?.startsWith('STI-') 
-                      ? `${transaction.item_name} ${transaction.quantity} ${transaction.unit} @ Rs.${transaction.price_per_unit}/${transaction.unit || 'unit'}`
-                      : transaction.description || 
-                        (transaction.weight && (transaction.item_type || transaction.paper_type)) 
-                          ? `${transaction.weight} ${transaction.gate_unit || transaction.unit || 'unit'} of ${transaction.item_type || transaction.paper_type}${transaction.price_per_unit ? ` @ Rs.${transaction.price_per_unit}/${transaction.gate_unit || transaction.unit || 'unit'}` : ''}`
-                          : '-'}</td>
+                  <td>${formatTransactionDetails(transaction)}</td>
                   <td class="amount-cell">${transaction.type === 'DEBIT' ? transaction.amount.toFixed(2) : ''}</td>
                   <td class="amount-cell">${transaction.type === 'CREDIT' ? transaction.amount.toFixed(2) : ''}</td>
                   <td class="amount-cell">${calculateBalance(index)}</td>
@@ -342,19 +352,19 @@ const Ledger = () => {
               <div className="total-item">
                 <div>Total Debits:</div>
                 <div style="color: #d32f2f; font-weight: bold; font-size: 14pt;">
-                  ${totalDebits.toFixed(2)}
+                  Rs.${totalDebits.toFixed(2)}
                 </div>
               </div>
               <div className="total-item">
                 <div>Total Credits:</div>
                 <div style="color: #2e7d32; font-weight: bold; font-size: 14pt;">
-                  ${totalCredits.toFixed(2)}
+                  Rs.${totalCredits.toFixed(2)}
                 </div>
               </div>
               <div className="total-item">
                 <div>Current Balance:</div>
                 <div style="font-weight: bold; font-size: 14pt;">
-                  ${finalBalance.toFixed(2)}
+                  Rs.${Math.abs(finalBalance).toFixed(2)}${finalBalance >= 0 ? ' CR' : ' DB'}
                 </div>
               </div>
             </div>
@@ -471,7 +481,7 @@ const Ledger = () => {
                     <Typography><strong>Account Name:</strong> {accountDetails.name}</Typography>
                   </Grid>
                   <Grid item xs={12} md={6}>
-                    <Typography><strong>Opening Balance:</strong> {accountDetails.opening_balance.toFixed(2)}</Typography>
+                    <Typography><strong>Opening Balance:</strong> {Math.abs(accountDetails.opening_balance).toFixed(2)}{accountDetails.opening_balance >= 0 ? ' CR' : ' DB'}</Typography>
                   </Grid>
                 </Grid>
               </Box>
@@ -495,7 +505,8 @@ const Ledger = () => {
                       </TableCell>
                       <TableCell align="right">
                         <Typography variant="subtitle2">
-                          {accountDetails.opening_balance.toFixed(2)}
+                          Rs.{Math.abs(accountDetails.opening_balance).toFixed(2)}
+                          {accountDetails.opening_balance >= 0 ? ' CR' : ' DB'}
                         </Typography>
                       </TableCell>
                     </TableRow>
@@ -546,7 +557,7 @@ const Ledger = () => {
                   <Grid item xs={12} md={4}>
                     <Typography variant="subtitle2">Current Balance:</Typography>
                     <Typography variant="h6" fontWeight="bold">
-                      {finalBalance.toFixed(2)}
+                      Rs.{Math.abs(finalBalance).toFixed(2)}{finalBalance >= 0 ? ' CR' : ' DB'}
                     </Typography>
                   </Grid>
                 </Grid>
