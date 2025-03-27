@@ -85,7 +85,15 @@ const BankManager = () => {
   const fetchAccounts = async () => {
     try {
       const response = await axios.get('http://localhost:5000/api/accounts/bank-accounts');
-      setAccounts(response.data);
+      
+      // Normalize the account data to ensure consistent property names
+      const normalizedAccounts = response.data.map(account => ({
+        ...account,
+        // Ensure current_balance is a number and handle different property names
+        current_balance: Number(account.current_balance || account.balance || 0)
+      }));
+      
+      setAccounts(normalizedAccounts);
     } catch (error) {
       showAlert('Error fetching bank accounts');
       console.error('Error fetching accounts:', error);
@@ -320,11 +328,11 @@ const BankManager = () => {
               <TableCell 
                 align="right"
                 sx={{ 
-                  color: Number(account.balance) >= 0 ? 'green' : 'red',
+                  color: Number(account.current_balance) >= 0 ? 'green' : 'red',
                   fontWeight: 'bold'
                 }}
               >
-                {Number(account.balance).toLocaleString('en-IN', {
+                {Number(account.current_balance).toLocaleString('en-IN', {
                   minimumFractionDigits: 2,
                   maximumFractionDigits: 2
                 })}

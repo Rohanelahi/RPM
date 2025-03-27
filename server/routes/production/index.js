@@ -23,14 +23,27 @@ router.post('/add', async (req, res) => {
       totalYield
     } = req.body;
 
-    // Validate numeric fields
-    const validatedTotalWeight = totalWeight === '' ? 0 : parseFloat(totalWeight);
-    const validatedBoilerFuelQuantity = boilerFuelQuantity === '' ? 0 : parseFloat(boilerFuelQuantity);
-    const validatedBoilerFuelCost = boilerFuelCost === '' ? 0 : parseFloat(boilerFuelCost);
-    const validatedElectricityUnits = electricityUnits === '' ? 0 : parseFloat(electricityUnits);
-    const validatedElectricityUnitPrice = electricityUnitPrice === '' ? 0 : parseFloat(electricityUnitPrice);
-    const validatedElectricityCost = electricityCost === '' ? 0 : parseFloat(electricityCost);
-    const validatedTotalYield = totalYield === '' ? 0 : parseFloat(totalYield);
+    // Validate numeric fields with proper limits
+    const validatedTotalWeight = totalWeight === '' ? 0 : 
+      Math.min(parseFloat(totalWeight), 9999999.99); // Limit to fit within NUMERIC(10,2)
+
+    const validatedBoilerFuelQuantity = boilerFuelQuantity === '' ? 0 : 
+      Math.min(parseFloat(boilerFuelQuantity), 9999999.99);
+
+    const validatedBoilerFuelCost = boilerFuelCost === '' ? 0 : 
+      Math.min(parseFloat(boilerFuelCost), 9999999.99);
+
+    const validatedElectricityUnits = electricityUnits === '' ? 0 : 
+      Math.min(parseFloat(electricityUnits), 9999999.99);
+
+    const validatedElectricityUnitPrice = electricityUnitPrice === '' ? 0 : 
+      Math.min(parseFloat(electricityUnitPrice), 9999999.99);
+
+    const validatedElectricityCost = electricityCost === '' ? 0 : 
+      Math.min(parseFloat(electricityCost), 9999999.99);
+
+    const validatedTotalYield = totalYield === '' ? 0 : 
+      Math.min(parseFloat(totalYield), 100); // Yield should be a percentage
 
     // Validate recipe calculations
     const validatedRecipe = recipe.map(item => {

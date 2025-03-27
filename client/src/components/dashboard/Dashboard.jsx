@@ -78,88 +78,191 @@ const Dashboard = () => {
         setLoading(true);
       }
       
-      // Fetch today's production data
-      const todayResponse = await fetch('http://localhost:5000/api/production/today');
-      const todayData = await todayResponse.json();
-      setTodayProductionData(todayData);
-
-      // Fetch yesterday's production data
-      const yesterdayResponse = await fetch('http://localhost:5000/api/production/yesterday');
-      const yesterdayData = await yesterdayResponse.json();
-      setYesterdayProductionData(yesterdayData);
+      // Helper function to safely fetch data with fallbacks
+      const safeFetch = async (url, defaultValue = []) => {
+        try {
+          const response = await fetch(url);
+          if (!response.ok) {
+            console.warn(`API call to ${url} failed with status ${response.status}`);
+            return defaultValue;
+          }
+          return await response.json();
+        } catch (error) {
+          console.warn(`Error fetching from ${url}:`, error);
+          return defaultValue;
+        }
+      };
 
       // Fetch cash balances
-      const cashResponse = await fetch(`http://localhost:5000/api/accounts/cash-balances?t=${Date.now()}`);
-      const cashData = await cashResponse.json();
+      const cashData = await safeFetch(`http://localhost:5000/api/accounts/cash-balances?t=${Date.now()}`, {
+        cash_in_hand: 0,
+        cash_in_bank: 0
+      });
       
       // Fetch bank accounts
-      const bankResponse = await fetch('http://localhost:5000/api/accounts/bank-accounts');
-      const bankData = await bankResponse.json();
+      const bankData = await safeFetch('http://localhost:5000/api/accounts/bank-accounts', []);
       
-      // Only update if values are different to prevent unnecessary rerenders
-      setCashBalances(prev => {
-        const newCashInHand = Number(cashData.cash_in_hand || 0);
-        const newCashInBank = Number(cashData.cash_in_bank || 0);
-        if (prev.cash_in_hand !== newCashInHand || prev.cash_in_bank !== newCashInBank) {
-          return {
-            cash_in_hand: newCashInHand,
-            cash_in_bank: newCashInBank
-          };
-        }
-        return prev;
-      });
-
-      setBankAccounts(bankData);
-
-      // Rest of your fetch calls with similar optimization...
-      const stockResponse = await fetch(`http://localhost:5000/api/stock/overview`);
-      const stockData = await stockResponse.json();
-      setStockData(prev => {
-        if (JSON.stringify(prev) !== JSON.stringify(stockData)) {
-          return stockData;
-        }
-        return prev;
-      });
-
-      const productionResponse = await fetch(`http://localhost:5000/api/production/dashboard`);
-      const productionData = await productionResponse.json();
-      setProductionData(prev => {
-        if (JSON.stringify(prev) !== JSON.stringify(productionData)) {
-          return productionData;
-        }
-        return prev;
-      });
-
-      // Calculate estimated production only if stock or production data changed
-      const estimates = stockData.map(item => ({
-        item_type: item.item_type,
-        current_stock: item.current_quantity,
-        estimated_production: calculateEstimatedProduction(item, productionData?.recipe || [])
+      // Normalize bank account data to ensure consistent property names
+      const normalizedBankAccounts = (bankData || []).map(account => ({
+        ...account,
+        // Ensure balance is a number and use the correct property name
+        balance: Number(account.current_balance || account.balance || 0)
       }));
-      setEstimatedProduction(prev => {
-        if (JSON.stringify(prev) !== JSON.stringify(estimates)) {
-          return estimates;
-        }
-        return prev;
+      
+      // Update cash balances
+      setCashBalances({
+        cash_in_hand: Number(cashData.cash_in_hand || 0),
+        cash_in_bank: Number(cashData.cash_in_bank || 0)
       });
 
-      // Fetch monthly statistics
-      const monthStart = new Date();
-      monthStart.setDate(1);
-      monthStart.setHours(0, 0, 0, 0);
+      // Update bank accounts
+      setBankAccounts(normalizedBankAccounts);
 
-      const monthlyStatsResponse = await fetch(`http://localhost:5000/api/production/monthly-stats?startDate=${monthStart.toISOString()}`);
-      const monthlyStatsData = await monthlyStatsResponse.json();
-      setMonthlyStats(monthlyStatsData);
+      // Fetch stock data
+      const stockData = await safeFetch('http://localhost:5000/api/stock/overview', []);
+      setStockData(stockData);
 
-      // Fetch last 7 days production data
-      const sevenDaysAgo = new Date();
-      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-      const dailyProductionResponse = await fetch(
-        `http://localhost:5000/api/production/daily-stats?startDate=${sevenDaysAgo.toISOString()}`
+      // Instead of trying to fetch from /api/production/dashboard, use the production history endpoint
+      // with appropriate date filters to get recent production data
+      const today = new Date();
+      const oneMonthAgo = new Date();
+      oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
+      
+      const productionHistoryData = await safeFetch(
+        `http://localhost:5000/api/production/history?startDate=${oneMonthAgo.toISOString()}&endDate=${today.toISOString()}`, 
+        []
       );
-      const dailyProductionData = await dailyProductionResponse.json();
-      setDailyProductionData(dailyProductionData);
+      
+      // Create a simplified production data object from history
+      const productionData = productionHistoryData.length > 0 ? {
+        recipe: productionHistoryData[0]?.recipe || [],
+        // Add other fields as needed
+      } : null;
+      
+      setProductionData(productionData);
+
+      // Calculate estimated production if we have stock data
+      if (stockData && stockData.length > 0) {
+        const estimates = stockData.map(item => ({
+          item_type: item.item_type,
+          current_stock: item.current_quantity,
+          estimated_production: calculateEstimatedProduction(item, productionData?.recipe || [])
+        }));
+        setEstimatedProduction(estimates);
+      }
+
+      // For today's and yesterday's production data, filter from history
+      const todayStr = today.toISOString().split('T')[0];
+      const yesterdayDate = new Date();
+      yesterdayDate.setDate(yesterdayDate.getDate() - 1);
+      const yesterdayStr = yesterdayDate.toISOString().split('T')[0];
+      
+      const todayData = productionHistoryData.find(item => 
+        new Date(item.date_time).toISOString().split('T')[0] === todayStr
+      ) || null;
+      
+      const yesterdayData = productionHistoryData.find(item => 
+        new Date(item.date_time).toISOString().split('T')[0] === yesterdayStr
+      ) || null;
+      
+      setTodayProductionData(todayData);
+      setYesterdayProductionData(yesterdayData);
+
+      // For monthly statistics, calculate from production history
+      const monthlyStats = {
+        electricity: productionHistoryData.reduce((sum, item) => 
+          sum + Number(item.electricity_units || 0), 0),
+        rawMaterials: [],
+        boilerFuel: []
+      };
+      
+      // Extract raw materials used
+      const rawMaterialsMap = new Map();
+      productionHistoryData.forEach(item => {
+        if (item.recipe && Array.isArray(item.recipe)) {
+          item.recipe.forEach(material => {
+            const type = material.raddi_type;
+            const quantity = Number(material.quantity_used || 0);
+            if (type) {
+              const current = rawMaterialsMap.get(type) || 0;
+              rawMaterialsMap.set(type, current + quantity);
+            }
+          });
+        }
+      });
+      
+      // Extract boiler fuel used
+      const boilerFuelMap = new Map();
+      productionHistoryData.forEach(item => {
+        const type = item.boiler_fuel_type;
+        const quantity = Number(item.boiler_fuel_quantity || 0);
+        if (type) {
+          const current = boilerFuelMap.get(type) || 0;
+          boilerFuelMap.set(type, current + quantity);
+        }
+      });
+      
+      // Convert maps to arrays for state
+      monthlyStats.rawMaterials = Array.from(rawMaterialsMap.entries())
+        .map(([type, quantity]) => ({ type, quantity }));
+      
+      monthlyStats.boilerFuel = Array.from(boilerFuelMap.entries())
+        .map(([type, quantity]) => ({ type, quantity }));
+      
+      setMonthlyStats(monthlyStats);
+
+      // For daily production data, group by date
+      const dailyProductionMap = new Map();
+      productionHistoryData.forEach(item => {
+        const date = new Date(item.date_time).toISOString().split('T')[0];
+        const existingData = dailyProductionMap.get(date) || { 
+          date,
+          total_weight: 0,
+          recipe: [],
+          boiler_fuel_quantity: 0,
+          boiler_fuel_price: 0,
+          electricity_cost: 0,
+          maintenance_cost: 0,
+          labor_cost: 0,
+          contractors_cost: 0,
+          daily_expenses: 0
+        };
+        
+        // Aggregate data
+        existingData.total_weight += Number(item.total_weight || 0);
+        existingData.boiler_fuel_quantity += Number(item.boiler_fuel_quantity || 0);
+        existingData.electricity_cost += Number(item.electricity_cost || 0);
+        
+        // Combine recipes
+        if (item.recipe && Array.isArray(item.recipe)) {
+          existingData.recipe = [...existingData.recipe, ...item.recipe];
+        }
+        
+        dailyProductionMap.set(date, existingData);
+      });
+      
+      // Get the last 7 days of production data
+      const last7Days = [];
+      for (let i = 6; i >= 0; i--) {
+        const date = new Date();
+        date.setDate(date.getDate() - i);
+        const dateStr = date.toISOString().split('T')[0];
+        const data = dailyProductionMap.get(dateStr) || { 
+          date: dateStr,
+          total_weight: 0,
+          recipe: [],
+          boiler_fuel_quantity: 0,
+          boiler_fuel_price: 0,
+          electricity_cost: 0,
+          maintenance_cost: 0,
+          labor_cost: 0,
+          contractors_cost: 0,
+          daily_expenses: 0
+        };
+        last7Days.push(data);
+      }
+      
+      setDailyProductionData(last7Days);
 
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
@@ -181,6 +284,12 @@ const Dashboard = () => {
 
   const fetchDailyExpenses = async (date) => {
     try {
+      // Validate the date first
+      if (!date || isNaN(new Date(date).getTime())) {
+        console.warn(`Invalid date provided to fetchDailyExpenses: ${date}`);
+        return 0;
+      }
+      
       const startDate = new Date(date);
       startDate.setHours(0, 0, 0, 0);
       
@@ -211,7 +320,14 @@ const Dashboard = () => {
   const calculatePerKgCost = async (row) => {
     if (!row || !row.recipe) return '0.00';
     
-    let dailyExpense = dailyExpenses[row.date_time] || await fetchDailyExpenses(row.date_time);
+    // Ensure we have a valid date
+    let dateToUse = row.date_time;
+    if (!dateToUse || isNaN(new Date(dateToUse).getTime())) {
+      console.warn(`Invalid date in row: ${dateToUse}, using current date instead`);
+      dateToUse = new Date().toISOString().split('T')[0];
+    }
+    
+    let dailyExpense = dailyExpenses[dateToUse] || await fetchDailyExpenses(dateToUse);
 
     // Ensure recipe is an array
     const recipe = Array.isArray(row.recipe) ? row.recipe : [];
@@ -336,7 +452,7 @@ const Dashboard = () => {
                                 <TableCell>{account.bank_name}</TableCell>
                                 <TableCell>{account.account_number}</TableCell>
                                 <TableCell align="right">
-                                  Rs. {Number(account.balance).toLocaleString()}
+                                  Rs. {(account.balance || 0).toLocaleString()}
                                 </TableCell>
                               </TableRow>
                             ))}
@@ -352,13 +468,13 @@ const Dashboard = () => {
                           <Grid item xs={12}>
                             <Typography variant="subtitle1">Total Bank Balance</Typography>
                             <Typography variant="h6" color="primary">
-                              Rs. {bankAccounts.reduce((sum, account) => sum + Number(account.balance), 0).toLocaleString()}
+                              Rs. {bankAccounts.reduce((sum, account) => sum + (account.balance || 0), 0).toLocaleString()}
                             </Typography>
                           </Grid>
                           <Grid item xs={12}>
                             <Typography variant="subtitle1">Total Cash + Bank</Typography>
                             <Typography variant="h6" sx={{ color: 'success.main', fontWeight: 'bold' }}>
-                              Rs. {(bankAccounts.reduce((sum, account) => sum + Number(account.balance), 0) + Number(cashBalances.cash_in_hand || 0)).toLocaleString()}
+                              Rs. {(bankAccounts.reduce((sum, account) => sum + (account.balance || 0), 0) + Number(cashBalances.cash_in_hand || 0)).toLocaleString()}
                             </Typography>
                           </Grid>
                         </Grid>
