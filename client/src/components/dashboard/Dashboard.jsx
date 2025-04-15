@@ -95,13 +95,13 @@ const Dashboard = () => {
       };
 
       // Fetch cash balances
-      const cashData = await safeFetch(`${config.apiUrl}/api/accounts/cash-balances?t=${Date.now()}`, {
+      const cashData = await safeFetch(`${config.apiUrl}/accounts/cash-balances?t=${Date.now()}`, {
         cash_in_hand: 0,
         cash_in_bank: 0
       });
       
       // Fetch bank accounts
-      const bankData = await safeFetch(`${config.apiUrl}/api/accounts/bank-accounts`, []);
+      const bankData = await safeFetch(`${config.apiUrl}/accounts/bank-accounts`, []);
       
       // Normalize bank account data to ensure consistent property names
       const normalizedBankAccounts = (bankData || []).map(account => ({
@@ -120,7 +120,7 @@ const Dashboard = () => {
       setBankAccounts(normalizedBankAccounts);
 
       // Fetch stock data
-      const stockData = await safeFetch(`${config.apiUrl}/api/stock/overview`, []);
+      const stockData = await safeFetch(`${config.apiUrl}/stock/overview`, []);
       setStockData(stockData);
 
       // Instead of trying to fetch from /api/production/dashboard, use the production history endpoint
@@ -130,7 +130,7 @@ const Dashboard = () => {
       oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
       
       const productionHistoryData = await safeFetch(
-        `${config.apiUrl}/api/production/history?startDate=${oneMonthAgo.toISOString()}&endDate=${today.toISOString()}`, 
+        `${config.apiUrl}/production/history?startDate=${oneMonthAgo.toISOString()}&endDate=${today.toISOString()}`, 
         []
       );
       
@@ -302,7 +302,7 @@ const Dashboard = () => {
         endDate: endDate.toISOString()
       });
 
-      const response = await fetch(`${config.apiUrl}/api/accounts/expenses/history?${queryParams}`);
+      const response = await fetch(`${config.apiUrl}/accounts/expenses/history?${queryParams}`);
       if (!response.ok) throw new Error('Failed to fetch expenses');
       
       const data = await response.json();

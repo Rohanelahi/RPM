@@ -23,6 +23,7 @@ import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import { KeyboardArrowDown, KeyboardArrowUp, Print } from '@mui/icons-material';
 import { format } from 'date-fns';
+import config from '../../config';
 
 const ProductionHistory = () => {
   const [loading, setLoading] = useState(true);
@@ -87,7 +88,7 @@ const ProductionHistory = () => {
         endDate: filters.endDate?.toISOString()
       });
 
-      const response = await fetch(`http://localhost:5000/api/production/history?${queryParams}`);
+      const response = await fetch(`${config.apiUrl}/production/history?${queryParams}`);
       if (!response.ok) throw new Error('Failed to fetch history data');
       const data = await response.json();
       setHistory(data);

@@ -19,6 +19,7 @@ import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import { Refresh } from '@mui/icons-material';
+import config from '../../config';
 import '../../styles/Stock.css';
 
 const StockOverview = () => {
@@ -43,7 +44,7 @@ const StockOverview = () => {
         t: Date.now() // Cache-busting
       });
       
-      const response = await fetch(`http://localhost:5000/api/stock/overview?${queryParams}`);
+      const response = await fetch(`${config.apiUrl}/stock/overview?${queryParams}`);
       if (!response.ok) throw new Error('Failed to fetch stock data');
       const data = await response.json();
       setStockData(data);

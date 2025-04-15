@@ -23,6 +23,7 @@ import {
   FormControl,
   InputLabel,
   Grid,
+  CircularProgress,
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -33,6 +34,7 @@ import {
   Print,
 } from '@mui/icons-material';
 import axios from 'axios';
+import config from '../../config';
 import '../../styles/BankManager.css';
 import { format } from 'date-fns';
 
@@ -84,7 +86,7 @@ const BankManager = () => {
 
   const fetchAccounts = async () => {
     try {
-      const response = await axios.get('http://localhost:5000/api/accounts/bank-accounts');
+      const response = await axios.get(`${config.apiUrl}/accounts/bank-accounts`);
       
       // Normalize the account data to ensure consistent property names
       const normalizedAccounts = response.data.map(account => ({
@@ -102,7 +104,7 @@ const BankManager = () => {
 
   const fetchTransactions = async () => {
     try {
-      let url = 'http://localhost:5000/api/accounts/bank-transactions';
+      let url = `${config.apiUrl}/accounts/bank-transactions`;
       const params = new URLSearchParams();
       
       if (filters.startDate) params.append('startDate', filters.startDate);
@@ -125,13 +127,13 @@ const BankManager = () => {
     e.preventDefault();
     try {
       if (editMode) {
-        await axios.put(`http://localhost:5000/api/accounts/bank-accounts/${selectedAccount.id}`, {
+        await axios.put(`${config.apiUrl}/accounts/bank-accounts/${selectedAccount.id}`, {
           ...formData,
           account_type: 'CURRENT'
         });
         showAlert('Bank account updated successfully', 'success');
       } else {
-        await axios.post('http://localhost:5000/api/accounts/bank-accounts', {
+        await axios.post(`${config.apiUrl}/accounts/bank-accounts`, {
           ...formData,
           account_type: 'CURRENT'
         });
@@ -154,7 +156,7 @@ const BankManager = () => {
 
   const handleDelete = async (id) => {
     try {
-      await axios.delete(`http://localhost:5000/api/accounts/bank-accounts/${id}`);
+      await axios.delete(`${config.apiUrl}/accounts/bank-accounts/${id}`);
       showAlert('Bank account deleted successfully', 'success');
       fetchAccounts();
     } catch (error) {
@@ -203,7 +205,7 @@ const BankManager = () => {
       }
 
       // Process withdrawal and update cash in a single transaction
-      await axios.post('http://localhost:5000/api/accounts/bank-transactions', {
+      await axios.post(`${config.apiUrl}/accounts/bank-transactions`, {
         account_id: withdrawData.account_id,
         type: 'DEBIT',
         amount: amount,
