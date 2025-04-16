@@ -110,11 +110,30 @@ router.get('/pending-entries', async (req, res) => {
         sr.date_time,
         sr.remarks as return_reason,
         pe.price_per_unit as original_price
-       FROM pricing_entries pe
-       JOIN store_returns sr ON pe.reference_id = sr.id
-       WHERE pe.status = 'PENDING'
-       AND pe.entry_type = 'STORE_RETURN'`
-    );
+      FROM pricing_entries pe
+      JOIN store_returns sr ON pe.reference_id = sr.id
+      WHERE pe.status = 'PENDING'
+      AND pe.entry_type = 'STORE_RETURN'`
+    ).catch(error => {
+      console.error('Store returns query error:', error);
+      console.error('Query:', `SELECT 
+        pe.id as pricing_id,
+        'STORE_RETURN' as entry_type,
+        sr.return_grn as return_number,
+        sr.grn_number as original_grn,
+        pe.quantity,
+        pe.status,
+        pe.unit,
+        sr.item_name as item_type,
+        sr.date_time,
+        sr.remarks as return_reason,
+        pe.price_per_unit as original_price
+      FROM pricing_entries pe
+      JOIN store_returns sr ON pe.reference_id = sr.id
+      WHERE pe.status = 'PENDING'
+      AND pe.entry_type = 'STORE_RETURN'`);
+      throw error;
+    });
 
     // Process and combine results
     const processedGateEntries = gateResult.rows.map(row => ({
