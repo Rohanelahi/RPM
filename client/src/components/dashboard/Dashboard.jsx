@@ -33,7 +33,7 @@ const Dashboard = () => {
 
   const fetchDashboardData = async () => {
     try {
-      setLoading(true);
+        setLoading(true);
       const [cashResponse, bankResponse, stockResponse, productionResponse] = await Promise.all([
         fetch(`${config.apiUrl}/accounts/cash-balances`),
         fetch(`${config.apiUrl}/accounts/bank-accounts`),
@@ -91,11 +91,11 @@ const Dashboard = () => {
         mb: 3
       }}>
         <Typography variant="h4" component="h1">
-          Dashboard
-        </Typography>
+            Dashboard
+          </Typography>
         <Tooltip title="Refresh dashboard">
-          <IconButton 
-            onClick={handleRefresh}
+            <IconButton 
+              onClick={handleRefresh} 
             disabled={refreshing || loading}
             sx={{ 
               '&:hover': { 
@@ -110,40 +110,40 @@ const Dashboard = () => {
                   '0%': { transform: 'rotate(0deg)' },
                   '100%': { transform: 'rotate(360deg)' }
                 }
-              }} 
+              }}
             />
-          </IconButton>
-        </Tooltip>
-      </Box>
-
-      {loading ? (
-        <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
-          <CircularProgress />
+            </IconButton>
+          </Tooltip>
         </Box>
-      ) : (
-        <Grid container spacing={3}>
+
+        {loading ? (
+        <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
+            <CircularProgress />
+          </Box>
+        ) : (
+          <Grid container spacing={3}>
           {/* Cash Balances */}
-          <Grid item xs={12} md={6}>
+            <Grid item xs={12} md={6}>
             <Paper elevation={3}>
               <Card>
                 <CardContent>
                   <Typography variant="h6" gutterBottom>
                     Cash Balances
-                  </Typography>
+                        </Typography>
                   <TableContainer>
-                    <Table size="small">
-                      <TableHead>
-                        <TableRow>
+                        <Table size="small">
+                          <TableHead>
+                            <TableRow>
                           <TableCell>Account</TableCell>
-                          <TableCell align="right">Balance</TableCell>
-                        </TableRow>
-                      </TableHead>
-                      <TableBody>
+                              <TableCell align="right">Balance</TableCell>
+                            </TableRow>
+                          </TableHead>
+                          <TableBody>
                         {cashBalances.length > 0 ? (
                           cashBalances.map((balance) => (
                             <TableRow key={balance.id}>
                               <TableCell>{balance.name || '-'}</TableCell>
-                              <TableCell align="right">
+                                <TableCell align="right">
                                 Rs. {formatNumber(balance.amount)}
                               </TableCell>
                             </TableRow>
@@ -152,35 +152,35 @@ const Dashboard = () => {
                           <TableRow>
                             <TableCell colSpan={2} align="center">
                               No cash balances available
-                            </TableCell>
-                          </TableRow>
+                                </TableCell>
+                              </TableRow>
                         )}
-                      </TableBody>
-                    </Table>
-                  </TableContainer>
+                          </TableBody>
+                        </Table>
+                      </TableContainer>
                 </CardContent>
               </Card>
-            </Paper>
-          </Grid>
+              </Paper>
+            </Grid>
 
           {/* Bank Accounts */}
-          <Grid item xs={12} md={6}>
+            <Grid item xs={12} md={6}>
             <Paper elevation={3}>
               <Card>
                 <CardContent>
                   <Typography variant="h6" gutterBottom>
                     Bank Accounts
                   </Typography>
-                  <TableContainer>
-                    <Table size="small">
-                      <TableHead>
-                        <TableRow>
+                    <TableContainer>
+                      <Table size="small">
+                        <TableHead>
+                          <TableRow>
                           <TableCell>Bank</TableCell>
                           <TableCell>Account</TableCell>
                           <TableCell align="right">Balance</TableCell>
-                        </TableRow>
-                      </TableHead>
-                      <TableBody>
+                          </TableRow>
+                        </TableHead>
+                        <TableBody>
                         {bankAccounts.length > 0 ? (
                           bankAccounts.map((account) => (
                             <TableRow key={account.id}>
@@ -198,16 +198,16 @@ const Dashboard = () => {
                             </TableCell>
                           </TableRow>
                         )}
-                      </TableBody>
-                    </Table>
-                  </TableContainer>
+                        </TableBody>
+                      </Table>
+                    </TableContainer>
                 </CardContent>
               </Card>
-            </Paper>
-          </Grid>
+                  </Paper>
+                </Grid>
 
           {/* Stock Overview */}
-          <Grid item xs={12} md={6}>
+                        <Grid item xs={12} md={6}>
             <Paper elevation={3}>
               <Card>
                 <CardContent>
@@ -254,7 +254,7 @@ const Dashboard = () => {
                 <CardContent>
                   <Typography variant="h6" gutterBottom>
                     Recent Production
-                  </Typography>
+                    </Typography>
                   <TableContainer>
                     <Table size="small">
                       <TableHead>
@@ -273,7 +273,7 @@ const Dashboard = () => {
                                 {record.date_time ? new Date(record.date_time).toLocaleDateString() : '-'}
                               </TableCell>
                               <TableCell>{record.paper_type || '-'}</TableCell>
-                              <TableCell align="right">
+                            <TableCell align="right">
                                 {formatNumber(record.total_weight)}
                               </TableCell>
                               <TableCell>kg</TableCell>
@@ -291,11 +291,11 @@ const Dashboard = () => {
                   </TableContainer>
                 </CardContent>
               </Card>
-            </Paper>
+              </Paper>
+            </Grid>
           </Grid>
-        </Grid>
-      )}
-    </Box>
+        )}
+      </Box>
   );
 };
 
