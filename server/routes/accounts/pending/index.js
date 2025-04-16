@@ -114,7 +114,7 @@ router.get('/pending-entries', async (req, res) => {
         pe.price_per_unit as original_price
        FROM pricing_entries pe
        JOIN store_returns sr ON pe.reference_id = sr.id
-       JOIN store_entries se ON sr.return_grn = se.grn_number
+       JOIN store_entries se ON sr.grn_number = se.grn_number
        JOIN store_items si ON se.item_id = si.id
        JOIN accounts v ON se.vendor_id = v.id
        WHERE pe.status = 'PENDING'
