@@ -9,9 +9,9 @@ const runMigration = async () => {
 
     // Run migrations in correct order (dependencies first)
     const migrations = [
-      '003_create_accounts_tables.sql',   // First create accounts
-      '002_create_store_tables.sql',      // Then store tables (depends on accounts)
-      '001_create_gate_tables.sql',       // Then gate tables (depends on accounts)
+      '001_create_gate_tables.sql',       // First create basic tables
+      '003_create_accounts_tables.sql',   // Then accounts tables
+      '002_create_store_tables.sql',      // Then store tables
       '006_fix_gate_entries_foreign_keys.sql'  // Finally, fix foreign keys
     ];
 
@@ -32,12 +32,17 @@ const runMigration = async () => {
 
     // Run migrations
     for (const migration of migrations) {
-      const sql = fs.readFileSync(
-        path.join(__dirname, 'migrations', migration),
-        'utf8'
-      );
-      await client.query(sql);
-      console.log(`Migration ${migration} completed successfully`);
+      try {
+        const sql = fs.readFileSync(
+          path.join(__dirname, 'migrations', migration),
+          'utf8'
+        );
+        await client.query(sql);
+        console.log(`Migration ${migration} completed successfully`);
+      } catch (error) {
+        console.error(`Error in migration ${migration}:`, error);
+        throw error;
+      }
     }
 
     await client.query('COMMIT');
@@ -52,4 +57,4 @@ const runMigration = async () => {
   }
 };
 
-runMigration(); 
+runMigration();
