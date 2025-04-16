@@ -22,6 +22,7 @@ import AccountsList from './AccountsList';
 import Ledger from './Ledger';
 import '../../styles/accounts/AccountsPage.css';
 import api from '../../services/api';
+import PropTypes from 'prop-types';
 
 function TabPanel({ children, value, index, ...other }) {
   return (
@@ -504,6 +505,12 @@ const Accounts = () => {
       </Paper>
     </div>
   );
+};
+
+Accounts.propTypes = {
+  children: PropTypes.node.isRequired,
+  value: PropTypes.number.isRequired,
+  index: PropTypes.number.isRequired
 };
 
 export default Accounts; 

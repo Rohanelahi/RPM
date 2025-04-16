@@ -342,4 +342,26 @@ const ReturnTable = ({ data, totals, type }) => {
   );
 };
 
+ReturnTable.propTypes = {
+  data: PropTypes.arrayOf(PropTypes.shape({
+    return_date: PropTypes.string.isRequired,
+    return_number: PropTypes.string.isRequired,
+    original_grn_number: PropTypes.string.isRequired,
+    supplier_name: PropTypes.string,
+    customer_name: PropTypes.string,
+    vendor_name: PropTypes.string,
+    item_type: PropTypes.string.isRequired,
+    return_quantity: PropTypes.number.isRequired,
+    unit: PropTypes.string.isRequired,
+    price_per_unit: PropTypes.number.isRequired,
+    total_amount: PropTypes.number.isRequired,
+    pricing_status: PropTypes.string
+  })).isRequired,
+  totals: PropTypes.shape({
+    totalQuantity: PropTypes.number.isRequired,
+    totalAmount: PropTypes.number.isRequired
+  }).isRequired,
+  type: PropTypes.oneOf(['purchase', 'sale', 'store']).isRequired
+};
+
 export default ReturnsSummary; 

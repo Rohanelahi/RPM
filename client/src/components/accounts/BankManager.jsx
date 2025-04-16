@@ -24,6 +24,10 @@ import {
   InputLabel,
   Grid,
   CircularProgress,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -66,11 +70,15 @@ const BankManager = () => {
     endDate: '',
     bankAccount: ''
   });
+  const [banks, setBanks] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [dialogOpen, setDialogOpen] = useState(false);
 
   // Fetch accounts and transactions
   useEffect(() => {
     fetchAccounts();
     fetchTransactions();
+    fetchBanks();
   }, []);
 
   useEffect(() => {
@@ -123,9 +131,25 @@ const BankManager = () => {
     }
   };
 
+  const fetchBanks = async () => {
+    try {
+      setLoading(true);
+      const response = await fetch(`${config.apiUrl}/accounts/banks`);
+      if (!response.ok) throw new Error('Failed to fetch banks');
+      const data = await response.json();
+      setBanks(data);
+    } catch (error) {
+      console.error('Error:', error);
+      alert('Failed to fetch banks');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
+      setLoading(true);
       if (editMode) {
         await axios.put(`${config.apiUrl}/accounts/bank-accounts/${selectedAccount.id}`, {
           ...formData,
@@ -145,6 +169,8 @@ const BankManager = () => {
     } catch (error) {
       showAlert(error.response?.data?.error || 'Error saving bank account');
       console.error('Error submitting form:', error);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -579,7 +605,7 @@ const BankManager = () => {
           <Button
             variant="contained"
             startIcon={<AddIcon />}
-            onClick={() => setOpenModal(true)}
+            onClick={() => setDialogOpen(true)}
             sx={{ bgcolor: '#1a1a1a', '&:hover': { bgcolor: '#000' } }}
           >
             Add New Account
@@ -678,6 +704,55 @@ const BankManager = () => {
           </form>
         </Box>
       </Modal>
+
+      <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)}>
+        <DialogTitle>Add Bank Account</DialogTitle>
+        <DialogContent>
+          <Box sx={{ pt: 2 }}>
+            <TextField
+              fullWidth
+              label="Bank Name"
+              value={formData.bank_name}
+              onChange={(e) => setFormData(prev => ({ ...prev, bank_name: e.target.value }))}
+              sx={{ mb: 2 }}
+            />
+            <TextField
+              fullWidth
+              label="Account Number"
+              value={formData.account_number}
+              onChange={(e) => setFormData(prev => ({ ...prev, account_number: e.target.value }))}
+              sx={{ mb: 2 }}
+            />
+            <TextField
+              fullWidth
+              label="Branch"
+              value={formData.branch_name}
+              onChange={(e) => setFormData(prev => ({ ...prev, branch_name: e.target.value }))}
+              sx={{ mb: 2 }}
+            />
+            <TextField
+              fullWidth
+              label="IFSC Code"
+              value={formData.ifsc_code}
+              onChange={(e) => setFormData(prev => ({ ...prev, ifsc_code: e.target.value }))}
+              sx={{ mb: 2 }}
+            />
+            <TextField
+              fullWidth
+              label="Opening Balance"
+              type="number"
+              value={formData.opening_balance}
+              onChange={(e) => setFormData(prev => ({ ...prev, opening_balance: e.target.value }))}
+            />
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDialogOpen(false)}>Cancel</Button>
+          <Button onClick={handleSubmit} variant="contained" disabled={loading}>
+            Add
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };

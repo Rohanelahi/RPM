@@ -9,25 +9,27 @@ import {
   TableContainer,
   TableHead,
   TableRow,
-  CircularProgress,
-  Button
+  Button,
+  TextField
 } from '@mui/material';
-import { Print } from '@mui/icons-material';
+import { Print as PrintIcon } from '@mui/icons-material';
+import PropTypes from 'prop-types';
 import config from '../../config';
-import { format } from 'date-fns';
 
 const StockHistory = () => {
   const [stockHistory, setStockHistory] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [selectedDate, setSelectedDate] = useState(new Date());
+  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+
+  useEffect(() => {
+    fetchStockHistory();
+  }, [selectedDate]);
 
   const fetchStockHistory = async () => {
     try {
       setLoading(true);
       const response = await fetch(`${config.apiUrl}/stock/history?date=${selectedDate}`);
-      if (!response.ok) {
-        throw new Error('Failed to fetch stock history');
-      }
+      if (!response.ok) throw new Error('Failed to fetch stock history');
       const data = await response.json();
       setStockHistory(data);
     } catch (error) {
@@ -38,78 +40,98 @@ const StockHistory = () => {
     }
   };
 
-  useEffect(() => {
-    fetchStockHistory();
-  }, [selectedDate]);
-
   const handlePrint = () => {
     const printWindow = window.open('', '_blank');
     if (printWindow) {
-      const printContent = document.getElementById('printable-area');
-      const originalContents = document.body.innerHTML;
-      
       printWindow.document.write(`
         <html>
           <head>
-            <title>Stock History</title>
+            <title>Stock History - ${selectedDate}</title>
             <style>
-              table { border-collapse: collapse; width: 100%; }
-              th, td { border: 1px solid black; padding: 8px; text-align: left; }
+              body { font-family: Arial, sans-serif; padding: 20px; }
+              .header { text-align: center; margin-bottom: 20px; }
+              .company-name { font-size: 24px; font-weight: bold; }
+              .stock-title { font-size: 18px; margin: 10px 0; }
+              table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+              th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+              th { background-color: #f5f5f5; }
             </style>
           </head>
           <body>
-            ${printContent.innerHTML}
+            <div class="header">
+              <div class="company-name">Rose Paper Mill PVT</div>
+              <div class="stock-title">Stock History - ${selectedDate}</div>
+            </div>
+            <table>
+              <thead>
+                <tr>
+                  <th>Item</th>
+                  <th>Type</th>
+                  <th>Quantity</th>
+                  <th>Date</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${stockHistory.map(record => `
+                  <tr>
+                    <td>${record.item}</td>
+                    <td>${record.type}</td>
+                    <td>${record.quantity}</td>
+                    <td>${new Date(record.date).toLocaleString()}</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
           </body>
         </html>
       `);
-      
       printWindow.document.close();
-      printWindow.focus();
-      setTimeout(() => {
-        printWindow.print();
-        printWindow.close();
-      }, 250);
+      printWindow.print();
     }
   };
 
   return (
-    <Box>
-      <Box sx={{ mb: 2 }}>
-        <Button
-          variant="contained"
-          startIcon={<Print />}
-          onClick={handlePrint}
-        >
-          Print
-        </Button>
+    <Box component={Paper} sx={{ p: 3 }}>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 3 }}>
+        <Typography variant="h6">Stock History</Typography>
+        <Box sx={{ display: 'flex', gap: 2 }}>
+          <TextField
+            type="date"
+            value={selectedDate}
+            onChange={(e) => setSelectedDate(e.target.value)}
+            InputLabelProps={{ shrink: true }}
+          />
+          <Button
+            variant="contained"
+            startIcon={<PrintIcon />}
+            onClick={handlePrint}
+          >
+            Print
+          </Button>
+        </Box>
       </Box>
-
-      {loading ? (
-        <CircularProgress />
-      ) : (
-        <TableContainer component={Paper}>
-          <Table>
-            <TableHead>
-              <TableRow>
-                <TableCell>Date</TableCell>
-                <TableCell>Item</TableCell>
-                <TableCell>Quantity</TableCell>
-                <TableCell>Type</TableCell>
+      <TableContainer>
+        <Table>
+          <TableHead>
+            <TableRow>
+              <TableCell>Item</TableCell>
+              <TableCell>Type</TableCell>
+              <TableCell>Quantity</TableCell>
+              <TableCell>Date</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {stockHistory.map((record) => (
+              <TableRow key={record.id}>
+                <TableCell>{record.item}</TableCell>
+                <TableCell>{record.type}</TableCell>
+                <TableCell>{record.quantity}</TableCell>
+                <TableCell>{new Date(record.date).toLocaleString()}</TableCell>
               </TableRow>
-            </TableHead>
-            <TableBody>
-              {stockHistory.map((item) => (
-                <TableRow key={item.id}>
-                  <TableCell>{format(new Date(item.date), 'dd/MM/yyyy')}</TableCell>
-                  <TableCell>{item.item_name}</TableCell>
-                  <TableCell>{item.quantity}</TableCell>
-                  <TableCell>{item.type}</TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </TableContainer>
-      )}
+            ))}
+          </TableBody>
+        </Table>
+      </TableContainer>
     </Box>
   );
 };

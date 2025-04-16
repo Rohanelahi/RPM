@@ -23,7 +23,6 @@ import Accounts from './components/accounts/Accounts';
 import Inventory from './components/store/Inventory';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import MaintenanceHistory from './components/maintenance/MaintenanceHistory';
-import StockOverview from './components/stock/StockOverview';
 import StockHistory from './components/stock/StockHistory';
 import ProductionForm from './components/production/ProductionForm';
 import ProductionHistory from './components/production/ProductionHistory';

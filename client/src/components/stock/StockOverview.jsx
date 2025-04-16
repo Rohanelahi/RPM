@@ -18,7 +18,8 @@ import {
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
-import { Refresh } from '@mui/icons-material';
+import { Refresh, Print as PrintIcon } from '@mui/icons-material';
+import PropTypes from 'prop-types';
 import config from '../../config';
 import '../../styles/Stock.css';
 
@@ -50,6 +51,7 @@ const StockOverview = () => {
       setStockData(data);
     } catch (error) {
       console.error('Error fetching stock data:', error);
+      alert('Failed to fetch stock data');
     } finally {
       setLoading(false);
     }
@@ -66,6 +68,56 @@ const StockOverview = () => {
   // Apply filters
   const applyFilters = () => {
     fetchStockData();
+  };
+
+  const handlePrint = () => {
+    const printWindow = window.open('', '_blank');
+    if (printWindow) {
+      printWindow.document.write(`
+        <html>
+          <head>
+            <title>Stock Overview</title>
+            <style>
+              body { font-family: Arial, sans-serif; padding: 20px; }
+              .header { text-align: center; margin-bottom: 20px; }
+              .company-name { font-size: 24px; font-weight: bold; }
+              .stock-title { font-size: 18px; margin: 10px 0; }
+              table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+              th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+              th { background-color: #f5f5f5; }
+            </style>
+          </head>
+          <body>
+            <div class="header">
+              <div class="company-name">Rose Paper Mill PVT</div>
+              <div class="stock-title">Stock Overview</div>
+            </div>
+            <table>
+              <thead>
+                <tr>
+                  <th>Item</th>
+                  <th>Current Stock</th>
+                  <th>Unit</th>
+                  <th>Last Updated</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${stockData.map(item => `
+                  <tr>
+                    <td>${item.name}</td>
+                    <td>${item.quantity}</td>
+                    <td>${item.unit}</td>
+                    <td>${new Date(item.lastUpdated).toLocaleString()}</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </body>
+        </html>
+      `);
+      printWindow.document.close();
+      printWindow.print();
+    }
   };
 
   return (
@@ -107,6 +159,23 @@ const StockOverview = () => {
           </Grid>
         </Grid>
       </Paper>
+
+      {loading ? (
+        <Box className="stock-loading">
+          <CircularProgress />
+        </Box>
+      ) : (
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 3 }}>
+          <Typography variant="h6">Stock Overview</Typography>
+          <Button
+            variant="contained"
+            startIcon={<PrintIcon />}
+            onClick={handlePrint}
+          >
+            Print
+          </Button>
+        </Box>
+      )}
 
       {loading ? (
         <Box className="stock-loading">

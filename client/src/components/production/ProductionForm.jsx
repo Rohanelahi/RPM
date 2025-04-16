@@ -123,30 +123,26 @@ const ProductionForm = ({ onProductionAdded }) => {
   };
 
   const checkStockAvailability = async (recipe) => {
-    try {
-      const response = await fetch('http://localhost:5000/api/production/check-stock', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ recipe })
-      });
+    const response = await fetch('http://localhost:5000/api/production/check-stock', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ recipe })
+    });
 
-      if (!response.ok) throw new Error('Failed to check stock');
-      const stockChecks = await response.json();
+    if (!response.ok) throw new Error('Failed to check stock');
+    const stockChecks = await response.json();
 
-      const insufficientStock = stockChecks.filter(check => !check.sufficient);
-      if (insufficientStock.length > 0) {
-        const message = insufficientStock.map(item => 
-          `${item.raddiType}: Need ${item.required}kg, Available ${item.available}kg`
-        ).join('\n');
-        throw new Error(`Insufficient stock:\n${message}`);
-      }
-
-      return true;
-    } catch (error) {
-      throw error;
+    const insufficientStock = stockChecks.filter(check => !check.sufficient);
+    if (insufficientStock.length > 0) {
+      const message = insufficientStock.map(item => 
+        `${item.raddiType}: Need ${item.required}kg, Available ${item.available}kg`
+      ).join('\n');
+      throw new Error(`Insufficient stock:\n${message}`);
     }
+
+    return true;
   };
 
   const resetForm = () => {
