@@ -24,6 +24,7 @@ import { Print } from '@mui/icons-material';
 import { format, startOfMonth } from 'date-fns';
 import { useAuth } from '../../context/AuthContext';
 import '../../styles/Stock.css';
+import config from '../../config';
 
 const SaleSummary = () => {
   const [loading, setLoading] = useState(true);

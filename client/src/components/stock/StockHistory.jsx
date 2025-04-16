@@ -24,6 +24,7 @@ import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import { Print, Refresh } from '@mui/icons-material';
 import { format } from 'date-fns';
 import '../../styles/Stock.css';
+import config from '../../config';
 
 const StockHistory = () => {
   const [loading, setLoading] = useState(true);

@@ -24,6 +24,7 @@ import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import { format } from 'date-fns';
 import PrintIcon from '@mui/icons-material/Print';
 import '../../styles/CashFlowSummary.css';
+import config from '../../config';
 
 const CashFlowSummary = () => {
   const [loading, setLoading] = useState(true);

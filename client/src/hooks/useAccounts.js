@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import config from '../config';
 
 const useAccounts = (type) => {
   const [accounts, setAccounts] = useState([]);

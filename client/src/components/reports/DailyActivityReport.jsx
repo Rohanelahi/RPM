@@ -25,6 +25,7 @@ import { Print, ExpandMore, Refresh } from '@mui/icons-material';
 import { format } from 'date-fns';
 import { useAuth } from '../../context/AuthContext';
 import '../../styles/Stock.css';
+import config from '../../config';
 
 const DailyActivityReport = () => {
   const [selectedDate, setSelectedDate] = useState(new Date());
