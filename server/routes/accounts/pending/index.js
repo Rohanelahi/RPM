@@ -20,6 +20,16 @@ router.get('/pending-entries', async (req, res) => {
   try {
     const { userRole } = req.query;
 
+    // Test query first
+    const testQuery = await pool.query(
+      `SELECT 1 FROM pricing_entries LIMIT 1`
+    ).catch(error => {
+      console.error('Test query error:', error);
+      throw error;
+    });
+
+    console.log('Test query successful');
+
     // Get gate entries
     const gateQuery = `
       SELECT 
