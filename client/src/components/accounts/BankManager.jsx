@@ -140,7 +140,7 @@ const BankManager = () => {
       setBanks(data);
     } catch (error) {
       console.error('Error:', error);
-      alert('Failed to fetch banks');
+      showAlert('Failed to fetch banks', 'error');
     } finally {
       setLoading(false);
     }

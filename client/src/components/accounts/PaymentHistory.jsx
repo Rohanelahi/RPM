@@ -76,7 +76,7 @@ const PaymentHistory = () => {
         console.log('Payment Type:', filters.paymentType);
       }
 
-      const url = `http://localhost:5000/api/payments/history?${queryParams}`;
+      const url = `${config.apiUrl}/payments/history?${queryParams}`;
       console.log('Requesting URL:', url);
 
       const response = await fetch(url);

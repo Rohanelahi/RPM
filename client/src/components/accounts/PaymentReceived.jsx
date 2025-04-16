@@ -46,7 +46,7 @@ const PaymentReceived = () => {
   useEffect(() => {
     const generateVoucherNumber = async () => {
       try {
-        const response = await fetch('http://localhost:5000/api/accounts/payments/generate-voucher/RECEIVED');
+        const response = await fetch(`${config.apiUrl}/accounts/payments/generate-voucher/RECEIVED`);
         if (!response.ok) {
           throw new Error('Failed to generate voucher number');
         }
@@ -78,7 +78,7 @@ const PaymentReceived = () => {
 
   const fetchAccounts = async () => {
     try {
-      const response = await fetch(`http://localhost:5000/api/accounts/list?type=${formData.accountType}`);
+      const response = await fetch(`${config.apiUrl}/accounts/list?type=${formData.accountType}`);
       const data = await response.json();
       setAccounts(data);
     } catch (error) {
@@ -88,7 +88,7 @@ const PaymentReceived = () => {
 
   const fetchBankAccounts = async () => {
     try {
-      const response = await fetch('http://localhost:5000/api/accounts/bank-accounts');
+      const response = await fetch(`${config.apiUrl}/accounts/bank-accounts`);
       const data = await response.json();
       setBankAccounts(data);
     } catch (error) {
@@ -197,7 +197,7 @@ const PaymentReceived = () => {
     }
     setLoading(true);
     try {
-      const response = await fetch('http://localhost:5000/api/accounts/payments/received', {
+      const response = await fetch(`${config.apiUrl}/accounts/payments/received`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -221,7 +221,7 @@ const PaymentReceived = () => {
       const result = await response.json();
       
       // Generate new voucher number
-      const newVoucherResponse = await fetch('http://localhost:5000/api/accounts/payments/generate-voucher/RECEIVED');
+      const newVoucherResponse = await fetch(`${config.apiUrl}/accounts/payments/generate-voucher/RECEIVED`);
       if (!newVoucherResponse.ok) {
         throw new Error('Failed to generate new voucher number');
       }

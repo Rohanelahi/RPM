@@ -293,7 +293,7 @@ const IncomeStatementForm = () => {
       const month = selectedMonth.getMonth() + 1;
       const year = selectedMonth.getFullYear();
 
-      const response = await fetch(`${config.apiUrl}/accounts/income-statement?date=${selectedMonth}`);
+      const response = await fetch(`${config.apiUrl}/accounts/income-statement/${month}/${year}`);
       if (!response.ok) throw new Error('Failed to fetch income statement data');
       const result = await response.json();
       setData(result);

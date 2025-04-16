@@ -49,7 +49,7 @@ const Ledger = () => {
 
   const fetchAccounts = async () => {
     try {
-      const response = await fetch('http://localhost:5000/api/accounts/list');
+      const response = await fetch(`${config.apiUrl}/accounts/list`);
       if (!response.ok) throw new Error('Failed to fetch accounts');
       const data = await response.json();
       setAccounts(data);

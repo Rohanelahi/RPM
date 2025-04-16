@@ -22,6 +22,7 @@ import {
 } from '@mui/material';
 import { Refresh } from '@mui/icons-material';
 import { useAuth } from '../../context/AuthContext';
+import config from '../../config';
 
 const PendingEntries = () => {
   const { user } = useAuth();
@@ -46,7 +47,7 @@ const PendingEntries = () => {
   const fetchPendingEntries = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`http://localhost:5000/api/accounts/pending-entries?userRole=${user.role}`);
+      const response = await fetch(`${config.apiUrl}/accounts/pending-entries?userRole=${user.role}`);
       if (!response.ok) throw new Error('Failed to fetch entries');
       const data = await response.json();
       
@@ -92,7 +93,7 @@ const PendingEntries = () => {
 
   const fetchAccounts = async () => {
     try {
-      const response = await fetch('http://localhost:5000/api/accounts/list');
+      const response = await fetch(`${config.apiUrl}/accounts/list`);
       if (!response.ok) throw new Error('Failed to fetch accounts');
       const data = await response.json();
       setAccounts(data);
@@ -137,19 +138,19 @@ const PendingEntries = () => {
 
       setLoading(true);
       const endpoint = selectedEntry.entry_type === 'STORE_PURCHASE'
-        ? '/api/accounts/process-store-purchase'
+        ? '/accounts/process-store-purchase'
         : selectedEntry.entry_type === 'STORE_RETURN'
-          ? '/api/accounts/process-store-return'
+          ? '/accounts/process-store-return'
           : selectedEntry.entry_type === 'SALE_RETURN'
-            ? '/api/accounts/process-return'
+            ? '/accounts/process-return'
             : selectedEntry.entry_type === 'PURCHASE_RETURN'
-              ? '/api/accounts/process-return'
-              : '/api/accounts/process-entry';
+              ? '/accounts/process-return'
+              : '/accounts/process-entry';
 
       const finalQuantity = selectedEntry.quantity - (selectedEntry?.entry_type === 'PURCHASE' ? parseFloat(formData.cutWeight) || 0 : 0);
       const totalAmount = parseFloat(formData.pricePerUnit) * finalQuantity;
 
-      const response = await fetch(`http://localhost:5000${endpoint}`, {
+      const response = await fetch(`${config.apiUrl}${endpoint}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
