@@ -28,8 +28,8 @@ import {
   ResponsiveContainer
 } from 'recharts';
 import RefreshIcon from '@mui/icons-material/Refresh';
-import '../../styles/Dashboard.css';
 import config from '../../config';
+import '../../styles/Dashboard.css';
 
 const Dashboard = () => {
   const [loading, setLoading] = useState(true);
@@ -285,33 +285,16 @@ const Dashboard = () => {
 
   const fetchDailyExpenses = async (date) => {
     try {
-      // Validate the date first
-      if (!date || isNaN(new Date(date).getTime())) {
-        console.warn(`Invalid date provided to fetchDailyExpenses: ${date}`);
-        return 0;
-      }
-      
-      const startDate = new Date(date);
-      startDate.setHours(0, 0, 0, 0);
-      
-      const endDate = new Date(date);
-      endDate.setHours(23, 59, 59, 999);
-      
       const queryParams = new URLSearchParams({
-        startDate: startDate.toISOString(),
-        endDate: endDate.toISOString()
+        startDate: date,
+        endDate: date
       });
-
-      const response = await fetch(`${config.apiUrl}/accounts/expenses/history?${queryParams}`);
-      if (!response.ok) throw new Error('Failed to fetch expenses');
       
-      const data = await response.json();
-      const totalExpense = data.reduce((sum, expense) => sum + Number(expense.amount), 0);
-      setDailyExpenses(prev => ({
-        ...prev,
-        [date]: totalExpense
-      }));
-      return totalExpense;
+      const expensesResponse = await fetch(`${config.apiUrl}/accounts/expenses/history?${queryParams}`);
+      if (!expensesResponse.ok) throw new Error('Failed to fetch expenses');
+      
+      const expensesData = await expensesResponse.json();
+      return expensesData.reduce((sum, expense) => sum + Number(expense.amount || 0), 0);
     } catch (error) {
       console.error('Error fetching daily expenses:', error);
       return 0;
@@ -319,37 +302,30 @@ const Dashboard = () => {
   };
 
   const calculatePerKgCost = async (row) => {
-    if (!row || !row.recipe) return '0.00';
-    
-    // Ensure we have a valid date
-    let dateToUse = row.date_time;
-    if (!dateToUse || isNaN(new Date(dateToUse).getTime())) {
-      console.warn(`Invalid date in row: ${dateToUse}, using current date instead`);
-      dateToUse = new Date().toISOString().split('T')[0];
+    try {
+      const expenseParams = new URLSearchParams({
+        startDate: row.date,
+        endDate: row.date
+      });
+      
+      const expensesResponse = await fetch(`${config.apiUrl}/accounts/expenses/history?${expenseParams}`);
+      if (!expensesResponse.ok) throw new Error('Failed to fetch expenses');
+      
+      const expensesData = await expensesResponse.json();
+      const totalExpense = expensesData.reduce((sum, expense) => sum + Number(expense.amount || 0), 0);
+      
+      const dailyExpense = totalExpense + 
+        Number(row.boiler_fuel_price || 0) + 
+        Number(row.electricity_cost || 0) + 
+        Number(row.maintenance_cost || 0) + 
+        Number(row.labor_cost || 0) + 
+        Number(row.contractors_cost || 0);
+      
+      return dailyExpense / (Number(row.total_weight) || 1);
+    } catch (error) {
+      console.error('Error calculating per kg cost:', error);
+      return 0;
     }
-    
-    let dailyExpense = dailyExpenses[dateToUse] || await fetchDailyExpenses(dateToUse);
-
-    // Ensure recipe is an array
-    const recipe = Array.isArray(row.recipe) ? row.recipe : [];
-    
-    const raddiCost = recipe.reduce((total, item) => {
-      return total + (parseFloat(item.quantity_used || 0) * parseFloat(item.unit_price || 0));
-    }, 0);
-
-    const boilerFuelCost = parseFloat(row.boiler_fuel_quantity || 0) * parseFloat(row.boiler_fuel_price || 0);
-    const electricityCost = parseFloat(row.electricity_cost || 0);
-    const maintenanceCost = parseFloat(row.maintenance_cost || 0);
-    const laborCost = parseFloat(row.labor_cost || 0);
-    const contractorsCost = parseFloat(row.contractors_cost || 0);
-
-    const totalCost = raddiCost + boilerFuelCost + electricityCost + maintenanceCost + 
-                     laborCost + contractorsCost + dailyExpense;
-
-    const totalWeight = parseFloat(row.total_weight || 1);
-    const perKgCost = totalCost / totalWeight;
-
-    return perKgCost.toFixed(2);
   };
 
   // Manual refresh handler
@@ -368,25 +344,19 @@ const Dashboard = () => {
 
   // Helper function to calculate cost per kg
   const calculateCostPerKg = (data) => {
-    if (!data || !data.recipe) return '0.00';
-    
-    const recipe = Array.isArray(data.recipe) ? data.recipe : [];
-    
-    const raddiCost = recipe.reduce((total, item) => {
-      return total + (parseFloat(item.quantity_used || 0) * parseFloat(item.unit_price || 0));
-    }, 0);
-
-    const boilerFuelCost = parseFloat(data.boiler_fuel_quantity || 0) * parseFloat(data.boiler_fuel_price || 0);
-    const electricityCost = parseFloat(data.electricity_cost || 0);
-    const maintenanceCost = parseFloat(data.maintenance_cost || 0);
-    const laborCost = parseFloat(data.labor_cost || 0);
-    const contractorsCost = parseFloat(data.contractors_cost || 0);
-    const dailyExpenses = parseFloat(data.daily_expenses || 0);
-
-    const totalCost = raddiCost + boilerFuelCost + electricityCost + maintenanceCost + 
-                     laborCost + contractorsCost + dailyExpenses;
-
-    return (totalCost / parseFloat(data.total_weight || 1)).toFixed(2);
+    try {
+      const totalExpense = data.reduce((sum, item) => {
+        const itemCost = calculatePerKgCost(item);
+        return sum + (Number(itemCost) * Number(item.total_weight || 0));
+      }, 0);
+      
+      const totalWeight = data.reduce((sum, item) => sum + Number(item.total_weight || 0), 0);
+      
+      return totalWeight > 0 ? (totalExpense / totalWeight).toFixed(2) : '0.00';
+    } catch (error) {
+      console.error('Error calculating cost per kg:', error);
+      return '0.00';
+    }
   };
 
   return (

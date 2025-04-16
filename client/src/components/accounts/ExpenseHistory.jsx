@@ -18,6 +18,7 @@ import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import { format } from 'date-fns';
+import config from '../../config';
 import '../../styles/ExpenseHistory.css';
 
 const ExpenseHistory = () => {
@@ -49,7 +50,7 @@ const ExpenseHistory = () => {
       if (filters.endDate) queryParams.append('endDate', filters.endDate.toISOString());
       if (filters.expenseType) queryParams.append('expenseType', filters.expenseType);
 
-      const response = await fetch(`http://localhost:5000/api/accounts/expenses/history?${queryParams}`);
+      const response = await fetch(`${config.apiUrl}/accounts/expenses/history?${queryParams}`);
       if (!response.ok) throw new Error('Failed to fetch expenses');
       
       const data = await response.json();

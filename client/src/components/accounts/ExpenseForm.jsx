@@ -15,6 +15,7 @@ import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import { Print } from '@mui/icons-material';
 import { format } from 'date-fns';
+import config from '../../config';
 import '../../styles/Payment.css';
 
 const ExpenseForm = () => {
@@ -106,7 +107,7 @@ const ExpenseForm = () => {
     }
     setLoading(true);
     try {
-      const response = await fetch('http://localhost:5000/api/accounts/expenses', {
+      const response = await fetch(`${config.apiUrl}/accounts/expenses`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

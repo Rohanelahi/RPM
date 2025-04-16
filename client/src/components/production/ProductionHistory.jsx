@@ -119,7 +119,7 @@ const ProductionHistory = () => {
         endDate: endDate.toISOString()
       });
 
-      const response = await fetch(`http://localhost:5000/api/accounts/expenses/history?${queryParams}`);
+      const response = await fetch(`${config.apiUrl}/accounts/expenses/history?${queryParams}`);
       if (!response.ok) throw new Error('Failed to fetch expenses');
       
       const data = await response.json();
