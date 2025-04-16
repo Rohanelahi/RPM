@@ -103,20 +103,20 @@ router.get('/pending-entries', async (req, res) => {
         'STORE_RETURN' as entry_type,
         sr.return_grn as return_number,
         sr.grn_number as original_grn,
-        se.vendor_id as account_id,
+        COALESCE(se.vendor_id, v.id) as account_id,
         pe.quantity,
         pe.status,
         pe.unit,
-        si.item_name as item_type,
+        COALESCE(si.item_name, sr.item_name) as item_type,
         v.account_name as vendor_name,
         sr.date_time,
         sr.remarks as return_reason,
         pe.price_per_unit as original_price
        FROM pricing_entries pe
        JOIN store_returns sr ON pe.reference_id = sr.id
-       JOIN store_entries se ON sr.grn_number = se.grn_number
-       JOIN store_items si ON se.item_id = si.id
-       JOIN accounts v ON se.vendor_id = v.id
+       LEFT JOIN store_entries se ON sr.grn_number = se.grn_number
+       LEFT JOIN store_items si ON se.item_id = si.id
+       LEFT JOIN accounts v ON se.vendor_id = v.id
        WHERE pe.status = 'PENDING'
        AND pe.entry_type = 'STORE_RETURN'`
     );
