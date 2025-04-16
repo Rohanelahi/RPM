@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import {
-  Box,
-  Grid,
-  Paper,
+import { 
+  Box, 
+  Grid, 
+  Paper, 
   Typography,
   CircularProgress,
   Card,
@@ -23,7 +23,7 @@ const Dashboard = () => {
 
   const fetchDashboardData = async () => {
     try {
-      setLoading(true);
+        setLoading(true);
       const [cashResponse, bankResponse, stockResponse, productionResponse] = await Promise.all([
         fetch(`${config.apiUrl}/accounts/cash-balances`),
         fetch(`${config.apiUrl}/accounts/bank-accounts`),
@@ -56,11 +56,11 @@ const Dashboard = () => {
 
   return (
     <Box>
-      {loading ? (
-        <CircularProgress />
-      ) : (
-        <Grid container spacing={3}>
-          <Grid item xs={12} md={6}>
+        {loading ? (
+            <CircularProgress />
+        ) : (
+          <Grid container spacing={3}>
+            <Grid item xs={12} md={6}>
             <Paper>
               <Card>
                 <CardContent>
@@ -68,27 +68,27 @@ const Dashboard = () => {
                   {cashBalances.map((balance) => (
                     <Typography key={balance.id}>
                       {balance.name}: Rs. {balance.amount.toLocaleString()}
-                    </Typography>
+                        </Typography>
                   ))}
                 </CardContent>
               </Card>
-            </Paper>
-          </Grid>
+                      </Paper>
+                    </Grid>
           <Grid item xs={12} md={6}>
             <Paper>
               <Card>
                 <CardContent>
                   <Typography variant="h6">Bank Accounts</Typography>
-                  {bankAccounts.map((account) => (
+                            {bankAccounts.map((account) => (
                     <Typography key={account.id}>
                       {account.name}: Rs. {account.balance.toLocaleString()}
-                    </Typography>
+                            </Typography>
                   ))}
                 </CardContent>
               </Card>
-            </Paper>
-          </Grid>
-          <Grid item xs={12} md={6}>
+                  </Paper>
+                </Grid>
+                        <Grid item xs={12} md={6}>
             <Paper>
               <Card>
                 <CardContent>
@@ -114,11 +114,11 @@ const Dashboard = () => {
                   ))}
                 </CardContent>
               </Card>
-            </Paper>
+              </Paper>
+            </Grid>
           </Grid>
-        </Grid>
-      )}
-    </Box>
+        )}
+      </Box>
   );
 };
 

@@ -314,7 +314,8 @@ router.get('/history', async (req, res) => {
       LEFT JOIN MaintenanceCosts mc ON DATE(p.date_time) = mc.cost_date
       LEFT JOIN DailyLabor dl ON DATE(p.date_time) = dl.attendance_date
       LEFT JOIN DailyExpenses de ON DATE(p.date_time) = de.expense_date
-      CROSS JOIN ContractorsCost cc`;
+      CROSS JOIN ContractorsCost cc
+    `;
 
     if (paperType) {
       conditions.push(`p.paper_type = $${paramCount}`);
@@ -322,7 +323,6 @@ router.get('/history', async (req, res) => {
       paramCount++;
     }
 
-    // Add date validation before adding to conditions
     if (startDate && startDate !== 'null' && startDate !== 'undefined') {
       try {
         const validStartDate = new Date(startDate);
