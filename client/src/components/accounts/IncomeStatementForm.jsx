@@ -293,12 +293,13 @@ const IncomeStatementForm = () => {
       const month = selectedMonth.getMonth() + 1;
       const year = selectedMonth.getFullYear();
 
-      const response = await fetch(`http://localhost:5000/api/accounts/income-statement/${month}/${year}`);
+      const response = await fetch(`${config.apiUrl}/accounts/income-statement?date=${selectedMonth}`);
       if (!response.ok) throw new Error('Failed to fetch income statement data');
       const result = await response.json();
       setData(result);
     } catch (error) {
-      console.error('Error fetching income statement data:', error);
+      console.error('Error:', error);
+      alert('Failed to fetch income statement data');
     } finally {
       setLoading(false);
     }
@@ -504,67 +505,45 @@ const IncomeStatementForm = () => {
 
   const fetchMaterialTypes = async () => {
     try {
-      const month = selectedMonth.getMonth() + 1;
-      const year = selectedMonth.getFullYear();
-      
-      const response = await fetch(
-        `http://localhost:5000/api/accounts/income-statement/materials-types/${month}/${year}`
-      );
-      
-      if (!response.ok) throw new Error('Failed to fetch material types');
-      
+      const response = await fetch(`${config.apiUrl}/stock/material-types`);
+      if (!response.ok) {
+        throw new Error('Failed to fetch material types');
+      }
       const data = await response.json();
       setMaterialTypes(data);
     } catch (error) {
-      console.error('Error fetching material types:', error);
-      setAdjustmentError('Failed to fetch material types');
+      console.error('Error:', error);
     }
   };
 
   const fetchBoilerFuelTypes = async () => {
     try {
-      const month = selectedMonth.getMonth() + 1;
-      const year = selectedMonth.getFullYear();
-      
-      const response = await fetch(
-        `http://localhost:5000/api/accounts/income-statement/boiler-fuel-types/${month}/${year}`
-      );
-      
-      if (!response.ok) throw new Error('Failed to fetch boiler fuel types');
-      
+      const response = await fetch(`${config.apiUrl}/stock/boiler-fuel-types`);
+      if (!response.ok) {
+        throw new Error('Failed to fetch boiler fuel types');
+      }
       const data = await response.json();
       setBoilerFuelTypes(data);
     } catch (error) {
-      console.error('Error fetching boiler fuel types:', error);
-      setAdjustmentError('Failed to fetch boiler fuel types');
+      console.error('Error:', error);
     }
   };
 
   const fetchCurrentValue = async (category, subType = null) => {
     try {
-      const month = selectedMonth.getMonth() + 1;
-      const year = selectedMonth.getFullYear();
-      
-      const url = subType 
-        ? `http://localhost:5000/api/accounts/income-statement/current-value/${month}/${year}/${category}/${subType}`
-        : `http://localhost:5000/api/accounts/income-statement/current-value/${month}/${year}/${category}`;
-      
+      let url = `${config.apiUrl}/stock/current-value/${category}`;
+      if (subType) {
+        url += `?subType=${subType}`;
+      }
       const response = await fetch(url);
-      
-      if (!response.ok) throw new Error('Failed to fetch current value');
-      
+      if (!response.ok) {
+        throw new Error(`Failed to fetch current value for ${category}`);
+      }
       const data = await response.json();
-      setAdjustment(prev => ({
-        ...prev,
-        category,
-        subType,
-        currentValue: data.currentValue,
-        newValue: data.currentValue,
-        difference: 0
-      }));
+      return data.value;
     } catch (error) {
-      console.error('Error fetching current value:', error);
-      setAdjustmentError('Failed to fetch current value');
+      console.error('Error:', error);
+      return 0;
     }
   };
 
@@ -580,41 +559,32 @@ const IncomeStatementForm = () => {
 
   const handleAddAdjustment = async () => {
     try {
-      setAdjustmentError('');
-      
-      if (!isMonthEnded(selectedMonth)) {
-        setAdjustmentError('Adjustments can only be made for past months');
-        return;
-      }
-
-      const response = await fetch('http://localhost:5000/api/accounts/income-statement/adjustments', {
+      setLoading(true);
+      const response = await fetch(`${config.apiUrl}/accounts/income-statement/adjustment`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          month: selectedMonth.getMonth() + 1,
-          year: selectedMonth.getFullYear(),
+          date: selectedMonth,
           category: adjustment.category,
           subType: adjustment.subType,
-          newValue: adjustment.newValue,
+          value: adjustment.newValue,
           remarks: adjustment.remarks
         }),
       });
 
-      const data = await response.json();
-      
       if (!response.ok) {
-        setAdjustmentError(data.error);
-        return;
+        throw new Error('Failed to add adjustment');
       }
-      
-      // Refresh data and close dialog
-      fetchIncomeStatementData();
+
+      await fetchIncomeStatementData();
       setAdjustmentDialog(false);
     } catch (error) {
-      console.error('Error adding adjustment:', error);
-      setAdjustmentError('Failed to add adjustment');
+      console.error('Error:', error);
+      alert('Failed to add adjustment');
+    } finally {
+      setLoading(false);
     }
   };
 

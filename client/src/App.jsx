@@ -1,4 +1,5 @@
 import React from 'react';
+import PropTypes from 'prop-types';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import Layout from './components/layout/Layout';
 import Dashboard from './components/dashboard/Dashboard';
@@ -51,6 +52,11 @@ const ProtectedRoute = ({ children, allowedRoles }) => {
   }
 
   return <Layout>{children}</Layout>;
+};
+
+ProtectedRoute.propTypes = {
+  children: PropTypes.node.isRequired,
+  allowedRoles: PropTypes.arrayOf(PropTypes.string).isRequired
 };
 
 function App() {

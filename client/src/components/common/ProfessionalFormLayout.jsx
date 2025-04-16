@@ -1,4 +1,5 @@
 import React from 'react';
+import PropTypes from 'prop-types';
 import { Box, Typography } from '@mui/material';
 import { format } from 'date-fns';
 
@@ -36,6 +37,18 @@ const ProfessionalFormLayout = ({ children, title, formType, formId, showReferen
       </Box>
     </Box>
   );
+};
+
+ProfessionalFormLayout.propTypes = {
+  children: PropTypes.node.isRequired,
+  title: PropTypes.string.isRequired,
+  formType: PropTypes.string.isRequired,
+  formId: PropTypes.string.isRequired,
+  showReference: PropTypes.bool
+};
+
+ProfessionalFormLayout.defaultProps = {
+  showReference: true
 };
 
 export default ProfessionalFormLayout; 

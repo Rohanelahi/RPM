@@ -124,7 +124,7 @@ const Ledger = () => {
       const formattedEndDate = format(dateRange.endDate, "yyyy-MM-dd'T'23:59:59.999'Z'");
 
       const response = await fetch(
-        `http://localhost:5000/api/accounts/ledger?` + 
+        `${config.apiUrl}/accounts/ledger?` + 
         `accountId=${selectedAccount}&` +
         `startDate=${formattedStartDate}&` +
         `endDate=${formattedEndDate}&` +

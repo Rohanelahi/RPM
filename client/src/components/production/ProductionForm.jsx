@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import PropTypes from 'prop-types';
 import {
   Box,
   Paper,
@@ -41,6 +42,7 @@ const ProductionForm = ({ onProductionAdded }) => {
   });
 
   const [isPrinted, setIsPrinted] = useState(false);
+  const [loading, setLoading] = useState(false);
 
   const paperTypes = ['SUPER', 'CMP', 'BOARD'];
   const boilerFuelTypes = ['Boiler Fuel (Toori)', 'Boiler Fuel (Tukka)'];
@@ -316,6 +318,7 @@ const ProductionForm = ({ onProductionAdded }) => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
+      setLoading(true);
       const recipeWithQuantities = calculateRaddiQuantities();
       
       await checkStockAvailability(recipeWithQuantities);
@@ -334,7 +337,7 @@ const ProductionForm = ({ onProductionAdded }) => {
       });
 
       if (!response.ok) {
-        throw new Error('Failed to add production record');
+        throw new Error('Failed to add production');
       }
 
       const result = await response.json();
@@ -346,10 +349,11 @@ const ProductionForm = ({ onProductionAdded }) => {
       if (onProductionAdded) {
         onProductionAdded(result.id);
       }
-      
     } catch (error) {
-      console.error('Error adding production:', error);
-      alert(error.message);
+      console.error('Error:', error);
+      alert('Failed to add production');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -568,7 +572,7 @@ const ProductionForm = ({ onProductionAdded }) => {
                   variant="contained"
                   color="primary"
                   size="large"
-                  disabled={!isPrinted}
+                  disabled={!isPrinted || loading}
                 >
                   Add Production Record
                 </Button>
@@ -579,6 +583,10 @@ const ProductionForm = ({ onProductionAdded }) => {
       </Paper>
     </Box>
   );
+};
+
+ProductionForm.propTypes = {
+  onProductionAdded: PropTypes.func
 };
 
 export default ProductionForm; 

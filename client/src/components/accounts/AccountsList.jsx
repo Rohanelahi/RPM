@@ -41,7 +41,7 @@ const AccountsList = () => {
   const fetchAccounts = async () => {
     try {
       setLoading(true);
-      const response = await fetch('http://localhost:5000/api/accounts/list');
+      const response = await fetch(`${config.apiUrl}/accounts/list`);
       if (!response.ok) {
         const errorData = await response.json();
         throw new Error(errorData.message || 'Failed to fetch accounts');
@@ -112,7 +112,7 @@ const AccountsList = () => {
         accountData.id = editingAccount.id;
       }
 
-      const response = await fetch(`http://localhost:5000/api/accounts/${editingAccount ? 'update' : 'create'}`, {
+      const response = await fetch(`${config.apiUrl}/accounts/${editingAccount ? 'update' : 'create'}`, {
         method: editingAccount ? 'PUT' : 'POST',
         headers: {
           'Content-Type': 'application/json',

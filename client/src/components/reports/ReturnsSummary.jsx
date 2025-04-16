@@ -23,8 +23,9 @@ import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import { Print, Refresh } from '@mui/icons-material';
 import { format, startOfMonth, endOfMonth } from 'date-fns';
 import config from '../../config';
+import PropTypes from 'prop-types';
 
-const ReturnsSummary = () => {
+const ReturnsSummary = ({ data, totals, type }) => {
   const [loading, setLoading] = useState(false);
   const [tabValue, setTabValue] = useState(0);
   const [dateRange, setDateRange] = useState({
@@ -265,6 +266,17 @@ const ReturnsSummary = () => {
       </Box>
     </LocalizationProvider>
   );
+};
+
+ReturnsSummary.propTypes = {
+  data: PropTypes.arrayOf(PropTypes.shape({
+    // Add specific shape validation based on your data structure
+  })).isRequired,
+  totals: PropTypes.shape({
+    totalQuantity: PropTypes.number.isRequired,
+    totalAmount: PropTypes.number.isRequired
+  }).isRequired,
+  type: PropTypes.string.isRequired
 };
 
 const ReturnTable = ({ data, totals, type }) => {
