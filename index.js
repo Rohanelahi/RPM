@@ -11,7 +11,6 @@ const inventoryRouter = require('./routes/store/inventory');
 const departmentsRoute = require('./routes/departments');
 const stockRoutes = require('./routes/stock');
 const productionRoutes = require('./routes/production');
-const scheduleMonthlyAverages = require('./cron/stockAverages');
 const bankAccountsRouter = require('./routes/accounts/bankAccounts');
 const saleReportsRoutes = require('./routes/reports/saleReports');
 const dailyActivityReportsRoutes = require('./routes/reports/dailyActivityReports');
@@ -49,9 +48,6 @@ app.use('/api/payments', require('./routes/accounts/payments'));
 
 // Add the bank accounts routes
 app.use('/api/accounts', bankAccountsRouter);
-
-// Initialize cron jobs
-scheduleMonthlyAverages();
 
 // Error handling middleware
 app.use((err, req, res, next) => {
