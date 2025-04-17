@@ -1,9 +1,7 @@
 const { Pool } = require('pg');
 const dotenv = require('dotenv');
-const path = require('path');
 
-// Load environment variables from the correct path
-dotenv.config({ path: path.resolve(__dirname, '../.env') });
+dotenv.config();
 
 const pool = new Pool({
   user: process.env.DB_USER,
@@ -11,14 +9,19 @@ const pool = new Pool({
   database: process.env.DB_NAME,
   password: process.env.DB_PASSWORD,
   port: process.env.DB_PORT,
-  max: 20,
-  idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 2000,
-  ssl: false,
-  application_name: 'rosepapermill-server'
+  // Add error handling for parameter setting errors
+  onError: (err) => {
+    if (err.code === '42501') {
+      // Ignore permission denied errors for parameter setting
+      console.log('Ignoring parameter setting error:', err.message);
+    } else {
+      console.error('Database error:', err);
+    }
+  }
 });
 
 // Test the connection
+<<<<<<< HEAD
 pool.on('connect', (client) => {
   console.log('Database connected successfully');
   // Set the search path and other session variables
@@ -31,10 +34,11 @@ pool.on('error', (err) => {
 });
 
 // Test the connection immediately
+=======
+>>>>>>> 831f550 (fix: remove session_replication_role setting to fix database connection)
 pool.query('SELECT NOW()', (err, res) => {
   if (err) {
     console.error('Database connection error:', err);
-    process.exit(-1);
   } else {
     console.log('Database connected successfully');
   }
