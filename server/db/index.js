@@ -1,16 +1,17 @@
 const { Pool } = require('pg');
 const dotenv = require('dotenv');
 const path = require('path');
+const config = require('../config');
 
 // Load environment variables from the correct path
 dotenv.config({ path: path.resolve(__dirname, '../.env') });
 
 const pool = new Pool({
-  user: process.env.DB_USER,
-  host: process.env.DB_HOST,
-  database: process.env.DB_NAME,
-  password: process.env.DB_PASSWORD,
-  port: process.env.DB_PORT,
+  user: config.database.user,
+  host: config.database.host,
+  database: config.database.database,
+  password: config.database.password,
+  port: config.database.port,
   max: 20,
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 2000,

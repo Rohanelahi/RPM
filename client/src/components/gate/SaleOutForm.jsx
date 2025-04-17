@@ -97,25 +97,6 @@ const SaleOutForm = () => {
     generateGRN();
   }, [formData.customerId, formData.paperType, customers]);
 
-  useEffect(() => {
-    const fetchCustomers = async () => {
-      try {
-        setLoading(true);
-        const response = await fetch(`${config.apiUrl}/accounts/customers`);
-        if (!response.ok) throw new Error('Failed to fetch customers');
-        const data = await response.json();
-        setCustomers(data);
-      } catch (error) {
-        console.error('Error fetching customers:', error);
-        alert('Error fetching customers');
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchCustomers();
-  }, []);
-
   const handleSubmit = async (e) => {
     e.preventDefault();
     
