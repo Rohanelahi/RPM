@@ -52,7 +52,7 @@ app.use('/api/payments', require('./routes/accounts/payments'));
 app.use('/api/accounts', bankAccountsRouter);
 
 // Initialize cron jobs
-scheduleMonthlyAverages();
+// scheduleMonthlyAverages();
 
 // Error handling middleware
 app.use((err, req, res, next) => {
