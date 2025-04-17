@@ -23,7 +23,6 @@ pool.on('connect', (client) => {
   console.log('Database connected successfully');
   // Set the search path and other session variables
   client.query('SET search_path TO public');
-  client.query('SET session_replication_role = replica');
 });
 
 pool.on('error', (err) => {

@@ -57,6 +57,15 @@ createTables();
 // Get all bank accounts with latest balance
 router.get('/bank-accounts', async (req, res) => {
   try {
+    // First verify the tables exist
+    await pool.query(`
+      SELECT EXISTS (
+        SELECT FROM information_schema.tables 
+        WHERE table_schema = 'public' 
+        AND table_name = 'bank_accounts'
+      );
+    `);
+
     const result = await pool.query(`
       WITH latest_balances AS (
         SELECT 
@@ -90,7 +99,15 @@ router.get('/bank-accounts', async (req, res) => {
     res.json(result.rows);
   } catch (err) {
     console.error('Error fetching bank accounts:', err);
-    res.status(500).json({ error: 'Failed to fetch bank accounts' });
+    // Return empty array instead of error if no data found
+    if (err.code === '42P01') { // Table does not exist
+      res.json([]);
+    } else {
+      res.status(500).json({ 
+        error: 'Failed to fetch bank accounts',
+        details: err.message 
+      });
+    }
   }
 });
 
@@ -113,7 +130,7 @@ router.post('/bank-accounts', async (req, res) => {
     const accountResult = await pool.query(
       `INSERT INTO bank_accounts (
         bank_name, account_name, account_number, branch_name, 
-        ifsc_code, account_type, balance
+        ifsc_code, account_type, opening_balance
       ) VALUES ($1, $2, $3, $4, $5, $6, $7) 
       RETURNING *`,
       [bank_name, account_name, account_number, branch_name, ifsc_code, account_type, opening_balance]

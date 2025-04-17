@@ -22,7 +22,7 @@ router.get('/pending-entries', async (req, res) => {
 
     // Test query first
     const testQuery = await pool.query(
-      `SELECT 1 FROM pricing_entries LIMIT 1`
+      `SELECT 1 FROM public.pricing_entries LIMIT 1`
     ).catch(error => {
       console.error('Test query error:', error);
       throw error;
@@ -120,8 +120,8 @@ router.get('/pending-entries', async (req, res) => {
         sr.date_time,
         sr.remarks as return_reason,
         pe.price_per_unit as original_price
-      FROM pricing_entries pe
-      JOIN store_returns sr ON pe.reference_id = sr.id
+      FROM public.pricing_entries pe
+      JOIN public.store_returns sr ON pe.reference_id = sr.id
       WHERE pe.status = 'PENDING'
       AND pe.entry_type = 'STORE_RETURN'`
     ).catch(error => {
@@ -138,8 +138,8 @@ router.get('/pending-entries', async (req, res) => {
         sr.date_time,
         sr.remarks as return_reason,
         pe.price_per_unit as original_price
-      FROM pricing_entries pe
-      JOIN store_returns sr ON pe.reference_id = sr.id
+      FROM public.pricing_entries pe
+      JOIN public.store_returns sr ON pe.reference_id = sr.id
       WHERE pe.status = 'PENDING'
       AND pe.entry_type = 'STORE_RETURN'`);
       throw error;
