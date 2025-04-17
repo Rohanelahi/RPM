@@ -68,32 +68,32 @@ router.get('/bank-accounts', async (req, res) => {
 
     const result = await pool.query(`
       WITH latest_balances AS (
-        SELECT 
+        SELECT
           account_id,
           running_balance,
           ROW_NUMBER() OVER (PARTITION BY account_id ORDER BY transaction_date DESC, id DESC) as rn
         FROM (
-          SELECT 
+          SELECT
             t.*,
-            SUM(CASE WHEN type = 'CREDIT' THEN amount ELSE -amount END) 
+            SUM(CASE WHEN type = 'CREDIT' THEN amount ELSE -amount END)
             OVER (PARTITION BY account_id ORDER BY transaction_date ASC, id ASC) as running_balance
           FROM bank_transactions t
         ) subq
       )
-      SELECT 
-        ba.id,
-        ba.bank_name,
-        ba.account_name,
-        ba.account_number,
-        ba.branch_name,
-        ba.ifsc_code,
-        ba.account_type,
-        ba.status,
+      SELECT
+        b.id,
+        b.bank_name,
+        b.account_name,
+        b.account_number,
+        b.branch_name,
+        b.ifsc_code,
+        b.account_type,
+        b.status,
         COALESCE(lb.running_balance, 0) as current_balance
-      FROM bank_accounts ba
-      LEFT JOIN latest_balances lb ON ba.id = lb.account_id AND lb.rn = 1
-      WHERE ba.status = $1 
-      ORDER BY ba.bank_name
+      FROM bank_accounts b
+      LEFT JOIN latest_balances lb ON b.id = lb.account_id AND lb.rn = 1
+      WHERE b.status = $1
+      ORDER BY b.bank_name
     `, ['ACTIVE']);
     
     res.json(result.rows);
