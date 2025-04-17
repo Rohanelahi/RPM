@@ -134,13 +134,13 @@ const BankManager = () => {
   const fetchBanks = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`${config.apiUrl}/accounts/banks`);
-      if (!response.ok) throw new Error('Failed to fetch banks');
+      const response = await fetch(`${config.apiUrl}/accounts/bank-accounts`);
+      if (!response.ok) throw new Error('Failed to fetch bank accounts');
       const data = await response.json();
       setBanks(data);
     } catch (error) {
       console.error('Error:', error);
-      showAlert('Failed to fetch banks', 'error');
+      showAlert('Failed to fetch bank accounts', 'error');
     } finally {
       setLoading(false);
     }
