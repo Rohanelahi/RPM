@@ -130,7 +130,7 @@ router.post('/bank-accounts', async (req, res) => {
     const accountResult = await pool.query(
       `INSERT INTO bank_accounts (
         bank_name, account_name, account_number, branch_name, 
-        ifsc_code, account_type, opening_balance
+        ifsc_code, account_type, balance
       ) VALUES ($1, $2, $3, $4, $5, $6, $7) 
       RETURNING *`,
       [bank_name, account_name, account_number, branch_name, ifsc_code, account_type, opening_balance]
