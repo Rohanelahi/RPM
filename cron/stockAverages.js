@@ -1,11 +1,12 @@
 const cron = require('node-cron');
+const config = require('../config');
 
 // Schedule task to run at 00:01 on the first day of each month
 const scheduleMonthlyAverages = () => {
   cron.schedule('1 0 1 * *', async () => {
     try {
       console.log('Running monthly averages calculation...');
-      const response = await fetch('http://localhost:5000/api/stock/monthly-averages', {
+      const response = await fetch(`${config.apiUrl}/stock/monthly-averages`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'

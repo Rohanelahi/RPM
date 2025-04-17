@@ -27,6 +27,7 @@ import { Search, Print, Refresh as RefreshIcon } from '@mui/icons-material';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import { LocalizationProvider, DatePicker } from '@mui/x-date-pickers';
 import '../../styles/Inventory.css';
+import config from '../../config';
 
 const Inventory = () => {
   const [loading, setLoading] = useState(true);
@@ -64,7 +65,7 @@ const Inventory = () => {
   const fetchInventory = async () => {
     try {
       setLoading(true);
-      const response = await fetch('http://localhost:5000/api/store/inventory');
+      const response = await fetch(`${config.apiUrl}/store/inventory`);
       if (!response.ok) throw new Error('Failed to fetch inventory');
       const data = await response.json();
       setInventory(data);
@@ -78,7 +79,7 @@ const Inventory = () => {
 
   const fetchDepartments = async () => {
     try {
-      const response = await fetch('http://localhost:5000/api/departments');
+      const response = await fetch(`${config.apiUrl}/departments`);
       if (!response.ok) throw new Error('Failed to fetch departments');
       const data = await response.json();
       
@@ -175,7 +176,7 @@ const Inventory = () => {
 
   const handleIssueSubmit = async () => {
     try {
-      const response = await fetch('http://localhost:5000/api/store/issue', {
+      const response = await fetch(`${config.apiUrl}/store/issue`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
