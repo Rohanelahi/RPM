@@ -97,7 +97,7 @@ const PurchaseReturnForm = () => {
       
       try {
         setLoading(true);
-        const response = await fetch(`http://localhost:5000/api/gate/grns/supplier/${formData.supplierId}`);
+        const response = await fetch(`${config.apiUrl}/gate/grns/supplier/${formData.supplierId}`);
         if (!response.ok) throw new Error('Failed to fetch GRNs');
         const data = await response.json();
         setPurchaseGRNs(data);
@@ -149,14 +149,14 @@ const PurchaseReturnForm = () => {
 
     try {
       setLoading(true);
-      const response = await fetch('http://localhost:5000/api/gate/out/purchase-return', {
+      const response = await fetch(`${config.apiUrl}/gate/out/purchase-return`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
           returnNumber: formData.returnNumber,
-          purchaseGRN: formData.purchaseGRN, // Make sure this is being sent
+          purchaseGRN: formData.purchaseGRN,
           supplierId: formData.supplierId,
           returnQuantity: formData.returnQuantity,
           returnReason: formData.returnReason,

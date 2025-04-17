@@ -59,7 +59,7 @@ const SaleSummary = () => {
 
   const fetchCustomers = async () => {
     try {
-      const response = await fetch('http://localhost:5000/api/accounts/list?type=CUSTOMER');
+      const response = await fetch(`${config.apiUrl}/accounts/list?type=CUSTOMER`);
       if (!response.ok) throw new Error('Failed to fetch customers');
       const data = await response.json();
       setCustomers(data);
@@ -93,7 +93,7 @@ const SaleSummary = () => {
 
       console.log('Fetching sale history with params:', Object.fromEntries(queryParams));
       
-      const response = await fetch(`http://localhost:5000/api/reports/sale-history?${queryParams}`);
+      const response = await fetch(`${config.apiUrl}/reports/sale-history?${queryParams}`);
       if (!response.ok) throw new Error('Failed to fetch history data');
       const data = await response.json();
       console.log('Sale history data:', data);
@@ -113,7 +113,7 @@ const SaleSummary = () => {
 
       console.log('Fetching sale summary with params:', Object.fromEntries(queryParams));
       
-      const response = await fetch(`http://localhost:5000/api/reports/sale-summary?${queryParams}`);
+      const response = await fetch(`${config.apiUrl}/reports/sale-summary?${queryParams}`);
       if (!response.ok) throw new Error('Failed to fetch item summary');
       const data = await response.json();
       console.log('Sale summary data:', data);

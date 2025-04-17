@@ -49,7 +49,7 @@ const StoreOutForm = () => {
 
   const fetchVendors = async () => {
     try {
-      const response = await fetch('http://localhost:5000/api/accounts/vendors');
+      const response = await fetch(`${config.apiUrl}/accounts/vendors`);
       if (!response.ok) throw new Error('Failed to fetch vendors');
       const data = await response.json();
       setVendors(data);
@@ -63,7 +63,7 @@ const StoreOutForm = () => {
   const fetchVendorGRNs = async (vendorId) => {
     try {
       setLoading(true);
-      const response = await fetch(`http://localhost:5000/api/store/vendor-grns/${vendorId}`);
+      const response = await fetch(`${config.apiUrl}/store/vendor-grns/${vendorId}`);
       
       if (!response.ok) {
         const error = await response.json();
@@ -93,7 +93,7 @@ const StoreOutForm = () => {
   const fetchGRNDetails = async (grnNumber) => {
     try {
       setLoading(true);
-      const response = await fetch(`http://localhost:5000/api/store/grn-details/${grnNumber}`);
+      const response = await fetch(`${config.apiUrl}/store/grn-details/${grnNumber}`);
       if (!response.ok) throw new Error('Failed to fetch GRN details');
       const data = await response.json();
       
@@ -166,7 +166,7 @@ const StoreOutForm = () => {
 
       console.log('Sending request:', requestBody); // Debug log
 
-      const response = await fetch('http://localhost:5000/api/store/return', {
+      const response = await fetch(`${config.apiUrl}/store/return`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

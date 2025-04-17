@@ -25,6 +25,7 @@ import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import { format } from 'date-fns';
+import config from '../../config';
 
 const ProductionForm = ({ onProductionAdded }) => {
   const [formData, setFormData] = useState({
@@ -123,7 +124,7 @@ const ProductionForm = ({ onProductionAdded }) => {
   };
 
   const checkStockAvailability = async (recipe) => {
-    const response = await fetch('http://localhost:5000/api/production/check-stock', {
+    const response = await fetch(`${config.apiUrl}/production/check-stock`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -324,7 +325,7 @@ const ProductionForm = ({ onProductionAdded }) => {
         recipe: recipeWithQuantities
       };
 
-      const response = await fetch('http://localhost:5000/api/production/add', {
+      const response = await fetch(`${config.apiUrl}/production/add`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

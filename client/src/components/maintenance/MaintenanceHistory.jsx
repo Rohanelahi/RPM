@@ -41,7 +41,7 @@ const MaintenanceHistory = () => {
     try {
       setLoading(true);
       const response = await fetch(
-        `http://localhost:5000/api/store/maintenance-history?` +
+        `${config.apiUrl}/store/maintenance-history?` +
         `startDate=${dateRange.startDate.toISOString().split('T')[0]}&` +
         `endDate=${dateRange.endDate.toISOString().split('T')[0]}`
       );

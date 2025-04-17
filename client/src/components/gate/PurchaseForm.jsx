@@ -22,6 +22,7 @@ import { Print } from '@mui/icons-material';
 import '../../styles/forms/GateForm.css';
 import useAccounts from '../../hooks/useAccounts';
 import { format } from 'date-fns';
+import config from '../../config';
 
 const PurchaseForm = () => {
   const [loading, setLoading] = useState(false);
@@ -128,7 +129,7 @@ const PurchaseForm = () => {
   const handleAddNewSupplier = async () => {
     try {
       setLoading(true);
-      const response = await fetch('http://localhost:5000/api/accounts/create', {
+      const response = await fetch(`${config.apiUrl}/accounts/create`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -344,7 +345,7 @@ const PurchaseForm = () => {
     try {
       setLoading(true);
       
-      const response = await fetch('http://localhost:5000/api/gate/in/purchase', {
+      const response = await fetch(`${config.apiUrl}/gate/in/purchase`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

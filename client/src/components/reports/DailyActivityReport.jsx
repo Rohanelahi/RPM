@@ -64,35 +64,35 @@ const DailyActivityReport = () => {
       const formattedDate = format(selectedDate, 'yyyy-MM-dd');
       
       // Fetch purchases
-      const purchasesResponse = await fetch(`http://localhost:5000/api/reports/daily-activity/purchases?date=${formattedDate}`);
+      const purchasesResponse = await fetch(`${config.apiUrl}/reports/daily-activity/purchases?date=${formattedDate}`);
       const purchasesData = await purchasesResponse.json();
       
       // Fetch sales
-      const salesResponse = await fetch(`http://localhost:5000/api/reports/daily-activity/sales?date=${formattedDate}`);
+      const salesResponse = await fetch(`${config.apiUrl}/reports/daily-activity/sales?date=${formattedDate}`);
       const salesData = await salesResponse.json();
       
       // Fetch expenses
-      const expensesResponse = await fetch(`http://localhost:5000/api/reports/daily-activity/expenses?date=${formattedDate}`);
+      const expensesResponse = await fetch(`${config.apiUrl}/reports/daily-activity/expenses?date=${formattedDate}`);
       const expensesData = await expensesResponse.json();
       
       // Fetch payments received
-      const paymentsReceivedResponse = await fetch(`http://localhost:5000/api/reports/daily-activity/payments/received?date=${formattedDate}`);
+      const paymentsReceivedResponse = await fetch(`${config.apiUrl}/reports/daily-activity/payments/received?date=${formattedDate}`);
       const paymentsReceivedData = await paymentsReceivedResponse.json();
       
       // Fetch payments issued
-      const paymentsIssuedResponse = await fetch(`http://localhost:5000/api/reports/daily-activity/payments/issued?date=${formattedDate}`);
+      const paymentsIssuedResponse = await fetch(`${config.apiUrl}/reports/daily-activity/payments/issued?date=${formattedDate}`);
       const paymentsIssuedData = await paymentsIssuedResponse.json();
       
       // Fetch purchase returns
-      const purchaseReturnsResponse = await fetch(`http://localhost:5000/api/reports/daily-activity/returns/purchase?date=${formattedDate}`);
+      const purchaseReturnsResponse = await fetch(`${config.apiUrl}/reports/daily-activity/returns/purchase?date=${formattedDate}`);
       const purchaseReturnsData = await purchaseReturnsResponse.json();
       
       // Fetch sale returns
-      const saleReturnsResponse = await fetch(`http://localhost:5000/api/reports/daily-activity/returns/sale?date=${formattedDate}`);
+      const saleReturnsResponse = await fetch(`${config.apiUrl}/reports/daily-activity/returns/sale?date=${formattedDate}`);
       const saleReturnsData = await saleReturnsResponse.json();
       
       // Fetch maintenance activities
-      const maintenanceResponse = await fetch(`http://localhost:5000/api/reports/daily-activity/maintenance?date=${formattedDate}`);
+      const maintenanceResponse = await fetch(`${config.apiUrl}/reports/daily-activity/maintenance?date=${formattedDate}`);
       const maintenanceData = await maintenanceResponse.json();
       
       // Calculate totals

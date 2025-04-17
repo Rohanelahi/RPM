@@ -44,7 +44,7 @@ const ReturnsSummary = ({ data, totals, type }) => {
     try {
       setLoading(true);
       const response = await fetch(
-        `http://localhost:5000/api/reports/returns-summary?` +
+        `${config.apiUrl}/reports/returns-summary?` +
         `startDate=${format(dateRange.startDate, "yyyy-MM-dd'T'00:00:00.000'Z'")}&` +
         `endDate=${format(dateRange.endDate, "yyyy-MM-dd'T'23:59:59.999'Z'")}`
       );

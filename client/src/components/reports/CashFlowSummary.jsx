@@ -84,7 +84,7 @@ const CashFlowSummary = () => {
         queryParams.append('sourceType', filters.sourceType);
       }
 
-      const url = `http://localhost:5000/api/reports/cash-flow?${queryParams}`;
+      const url = `${config.apiUrl}/reports/cash-flow?${queryParams}`;
       console.log('Fetching from URL:', url);
       
       const response = await fetch(url, {

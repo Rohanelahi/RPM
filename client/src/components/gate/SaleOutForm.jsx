@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import config from '../../config';
 import {
   Box,
   Paper,
@@ -96,28 +97,51 @@ const SaleOutForm = () => {
     generateGRN();
   }, [formData.customerId, formData.paperType, customers]);
 
+  useEffect(() => {
+    const fetchCustomers = async () => {
+      try {
+        setLoading(true);
+        const response = await fetch(`${config.apiUrl}/accounts/customers`);
+        if (!response.ok) throw new Error('Failed to fetch customers');
+        const data = await response.json();
+        setCustomers(data);
+      } catch (error) {
+        console.error('Error fetching customers:', error);
+        alert('Error fetching customers');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchCustomers();
+  }, []);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!formData.customerId || !formData.paperType || !formData.vehicleType || 
-        !formData.vehicleNumber || !formData.quantity) {
+    
+    if (!formData.customerId || !formData.quantity || !formData.vehicleType || !formData.vehicleNumber) {
       alert('Please fill all required fields');
       return;
     }
 
     try {
       setLoading(true);
-      const requestData = {
-        ...formData,
-        purchaserId: formData.customerId,
-      };
-      delete requestData.customerId;
-
-      const response = await fetch('http://localhost:5000/api/gate/out/sale', {
+      const response = await fetch(`${config.apiUrl}/gate/out/sale`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(requestData),
+        body: JSON.stringify({
+          customerId: formData.customerId,
+          quantity: formData.quantity,
+          vehicleType: formData.vehicleType,
+          vehicleNumber: formData.vehicleNumber,
+          driverName: formData.driverName,
+          dateTime: formData.dateTime,
+          itemType: formData.itemType,
+          unit: formData.unit,
+          remarks: formData.remarks
+        })
       });
 
       if (!response.ok) {

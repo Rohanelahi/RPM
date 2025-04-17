@@ -22,6 +22,7 @@ import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import { Print, Add as AddIcon, Delete as DeleteIcon } from '@mui/icons-material';
 import '../../styles/forms/GateForm.css';
 import { format } from 'date-fns';
+import config from '../../config';
 
 const StoreInForm = () => {
   const [loading, setLoading] = useState(false);
@@ -85,7 +86,7 @@ const StoreInForm = () => {
   const fetchStoreItems = async () => {
     try {
       setLoading(true);
-      const response = await fetch('http://localhost:5000/api/store/items');
+      const response = await fetch(`${config.apiUrl}/store/items`);
       if (!response.ok) throw new Error('Failed to fetch items');
       const data = await response.json();
       setStoreItems(data);
@@ -104,7 +105,7 @@ const StoreInForm = () => {
   // Update the fetchVendors function with the correct endpoint
   const fetchVendors = async () => {
     try {
-      const response = await fetch('http://localhost:5000/api/accounts/vendors');
+      const response = await fetch(`${config.apiUrl}/accounts/vendors`);
       if (!response.ok) throw new Error('Failed to fetch vendors');
       const data = await response.json();
       setVendors(data);
@@ -150,7 +151,7 @@ const StoreInForm = () => {
     try {
       setLoading(true);
 
-      const response = await fetch('http://localhost:5000/api/store/in', {
+      const response = await fetch(`${config.apiUrl}/store/in`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -393,7 +394,7 @@ const StoreInForm = () => {
         .toUpperCase() + 
         Math.floor(Math.random() * 1000).toString().padStart(3, '0');
 
-      const response = await fetch('http://localhost:5000/api/store/items', {
+      const response = await fetch(`${config.apiUrl}/store/items`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

@@ -95,7 +95,7 @@ const SaleReturnForm = () => {
       
       try {
         setLoading(true);
-        const response = await fetch(`http://localhost:5000/api/gate/grns/purchaser/${formData.purchaserId}`);
+        const response = await fetch(`${config.apiUrl}/gate/grns/purchaser/${formData.purchaserId}`);
         if (!response.ok) throw new Error('Failed to fetch GRNs');
         const data = await response.json();
         // Filter out GRNs that already have returns
@@ -146,7 +146,7 @@ const SaleReturnForm = () => {
 
     try {
       setLoading(true);
-      const response = await fetch('http://localhost:5000/api/gate/in/sale-return', {
+      const response = await fetch(`${config.apiUrl}/gate/in/sale-return`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -184,7 +184,7 @@ const SaleReturnForm = () => {
 
       // Refresh GRNs list to remove the one just returned
       if (formData.purchaserId) {
-        const response = await fetch(`http://localhost:5000/api/gate/grns/purchaser/${formData.purchaserId}`);
+        const response = await fetch(`${config.apiUrl}/gate/grns/purchaser/${formData.purchaserId}`);
         if (response.ok) {
           const data = await response.json();
           const availableGRNs = data.filter(grn => !grn.has_return);
