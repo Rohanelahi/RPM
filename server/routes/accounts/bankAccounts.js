@@ -140,13 +140,14 @@ router.post('/bank-accounts', async (req, res) => {
     if (parseFloat(opening_balance) > 0) {
       await pool.query(
         `INSERT INTO bank_transactions (
-          account_id, type, amount, reference, balance_after
-        ) VALUES ($1, $2, $3, $4, $5)`,
+          account_id, type, amount, reference, balance, balance_after
+        ) VALUES ($1, $2, $3, $4, $5, $6)`,
         [
           accountResult.rows[0].id,
           'CREDIT',
           opening_balance,
           'Opening Balance',
+          0,
           opening_balance
         ]
       );
