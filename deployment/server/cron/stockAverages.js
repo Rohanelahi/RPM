@@ -1,12 +1,12 @@
 const config = require('../config');
-const https = require('https');
+const http = require('http');
 
 const calculateMonthlyAverages = () => {
   console.log('Running monthly averages calculation...');
   
   const options = {
     hostname: new URL(config.apiUrl).hostname,
-    port: 443,
+    port: config.port,
     path: '/api/stock/monthly-averages',
     method: 'POST',
     headers: {
@@ -14,7 +14,7 @@ const calculateMonthlyAverages = () => {
     }
   };
 
-  const req = https.request(options, (res) => {
+  const req = http.request(options, (res) => {
     let data = '';
     
     res.on('data', (chunk) => {
