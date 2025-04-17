@@ -12,11 +12,13 @@ const runMigration = async () => {
       '003_create_accounts_tables.sql',   // First create accounts
       '002_create_store_tables.sql',      // Then store tables (depends on accounts)
       '001_create_gate_tables.sql',       // Then gate tables (depends on accounts)
-      '006_fix_gate_entries_foreign_keys.sql'  // Finally, fix foreign keys
+      '006_fix_gate_entries_foreign_keys.sql',  // Fix foreign keys
+      '20240417_add_monthly_price_averages.sql'  // Add monthly price averages table
     ];
 
     // First drop all existing tables to ensure clean state
     await client.query(`
+      DROP TABLE IF EXISTS monthly_price_averages CASCADE;
       DROP TABLE IF EXISTS gate_entries_pricing CASCADE;
       DROP TABLE IF EXISTS pricing_entries CASCADE;
       DROP TABLE IF EXISTS store_entries CASCADE;
