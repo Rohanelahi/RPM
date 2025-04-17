@@ -1,40 +1,49 @@
-const config = require('../config');
-const http = require('http');
+const pool = require('../db');
 
-const calculateMonthlyAverages = () => {
+const calculateMonthlyAverages = async () => {
   console.log('Running monthly averages calculation...');
+  const client = await pool.connect();
   
-  const options = {
-    hostname: new URL(config.apiUrl).hostname,
-    port: config.port,
-    path: '/api/stock/monthly-averages',
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json'
-    }
-  };
+  try {
+    await client.query('BEGIN');
 
-  const req = http.request(options, (res) => {
-    let data = '';
-    
-    res.on('data', (chunk) => {
-      data += chunk;
-    });
+    // Get the previous month's dates
+    const previousMonth = new Date();
+    previousMonth.setMonth(previousMonth.getMonth() - 1);
+    const monthStart = new Date(previousMonth.getFullYear(), previousMonth.getMonth(), 1);
+    const monthEnd = new Date(previousMonth.getFullYear(), previousMonth.getMonth() + 1, 0);
 
-    res.on('end', () => {
-      if (res.statusCode === 200) {
-        console.log('Monthly averages saved:', JSON.parse(data));
-      } else {
-        console.error('Error saving monthly averages:', data);
-      }
-    });
-  });
+    // Calculate and save monthly averages
+    await client.query(`
+      INSERT INTO monthly_price_averages (
+        item_type,
+        month,
+        year,
+        average_price
+      )
+      SELECT 
+        item_type,
+        EXTRACT(MONTH FROM date_time) as month,
+        EXTRACT(YEAR FROM date_time) as year,
+        AVG(price_per_unit) as average_price
+      FROM gate_entries ge
+      JOIN gate_entries_pricing gep ON ge.grn_number = gep.grn_number
+      WHERE ge.entry_type = 'PURCHASE_IN'
+      AND ge.date_time >= $1
+      AND ge.date_time <= $2
+      GROUP BY item_type, EXTRACT(MONTH FROM date_time), EXTRACT(YEAR FROM date_time)
+      ON CONFLICT (item_type, month, year) 
+      DO UPDATE SET average_price = EXCLUDED.average_price
+    `, [monthStart, monthEnd]);
 
-  req.on('error', (error) => {
+    await client.query('COMMIT');
+    console.log('Monthly averages saved successfully');
+  } catch (error) {
+    await client.query('ROLLBACK');
     console.error('Error saving monthly averages:', error);
-  });
-
-  req.end();
+  } finally {
+    client.release();
+  }
 };
 
 // Schedule the first run
