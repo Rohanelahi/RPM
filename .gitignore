@@ -28,4 +28,7 @@ yarn-error.log*
 
 # OS
 .DS_Store
-Thumbs.db 
+Thumbs.db backup_utf8.sql
+client/*.sh
+client/src/config.js.backup
+server/update-urls.sh
