@@ -395,4 +395,162 @@ router.post('/cash-transactions', async (req, res) => {
   }
 });
 
+// Process payment received
+router.post('/payments/received', async (req, res) => {
+  const {
+    account_id,
+    amount,
+    payment_date,
+    payment_mode,
+    receiver_name,
+    remarks
+  } = req.body;
+
+  const client = await pool.connect();
+  
+  try {
+    await client.query('BEGIN');
+
+    // Create payment record
+    const paymentResult = await client.query(
+      `INSERT INTO payments (
+        account_id, amount, payment_date, payment_mode,
+        payment_type, receiver_name, remarks
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7)
+      RETURNING *`,
+      [
+        account_id,
+        amount,
+        payment_date,
+        payment_mode,
+        'RECEIVED',
+        receiver_name,
+        remarks
+      ]
+    );
+
+    // If payment mode is CASH, update cash balance
+    if (payment_mode === 'CASH') {
+      // Get current cash balance
+      const cashBalanceResult = await client.query(`
+        SELECT COALESCE(
+          SUM(CASE WHEN type = 'CREDIT' THEN amount ELSE -amount END),
+          0
+        ) as current_balance
+        FROM cash_transactions
+      `);
+      
+      const currentBalance = Number(cashBalanceResult.rows[0].current_balance);
+      const newBalance = currentBalance + Number(amount);
+
+      // Create cash transaction
+      await client.query(
+        `INSERT INTO cash_transactions (
+          type, amount, reference, remarks, balance, balance_after
+        ) VALUES ($1, $2, $3, $4, $5, $6)`,
+        [
+          'CREDIT',
+          amount,
+          'Payment Received',
+          remarks || `Payment from ${receiver_name}`,
+          currentBalance,
+          newBalance
+        ]
+      );
+    }
+
+    await client.query('COMMIT');
+    res.json(paymentResult.rows[0]);
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('Error processing payment:', err);
+    res.status(500).json({ 
+      error: err.message || 'Failed to process payment'
+    });
+  } finally {
+    client.release();
+  }
+});
+
+// Process payment issued
+router.post('/payments/issued', async (req, res) => {
+  const {
+    account_id,
+    amount,
+    payment_date,
+    payment_mode,
+    receiver_name,
+    remarks
+  } = req.body;
+
+  const client = await pool.connect();
+  
+  try {
+    await client.query('BEGIN');
+
+    // Create payment record
+    const paymentResult = await client.query(
+      `INSERT INTO payments (
+        account_id, amount, payment_date, payment_mode,
+        payment_type, receiver_name, remarks
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7)
+      RETURNING *`,
+      [
+        account_id,
+        amount,
+        payment_date,
+        payment_mode,
+        'ISSUED',
+        receiver_name,
+        remarks
+      ]
+    );
+
+    // If payment mode is CASH, update cash balance
+    if (payment_mode === 'CASH') {
+      // Get current cash balance
+      const cashBalanceResult = await client.query(`
+        SELECT COALESCE(
+          SUM(CASE WHEN type = 'CREDIT' THEN amount ELSE -amount END),
+          0
+        ) as current_balance
+        FROM cash_transactions
+      `);
+      
+      const currentBalance = Number(cashBalanceResult.rows[0].current_balance);
+      const newBalance = currentBalance - Number(amount);
+
+      if (newBalance < 0) {
+        throw new Error('Insufficient cash balance');
+      }
+
+      // Create cash transaction
+      await client.query(
+        `INSERT INTO cash_transactions (
+          type, amount, reference, remarks, balance, balance_after
+        ) VALUES ($1, $2, $3, $4, $5, $6)`,
+        [
+          'DEBIT',
+          amount,
+          'Payment Issued',
+          remarks || `Payment to ${receiver_name}`,
+          currentBalance,
+          newBalance
+        ]
+      );
+    }
+
+    await client.query('COMMIT');
+    res.json(paymentResult.rows[0]);
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('Error processing payment:', err);
+    res.status(500).json({ 
+      error: err.message || 'Failed to process payment'
+    });
+  } finally {
+    client.release();
+  }
+});
+
 module.exports = router; 
