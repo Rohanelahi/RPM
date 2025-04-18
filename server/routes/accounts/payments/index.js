@@ -111,244 +111,177 @@ const generateVoucherNo = async (type, client) => {
   return voucherNo;
 };
 
-// Handle payment received
+// Process payment received
 router.post('/received', async (req, res) => {
+  const {
+    account_id,
+    amount,
+    payment_date,
+    payment_mode,
+    receiver_name,
+    remarks,
+    voucher_no,
+    is_tax_payment,
+    created_by,
+    processed_by_role
+  } = req.body;
+
   const client = await pool.connect();
+  
   try {
     await client.query('BEGIN');
-    
-    const { 
-      date, 
-      paymentMode, 
-      accountType, 
-      accountId, 
-      amount, 
-      remarks, 
-      receiverName, 
-      userRole,
-      bankTransaction 
-    } = req.body;
-
-    // Update cash tracking based on payment mode
-    if (paymentMode === 'CASH') {
-      await client.query(
-        'UPDATE cash_tracking SET cash_in_hand = cash_in_hand + $1, last_updated = CURRENT_TIMESTAMP',
-        [amount]
-      );
-    } else if (paymentMode === 'ONLINE' || paymentMode === 'CHEQUE') {
-      await client.query(
-        'UPDATE cash_tracking SET cash_in_bank = cash_in_bank + $1, last_updated = CURRENT_TIMESTAMP',
-        [amount]
-      );
-
-      // If it's an online payment, create a bank transaction
-      if (paymentMode === 'ONLINE' && bankTransaction) {
-        // Get current bank balance
-        const balanceResult = await client.query(`
-          SELECT COALESCE(
-            SUM(CASE WHEN type = 'CREDIT' THEN amount ELSE -amount END),
-            0
-          ) as current_balance
-          FROM bank_transactions
-          WHERE account_id = $1
-        `, [bankTransaction.bankAccountId]);
-        
-        const currentBalance = Number(balanceResult.rows[0].current_balance);
-        const newBalance = currentBalance + Number(amount);
-        const transactionReference = remarks || `Payment received from ${receiverName}`;
-        
-        await client.query(
-          `INSERT INTO bank_transactions 
-           (account_id, type, amount, reference, balance, balance_after, transaction_date)
-           VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP)`,
-          [
-            bankTransaction.bankAccountId,
-            'CREDIT',
-            Number(amount),
-            transactionReference,
-            currentBalance,
-            newBalance
-          ]
-        );
-
-        // Update bank account balance
-        await client.query(
-          `UPDATE bank_accounts 
-           SET current_balance = $1 
-           WHERE id = $2`,
-          [newBalance, bankTransaction.bankAccountId]
-        );
-      }
-    }
-
-    const voucherNo = await generateVoucherNo('RECEIVED', client);
 
     // Create payment record
-    const { rows: [payment] } = await client.query(
+    const paymentResult = await client.query(
       `INSERT INTO payments (
+        account_id, amount, payment_date, payment_mode,
+        payment_type, receiver_name, remarks,
+        voucher_no, is_tax_payment, created_by, processed_by_role
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+      RETURNING *`,
+      [
+        account_id,
+        amount,
         payment_date,
         payment_mode,
-        account_id,
-        account_type,
-        amount,
-        payment_type,
-        remarks,
-        receiver_name,
-        voucher_no,
-        processed_by_role,
-        bank_account_id
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-      RETURNING id, voucher_no`,
-      [
-        new Date(date),
-        paymentMode,
-        accountId,
-        accountType,
-        amount,
         'RECEIVED',
+        receiver_name,
         remarks,
-        receiverName,
-        voucherNo,
-        userRole,
-        paymentMode === 'ONLINE' ? bankTransaction.bankAccountId : null
+        voucher_no,
+        is_tax_payment || false,
+        created_by,
+        processed_by_role
       ]
     );
 
+    // If payment mode is CASH, update cash balance
+    if (payment_mode === 'CASH') {
+      // Get current cash balance
+      const cashBalanceResult = await client.query(`
+        SELECT COALESCE(
+          SUM(CASE WHEN type = 'CREDIT' THEN amount ELSE -amount END),
+          0
+        ) as current_balance
+        FROM cash_transactions
+      `);
+      
+      const currentBalance = Number(cashBalanceResult.rows[0].current_balance);
+      const newBalance = currentBalance + Number(amount);
+
+      // Create cash transaction
+      await client.query(
+        `INSERT INTO cash_transactions (
+          type, amount, reference, remarks, balance, balance_after
+        ) VALUES ($1, $2, $3, $4, $5, $6)`,
+        [
+          'CREDIT',
+          amount,
+          'Payment Received',
+          remarks || `Payment from ${receiver_name}`,
+          currentBalance,
+          newBalance
+        ]
+      );
+    }
+
     await client.query('COMMIT');
-    res.json({ 
-      message: 'Payment received successfully', 
-      paymentId: payment.id,
-      voucherNo: payment.voucher_no 
-    });
-  } catch (error) {
+    res.json(paymentResult.rows[0]);
+  } catch (err) {
     await client.query('ROLLBACK');
-    console.error('Error processing payment:', error);
-    res.status(500).json({ message: error.message || 'Error processing payment' });
+    console.error('Error processing payment:', err);
+    res.status(500).json({ 
+      error: err.message || 'Failed to process payment'
+    });
   } finally {
     client.release();
   }
 });
 
-// Handle payment issued
+// Process payment issued
 router.post('/issued', async (req, res) => {
+  const {
+    account_id,
+    amount,
+    payment_date,
+    payment_mode,
+    receiver_name,
+    remarks,
+    voucher_no,
+    is_tax_payment,
+    created_by,
+    processed_by_role
+  } = req.body;
+
   const client = await pool.connect();
+  
   try {
     await client.query('BEGIN');
-    
-    const { 
-      date, 
-      paymentMode, 
-      accountType, 
-      accountId, 
-      amount, 
-      remarks, 
-      receiverName, 
-      userRole,
-      bankTransaction 
-    } = req.body;
-
-    // Update cash tracking based on payment mode
-    if (paymentMode === 'CASH') {
-      // Check cash balance first
-      const cashResult = await client.query('SELECT cash_in_hand FROM cash_tracking LIMIT 1');
-      const currentCash = Number(cashResult.rows[0]?.cash_in_hand || 0);
-      
-      if (currentCash < Number(amount)) {
-        throw new Error('Insufficient cash balance');
-      }
-
-      await client.query(
-        'UPDATE cash_tracking SET cash_in_hand = cash_in_hand - $1, last_updated = CURRENT_TIMESTAMP',
-        [amount]
-      );
-    } else if (paymentMode === 'ONLINE' || paymentMode === 'CHEQUE') {
-      if (paymentMode === 'ONLINE' && bankTransaction) {
-        // Get current bank balance
-        const balanceResult = await client.query(`
-          SELECT COALESCE(
-            SUM(CASE WHEN type = 'CREDIT' THEN amount ELSE -amount END),
-            0
-          ) as current_balance
-          FROM bank_transactions
-          WHERE account_id = $1
-        `, [bankTransaction.bankAccountId]);
-
-        const currentBalance = Number(balanceResult.rows[0].current_balance);
-        const transactionAmount = Number(amount);
-
-        if (currentBalance < transactionAmount) {
-          throw new Error(`Insufficient bank balance. Available: ${currentBalance}, Required: ${transactionAmount}`);
-        }
-
-        const newBalance = currentBalance - transactionAmount;
-        const transactionReference = remarks || `Payment issued to ${receiverName}`;
-
-        // Create bank transaction record
-        await client.query(
-          `INSERT INTO bank_transactions 
-           (account_id, type, amount, reference, balance, balance_after, transaction_date)
-           VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP)`,
-          [
-            bankTransaction.bankAccountId,
-            'DEBIT',
-            transactionAmount,
-            transactionReference,
-            currentBalance,
-            newBalance
-          ]
-        );
-      }
-
-      // Update cash in bank tracking
-      await client.query(
-        'UPDATE cash_tracking SET cash_in_bank = cash_in_bank - $1, last_updated = CURRENT_TIMESTAMP',
-        [amount]
-      );
-    }
-
-    const voucherNo = await generateVoucherNo('ISSUED', client);
 
     // Create payment record
-    const { rows: [payment] } = await client.query(
+    const paymentResult = await client.query(
       `INSERT INTO payments (
+        account_id, amount, payment_date, payment_mode,
+        payment_type, receiver_name, remarks,
+        voucher_no, is_tax_payment, created_by, processed_by_role
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+      RETURNING *`,
+      [
+        account_id,
+        amount,
         payment_date,
         payment_mode,
-        account_id,
-        account_type,
-        amount,
-        payment_type,
-        remarks,
-        receiver_name,
-        voucher_no,
-        processed_by_role,
-        bank_account_id
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-      RETURNING id, voucher_no`,
-      [
-        new Date(date),
-        paymentMode,
-        accountId,
-        accountType,
-        amount,
         'ISSUED',
+        receiver_name,
         remarks,
-        receiverName,
-        voucherNo,
-        userRole,
-        paymentMode === 'ONLINE' ? bankTransaction.bankAccountId : null
+        voucher_no,
+        is_tax_payment || false,
+        created_by,
+        processed_by_role
       ]
     );
 
+    // If payment mode is CASH, update cash balance
+    if (payment_mode === 'CASH') {
+      // Get current cash balance
+      const cashBalanceResult = await client.query(`
+        SELECT COALESCE(
+          SUM(CASE WHEN type = 'CREDIT' THEN amount ELSE -amount END),
+          0
+        ) as current_balance
+        FROM cash_transactions
+      `);
+      
+      const currentBalance = Number(cashBalanceResult.rows[0].current_balance);
+      const newBalance = currentBalance - Number(amount);
+
+      if (newBalance < 0) {
+        throw new Error('Insufficient cash balance');
+      }
+
+      // Create cash transaction
+      await client.query(
+        `INSERT INTO cash_transactions (
+          type, amount, reference, remarks, balance, balance_after
+        ) VALUES ($1, $2, $3, $4, $5, $6)`,
+        [
+          'DEBIT',
+          amount,
+          'Payment Issued',
+          remarks || `Payment to ${receiver_name}`,
+          currentBalance,
+          newBalance
+        ]
+      );
+    }
+
     await client.query('COMMIT');
-    res.json({ 
-      message: 'Payment issued successfully', 
-      paymentId: payment.id,
-      voucherNo: payment.voucher_no 
-    });
-  } catch (error) {
+    res.json(paymentResult.rows[0]);
+  } catch (err) {
     await client.query('ROLLBACK');
-    console.error('Error processing payment:', error);
-    res.status(500).json({ message: error.message || 'Error processing payment' });
+    console.error('Error processing payment:', err);
+    res.status(500).json({ 
+      error: err.message || 'Failed to process payment'
+    });
   } finally {
     client.release();
   }
