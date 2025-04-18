@@ -263,54 +263,62 @@ router.post('/bank-transactions', async (req, res) => {
 router.get('/bank-transactions', async (req, res) => {
   try {
     const { startDate, endDate, accountId } = req.query;
-    
+    console.log('Fetching transactions with params:', { startDate, endDate, accountId });
+
     let query = `
-      WITH ordered_transactions AS (
-        SELECT 
-          t.*,
-          b.bank_name,
-          b.account_number,
-          COALESCE(p.receiver_name, '') as receiver_name,
-          COALESCE(p.payment_type, '') as payment_type,
-          COALESCE(a.account_name, '') as related_account_name
-        FROM bank_transactions t 
-        JOIN bank_accounts b ON t.account_id = b.id 
-        LEFT JOIN payments p ON p.bank_account_id = t.account_id
-          AND t.transaction_date::date = p.payment_date::date
-          AND ABS(t.amount) = p.amount
-        LEFT JOIN accounts a ON p.account_id = a.id
-        WHERE 1=1
-        ${accountId ? ' AND t.account_id = $1' : ''}
-        ${startDate ? ` AND t.transaction_date >= ${accountId ? '$2' : '$1'}` : ''}
-        ${endDate ? ` AND t.transaction_date <= ${accountId ? '$3' : '$2'} ` : ''}
-        ORDER BY t.transaction_date ASC, t.id ASC
-      )
       SELECT 
-        t.*,
-        SUM(CASE 
-          WHEN t.type = 'CREDIT' THEN t.amount 
-          ELSE -t.amount 
+        t.id,
+        t.account_id,
+        t.transaction_date,
+        t.description as remarks,
+        t.reference,
+        t.type,
+        t.amount,
+        t.balance,
+        t.created_at,
+        b.bank_name,
+        b.account_number,
+        '' as receiver_name,
+        '' as payment_type,
+        '' as related_account_name,
+        SUM(CASE
+          WHEN t.type = 'CREDIT' THEN t.amount
+          ELSE -t.amount
         END) OVER (
-          PARTITION BY t.account_id 
+          PARTITION BY t.account_id
           ORDER BY t.transaction_date ASC, t.id ASC
         ) as running_balance
-      FROM ordered_transactions t
+      FROM bank_transactions t
+      LEFT JOIN bank_accounts b ON t.account_id = b.id
+      WHERE 1=1
+      ${accountId ? ' AND t.account_id = $1' : ''}
+      ${startDate ? ` AND t.transaction_date >= ${accountId ? '$2' : '$1'}` : ''}
+      ${endDate ? ` AND t.transaction_date <= ${accountId ? '$3' : '$2'} ` : ''}
       ORDER BY t.transaction_date DESC, t.id DESC
     `;
-    
+
     const params = [];
     if (accountId) params.push(accountId);
     if (startDate) params.push(startDate);
     if (endDate) params.push(endDate + ' 23:59:59');
 
+    console.log('Executing query:', query);
+    console.log('With params:', params);
+
     const result = await pool.query(query, params);
+    console.log('Query result:', result.rows.length, 'rows');
+    
     res.json(result.rows);
   } catch (err) {
     console.error('Error fetching transactions:', err);
-    res.status(500).json({ error: 'Failed to fetch transactions' });
+    res.status(500).json({ 
+      error: 'Failed to fetch transactions',
+      details: err.message,
+      query: err.query,
+      position: err.position
+    });
   }
 });
-
 // Get cash balances endpoint
 router.get('/cash-balances', async (req, res) => {
   try {
