@@ -126,10 +126,18 @@ router.post('/received', async (req, res) => {
     processed_by_role
   } = req.body;
 
+  // Validate required fields
+  if (!payment_date) {
+    return res.status(400).json({ error: 'Payment date is required' });
+  }
+
   const client = await pool.connect();
   
   try {
     await client.query('BEGIN');
+
+    // Generate voucher number if not provided
+    const finalVoucherNo = voucher_no || await generateVoucherNo('RECEIVED', client);
 
     // Create payment record
     const paymentResult = await client.query(
@@ -142,12 +150,12 @@ router.post('/received', async (req, res) => {
       [
         account_id,
         amount,
-        payment_date,
+        new Date(payment_date), // Ensure date is properly formatted
         payment_mode,
         'RECEIVED',
         receiver_name,
         remarks,
-        voucher_no,
+        finalVoucherNo,
         is_tax_payment || false,
         created_by,
         processed_by_role
@@ -171,15 +179,16 @@ router.post('/received', async (req, res) => {
       // Create cash transaction
       await client.query(
         `INSERT INTO cash_transactions (
-          type, amount, reference, remarks, balance, balance_after
-        ) VALUES ($1, $2, $3, $4, $5, $6)`,
+          type, amount, reference, remarks, balance, balance_after, transaction_date
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
         [
           'CREDIT',
           amount,
           'Payment Received',
           remarks || `Payment from ${receiver_name}`,
           currentBalance,
-          newBalance
+          newBalance,
+          new Date(payment_date) // Use the same date for cash transaction
         ]
       );
     }
@@ -212,10 +221,18 @@ router.post('/issued', async (req, res) => {
     processed_by_role
   } = req.body;
 
+  // Validate required fields
+  if (!payment_date) {
+    return res.status(400).json({ error: 'Payment date is required' });
+  }
+
   const client = await pool.connect();
   
   try {
     await client.query('BEGIN');
+
+    // Generate voucher number if not provided
+    const finalVoucherNo = voucher_no || await generateVoucherNo('ISSUED', client);
 
     // Create payment record
     const paymentResult = await client.query(
@@ -228,12 +245,12 @@ router.post('/issued', async (req, res) => {
       [
         account_id,
         amount,
-        payment_date,
+        new Date(payment_date), // Ensure date is properly formatted
         payment_mode,
         'ISSUED',
         receiver_name,
         remarks,
-        voucher_no,
+        finalVoucherNo,
         is_tax_payment || false,
         created_by,
         processed_by_role
@@ -261,15 +278,16 @@ router.post('/issued', async (req, res) => {
       // Create cash transaction
       await client.query(
         `INSERT INTO cash_transactions (
-          type, amount, reference, remarks, balance, balance_after
-        ) VALUES ($1, $2, $3, $4, $5, $6)`,
+          type, amount, reference, remarks, balance, balance_after, transaction_date
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
         [
           'DEBIT',
           amount,
           'Payment Issued',
           remarks || `Payment to ${receiver_name}`,
           currentBalance,
-          newBalance
+          newBalance,
+          new Date(payment_date) // Use the same date for cash transaction
         ]
       );
     }
