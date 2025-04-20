@@ -29,6 +29,21 @@ const Dashboard = () => {
 
   useEffect(() => {
     fetchDashboardData();
+    // Set up event listeners for updates
+    const handlePaymentReceived = () => {
+      fetchDashboardData();
+    };
+    const handleCashBalanceUpdated = () => {
+      fetchDashboardData();
+    };
+    
+    window.addEventListener('paymentReceived', handlePaymentReceived);
+    window.addEventListener('cashBalanceUpdated', handleCashBalanceUpdated);
+    
+    return () => {
+      window.removeEventListener('paymentReceived', handlePaymentReceived);
+      window.removeEventListener('cashBalanceUpdated', handleCashBalanceUpdated);
+    };
   }, []);
 
   const fetchDashboardData = async () => {

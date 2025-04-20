@@ -124,7 +124,8 @@ router.post('/received', async (req, res) => {
     is_tax_payment,
     created_by,
     processed_by_role,
-    account_type
+    account_type,
+    bank_account_id
   } = req.body;
 
   // Validate required fields
@@ -145,8 +146,9 @@ router.post('/received', async (req, res) => {
       `INSERT INTO payments (
         account_id, amount, payment_date, payment_mode,
         payment_type, receiver_name, remarks,
-        voucher_no, is_tax_payment, created_by, processed_by_role, account_type
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+        voucher_no, is_tax_payment, created_by, processed_by_role, account_type,
+        bank_account_id
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
       RETURNING *`,
       [
         account_id,
@@ -160,7 +162,8 @@ router.post('/received', async (req, res) => {
         is_tax_payment || false,
         created_by,
         processed_by_role,
-        account_type
+        account_type,
+        bank_account_id
       ]
     );
 
@@ -190,7 +193,44 @@ router.post('/received', async (req, res) => {
           remarks || `Payment from ${receiver_name}`,
           currentBalance,
           newBalance,
-          new Date(payment_date) // Use the same date for cash transaction
+          new Date(payment_date)
+        ]
+      );
+
+      // Update cash_tracking table
+      await client.query(
+        `UPDATE cash_tracking 
+         SET cash_in_hand = $1,
+             last_updated = CURRENT_TIMESTAMP`,
+        [newBalance]
+      );
+    } else if (payment_mode === 'ONLINE' && bank_account_id) {
+      // Get current bank balance
+      const bankBalanceResult = await client.query(`
+        SELECT COALESCE(
+          SUM(CASE WHEN type = 'CREDIT' THEN amount ELSE -amount END),
+          0
+        ) as current_balance
+        FROM bank_transactions
+        WHERE account_id = $1
+      `, [bank_account_id]);
+      
+      const currentBalance = Number(bankBalanceResult.rows[0].current_balance);
+      const newBalance = currentBalance + Number(amount);
+
+      // Create bank transaction
+      await client.query(
+        `INSERT INTO bank_transactions (
+          account_id, type, amount, reference, balance, balance_after, transaction_date
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        [
+          bank_account_id,
+          'CREDIT',
+          amount,
+          `Payment from ${receiver_name}`,
+          currentBalance,
+          newBalance,
+          new Date(payment_date)
         ]
       );
     }
@@ -221,7 +261,8 @@ router.post('/issued', async (req, res) => {
     is_tax_payment,
     created_by,
     processed_by_role,
-    account_type
+    account_type,
+    bank_account_id
   } = req.body;
 
   // Validate required fields
@@ -242,8 +283,9 @@ router.post('/issued', async (req, res) => {
       `INSERT INTO payments (
         account_id, amount, payment_date, payment_mode,
         payment_type, receiver_name, remarks,
-        voucher_no, is_tax_payment, created_by, processed_by_role, account_type
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+        voucher_no, is_tax_payment, created_by, processed_by_role, account_type,
+        bank_account_id
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
       RETURNING *`,
       [
         account_id,
@@ -257,7 +299,8 @@ router.post('/issued', async (req, res) => {
         is_tax_payment || false,
         created_by,
         processed_by_role,
-        account_type
+        account_type,
+        bank_account_id
       ]
     );
 
@@ -291,8 +334,58 @@ router.post('/issued', async (req, res) => {
           remarks || `Payment to ${receiver_name}`,
           currentBalance,
           newBalance,
-          new Date(payment_date) // Use the same date for cash transaction
+          new Date(payment_date)
         ]
+      );
+
+      // Update cash_tracking table
+      await client.query(
+        `UPDATE cash_tracking 
+         SET cash_in_hand = $1,
+             last_updated = CURRENT_TIMESTAMP`,
+        [newBalance]
+      );
+    } else if (payment_mode === 'ONLINE' && bank_account_id) {
+      // Get current bank balance
+      const bankBalanceResult = await client.query(`
+        SELECT current_balance
+        FROM bank_accounts
+        WHERE id = $1
+      `, [bank_account_id]);
+      
+      if (bankBalanceResult.rows.length === 0) {
+        throw new Error('Bank account not found');
+      }
+
+      const currentBalance = Number(bankBalanceResult.rows[0].current_balance);
+      const newBalance = currentBalance - Number(amount);
+
+      if (newBalance < 0) {
+        throw new Error('Insufficient bank balance');
+      }
+
+      // Create bank transaction
+      await client.query(
+        `INSERT INTO bank_transactions (
+          account_id, type, amount, reference, balance, balance_after, transaction_date
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        [
+          bank_account_id,
+          'DEBIT',
+          amount,
+          `Payment to ${receiver_name}`,
+          currentBalance,
+          newBalance,
+          new Date(payment_date)
+        ]
+      );
+
+      // Update bank account balance
+      await client.query(
+        `UPDATE bank_accounts 
+         SET current_balance = $1
+         WHERE id = $2`,
+        [newBalance, bank_account_id]
       );
     }
 

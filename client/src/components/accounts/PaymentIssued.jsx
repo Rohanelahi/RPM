@@ -195,6 +195,13 @@ const PaymentIssued = () => {
       alert('Please print the voucher before submitting');
       return;
     }
+
+    // Validate bank account selection for online payments
+    if (formData.paymentMode === 'ONLINE' && !formData.bankAccountId) {
+      alert('Please select a bank account for online payment');
+      return;
+    }
+
     setLoading(true);
     try {
       const response = await fetch(`${config.apiUrl}/accounts/payments/issued`, {
@@ -213,7 +220,8 @@ const PaymentIssued = () => {
           is_tax_payment: false,
           created_by: user.id,
           processed_by_role: user.role,
-          account_type: formData.accountType
+          account_type: formData.accountType,
+          bank_account_id: formData.paymentMode === 'ONLINE' ? formData.bankAccountId : null
         }),
       });
 
@@ -247,6 +255,11 @@ const PaymentIssued = () => {
       setAccounts([]); // Clear accounts list
 
       alert('Payment submitted successfully!');
+      
+      // Dispatch events to update dashboard and bank manager
+      window.dispatchEvent(new Event('paymentIssued'));
+      window.dispatchEvent(new Event('cashBalanceUpdated'));
+      window.dispatchEvent(new Event('bankBalanceUpdated'));
     } catch (error) {
       console.error('Error submitting payment:', error);
       alert('Error submitting payment: ' + error.message);

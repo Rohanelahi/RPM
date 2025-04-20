@@ -79,6 +79,30 @@ const BankManager = () => {
     fetchAccounts();
     fetchTransactions();
     fetchBanks();
+
+    // Set up event listeners for updates
+    const handlePaymentReceived = () => {
+      fetchAccounts();
+      fetchTransactions();
+    };
+    const handlePaymentIssued = () => {
+      fetchAccounts();
+      fetchTransactions();
+    };
+    const handleBankBalanceUpdated = () => {
+      fetchAccounts();
+      fetchTransactions();
+    };
+    
+    window.addEventListener('paymentReceived', handlePaymentReceived);
+    window.addEventListener('paymentIssued', handlePaymentIssued);
+    window.addEventListener('bankBalanceUpdated', handleBankBalanceUpdated);
+    
+    return () => {
+      window.removeEventListener('paymentReceived', handlePaymentReceived);
+      window.removeEventListener('paymentIssued', handlePaymentIssued);
+      window.removeEventListener('bankBalanceUpdated', handleBankBalanceUpdated);
+    };
   }, []);
 
   useEffect(() => {

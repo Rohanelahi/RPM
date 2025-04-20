@@ -195,6 +195,13 @@ const PaymentReceived = () => {
       alert('Please print the receipt before submitting');
       return;
     }
+
+    // Validate bank account selection for online payments
+    if (formData.paymentMode === 'ONLINE' && !formData.bankAccountId) {
+      alert('Please select a bank account for online payment');
+      return;
+    }
+
     setLoading(true);
     try {
       const response = await fetch(`${config.apiUrl}/accounts/payments/received`, {
@@ -213,7 +220,8 @@ const PaymentReceived = () => {
           is_tax_payment: false,
           created_by: user.id,
           processed_by_role: user.role,
-          account_type: formData.accountType
+          account_type: formData.accountType,
+          bank_account_id: formData.paymentMode === 'ONLINE' ? formData.bankAccountId : null
         }),
       });
 
@@ -247,6 +255,10 @@ const PaymentReceived = () => {
       setAccounts([]); // Clear accounts list
 
       alert(`Payment submitted successfully. Receipt No: ${result.voucher_no}`);
+      
+      // Dispatch events to update dashboard
+      window.dispatchEvent(new Event('paymentReceived'));
+      window.dispatchEvent(new Event('cashBalanceUpdated'));
     } catch (error) {
       console.error('Error:', error);
       alert('Error submitting payment: ' + error.message);
