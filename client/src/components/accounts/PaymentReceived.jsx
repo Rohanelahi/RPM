@@ -212,7 +212,8 @@ const PaymentReceived = () => {
           voucher_no: formData.voucherNo,
           is_tax_payment: false,
           created_by: user.id,
-          processed_by_role: user.role
+          processed_by_role: user.role,
+          account_type: formData.accountType
         }),
       });
 
