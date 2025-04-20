@@ -57,15 +57,6 @@ createTables();
 // Get all bank accounts with latest balance
 router.get('/bank-accounts', async (req, res) => {
   try {
-    // First verify the tables exist
-    await pool.query(`
-      SELECT EXISTS (
-        SELECT FROM information_schema.tables 
-        WHERE table_schema = 'public' 
-        AND table_name = 'bank_accounts'
-      );
-    `);
-
     const result = await pool.query(`
       WITH latest_balances AS (
         SELECT
@@ -89,25 +80,20 @@ router.get('/bank-accounts', async (req, res) => {
         b.ifsc_code,
         b.account_type,
         b.status,
-        COALESCE(lb.running_balance, 0) as current_balance
+        COALESCE(lb.running_balance, 0) as balance
       FROM bank_accounts b
       LEFT JOIN latest_balances lb ON b.id = lb.account_id AND lb.rn = 1
-      WHERE b.status = $1
+      WHERE b.status = 'ACTIVE'
       ORDER BY b.bank_name
-    `, ['ACTIVE']);
+    `);
     
     res.json(result.rows);
   } catch (err) {
     console.error('Error fetching bank accounts:', err);
-    // Return empty array instead of error if no data found
-    if (err.code === '42P01') { // Table does not exist
-      res.json([]);
-    } else {
-      res.status(500).json({ 
-        error: 'Failed to fetch bank accounts',
-        details: err.message 
-      });
-    }
+    res.status(500).json({ 
+      error: 'Failed to fetch bank accounts',
+      details: err.message 
+    });
   }
 });
 
@@ -316,24 +302,19 @@ router.get('/cash-balances', async (req, res) => {
   try {
     // Calculate cash in hand from cash_transactions
     const cashResult = await pool.query(`
-      WITH running_balance AS (
-        SELECT 
-          COALESCE(
-            SUM(CASE WHEN type = 'CREDIT' THEN amount ELSE -amount END),
-            0
-          ) as cash_in_hand
-        FROM cash_transactions
-      )
       SELECT 
-        cash_in_hand,
-        0 as cash_in_bank
-      FROM running_balance
+        COALESCE(
+          SUM(CASE WHEN type = 'CREDIT' THEN amount ELSE -amount END),
+          0
+        ) as cash_in_hand
+      FROM cash_transactions
     `);
 
-    res.json({
-      cash_in_hand: Number(cashResult.rows[0]?.cash_in_hand || 0),
-      cash_in_bank: 0
-    });
+    res.json([{
+      id: 1,
+      name: 'Cash in Hand',
+      amount: Number(cashResult.rows[0]?.cash_in_hand || 0)
+    }]);
   } catch (err) {
     console.error('Error fetching cash balances:', err);
     res.status(500).json({ error: 'Failed to fetch cash balances' });

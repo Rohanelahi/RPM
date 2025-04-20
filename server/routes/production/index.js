@@ -779,4 +779,40 @@ router.get('/daily-stats', async (req, res) => {
   }
 });
 
+// Get all paper types
+router.get('/paper-types', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT * FROM paper_types ORDER BY name');
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Error fetching paper types:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Add new paper type
+router.post('/paper-types', async (req, res) => {
+  try {
+    const { name, description } = req.body;
+    
+    if (!name) {
+      return res.status(400).json({ error: 'Paper type name is required' });
+    }
+
+    const result = await pool.query(
+      'INSERT INTO paper_types (name, description) VALUES ($1, $2) RETURNING *',
+      [name, description]
+    );
+
+    res.status(201).json(result.rows[0]);
+  } catch (error) {
+    if (error.code === '23505') { // Unique violation
+      res.status(400).json({ error: 'Paper type with this name already exists' });
+    } else {
+      console.error('Error adding paper type:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  }
+});
+
 module.exports = router; 

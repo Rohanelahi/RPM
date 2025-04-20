@@ -19,6 +19,10 @@ import {
   InputLabel,
   Select,
   Stack,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions
 } from '@mui/material';
 import { Delete as DeleteIcon, Add as AddIcon, Print } from '@mui/icons-material';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
@@ -44,10 +48,61 @@ const ProductionForm = ({ onProductionAdded }) => {
 
   const [isPrinted, setIsPrinted] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [paperTypes, setPaperTypes] = useState([]);
+  const [openNewPaperType, setOpenNewPaperType] = useState(false);
+  const [newPaperType, setNewPaperType] = useState({
+    name: '',
+    description: ''
+  });
 
-  const paperTypes = ['SUPER', 'CMP', 'BOARD'];
   const boilerFuelTypes = ['Boiler Fuel (Toori)', 'Boiler Fuel (Tukka)'];
-  const raddiTypes = ['Petti', 'DABBI', 'CEMENT BAG'];
+  const raddiTypes = ['Petti', 'DABBI', 'CEMENT BAG','Mix Maal','Pulp'];
+
+  // Fetch paper types on component mount
+  useEffect(() => {
+    fetchPaperTypes();
+  }, []);
+
+  const fetchPaperTypes = async () => {
+    try {
+      const response = await fetch(`${config.apiUrl}/production/paper-types`);
+      if (!response.ok) throw new Error('Failed to fetch paper types');
+      const data = await response.json();
+      setPaperTypes(data);
+    } catch (error) {
+      console.error('Error fetching paper types:', error);
+      alert('Failed to fetch paper types');
+    }
+  };
+
+  const handleAddNewPaperType = async () => {
+    try {
+      setLoading(true);
+      const response = await fetch(`${config.apiUrl}/production/paper-types`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(newPaperType),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to add paper type');
+      }
+
+      const result = await response.json();
+      setPaperTypes(prev => [...prev, result]);
+      setOpenNewPaperType(false);
+      setNewPaperType({ name: '', description: '' });
+      
+    } catch (error) {
+      console.error('Error adding paper type:', error);
+      alert('Failed to add paper type: ' + error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -374,20 +429,27 @@ const ProductionForm = ({ onProductionAdded }) => {
                 />
               </LocalizationProvider>
             </Grid>
-            <Grid item xs={12} md={6}>
+            <Grid item xs={12} sm={6}>
               <FormControl fullWidth>
                 <InputLabel>Paper Type</InputLabel>
                 <Select
-                  name="paperType"
                   value={formData.paperType}
                   onChange={handleChange}
-                  label="Paper Type"
+                  name="paperType"
+                  required
                 >
                   {paperTypes.map(type => (
-                    <MenuItem key={type} value={type}>{type}</MenuItem>
+                    <MenuItem key={type.name} value={type.name}>{type.name}</MenuItem>
                   ))}
                 </Select>
               </FormControl>
+              <Button
+                variant="outlined"
+                onClick={() => setOpenNewPaperType(true)}
+                sx={{ mt: 1 }}
+              >
+                Add New Paper Type
+              </Button>
             </Grid>
 
             {/* Total Weight Section */}
@@ -578,6 +640,38 @@ const ProductionForm = ({ onProductionAdded }) => {
           </Grid>
         </form>
       </Paper>
+
+      {/* Add New Paper Type Dialog */}
+      <Dialog open={openNewPaperType} onClose={() => setOpenNewPaperType(false)}>
+        <DialogTitle>Add New Paper Type</DialogTitle>
+        <DialogContent>
+          <TextField
+            autoFocus
+            margin="dense"
+            label="Paper Type Name"
+            type="text"
+            fullWidth
+            value={newPaperType.name}
+            onChange={(e) => setNewPaperType(prev => ({ ...prev, name: e.target.value }))}
+          />
+          <TextField
+            margin="dense"
+            label="Description"
+            type="text"
+            fullWidth
+            multiline
+            rows={3}
+            value={newPaperType.description}
+            onChange={(e) => setNewPaperType(prev => ({ ...prev, description: e.target.value }))}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setOpenNewPaperType(false)}>Cancel</Button>
+          <Button onClick={handleAddNewPaperType} disabled={loading || !newPaperType.name}>
+            Add
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };

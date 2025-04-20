@@ -17,6 +17,22 @@ CREATE TABLE IF NOT EXISTS store_items (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Create paper types table
+CREATE TABLE IF NOT EXISTS paper_types (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(100) NOT NULL UNIQUE,
+    description TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Create item types table
+CREATE TABLE IF NOT EXISTS item_types (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(100) NOT NULL UNIQUE,
+    description TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 -- Create store entries table
 CREATE TABLE IF NOT EXISTS store_entries (
     id SERIAL PRIMARY KEY,
@@ -61,7 +77,10 @@ CREATE TABLE IF NOT EXISTS gate_entries_pricing (
     total_amount DECIMAL(15,2) NOT NULL,
     status VARCHAR(20) DEFAULT 'PENDING' CHECK (status IN ('PENDING', 'PROCESSED')),
     processed_at TIMESTAMP,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    final_quantity DECIMAL(10,2),
+    cut_weight DECIMAL(10,2) DEFAULT 0,
+    processed_by_role VARCHAR(20)
 );
 
 -- Add indexes
@@ -85,5 +104,36 @@ BEGIN
             ('Hydraulic Oil', 'HO001', 'Lubricants', 'Liter'),
             ('Air Filter', 'AF001', 'Filters', 'Piece'),
             ('Brake Pad', 'BP001', 'Vehicle Parts', 'Set');
+    END IF;
+END $$;
+
+-- Add final_quantity column to gate_entries_pricing if it doesn't exist
+DO $$ 
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 
+        FROM information_schema.columns 
+        WHERE table_name = 'gate_entries_pricing' 
+        AND column_name = 'final_quantity'
+    ) THEN
+        ALTER TABLE gate_entries_pricing ADD COLUMN final_quantity DECIMAL(10,2);
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1 
+        FROM information_schema.columns 
+        WHERE table_name = 'gate_entries_pricing' 
+        AND column_name = 'cut_weight'
+    ) THEN
+        ALTER TABLE gate_entries_pricing ADD COLUMN cut_weight DECIMAL(10,2) DEFAULT 0;
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1 
+        FROM information_schema.columns 
+        WHERE table_name = 'gate_entries_pricing' 
+        AND column_name = 'processed_by_role'
+    ) THEN
+        ALTER TABLE gate_entries_pricing ADD COLUMN processed_by_role VARCHAR(20);
     END IF;
 END $$; 

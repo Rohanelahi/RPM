@@ -18,15 +18,19 @@ import {
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { DateTimePicker } from '@mui/x-date-pickers/DateTimePicker';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
-import { Print } from '@mui/icons-material';
+import { Print, Add } from '@mui/icons-material';
 import '../../styles/forms/GateForm.css';
 import useAccounts from '../../hooks/useAccounts';
+import useAuth from '../../hooks/useAuth';
+import useItems from '../../hooks/useItems';
 import { format } from 'date-fns';
 import config from '../../config';
 
 const PurchaseForm = () => {
+  const { user } = useAuth();
+  const { accounts, loading: accountsLoading } = useAccounts('SUPPLIER');
+  const { items, loading: itemsLoading } = useItems();
   const [loading, setLoading] = useState(false);
-  const { accounts: suppliers, loading: suppliersLoading } = useAccounts('SUPPLIER');
   const [openNewSupplier, setOpenNewSupplier] = useState(false);
   const [newSupplier, setNewSupplier] = useState({
     name: '',
@@ -49,16 +53,12 @@ const PurchaseForm = () => {
   });
 
   const [isPrinted, setIsPrinted] = useState(false);
-
-  const itemTypes = [
-    'Petti',
-    'Mix Maal',
-    'Dabbi',
-    'Cement Bag',
-    'Pulp',
-    'Boiler Fuel (Toori)',
-    'Boiler Fuel (Tukka)'
-  ];
+  const [itemTypes, setItemTypes] = useState([]);
+  const [openNewItemType, setOpenNewItemType] = useState(false);
+  const [newItemType, setNewItemType] = useState({
+    name: '',
+    description: ''
+  });
 
   const units = [
     'KG',
@@ -104,7 +104,7 @@ const PurchaseForm = () => {
   // Update useEffect to generate GRN when supplier and item type change
   useEffect(() => {
     if (formData.supplierId && formData.itemType) {
-      const selectedSupplier = suppliers.find(s => s.id === formData.supplierId);
+      const selectedSupplier = accounts.find(s => s.id === formData.supplierId);
       const supplierName = selectedSupplier ? selectedSupplier.account_name : '';
       const grnNumber = generateGRN(supplierName, formData.itemType);
       setFormData(prev => ({
@@ -112,7 +112,7 @@ const PurchaseForm = () => {
         grnNumber
       }));
     }
-  }, [formData.supplierId, formData.itemType, suppliers]);
+  }, [formData.supplierId, formData.itemType, accounts]);
 
   useEffect(() => {
     // Auto calculate final quantity
@@ -125,6 +125,23 @@ const PurchaseForm = () => {
       }));
     }
   }, [formData.supplierQuantity, formData.receivedQuantity]);
+
+  // Fetch item types on component mount
+  useEffect(() => {
+    fetchItemTypes();
+  }, []);
+
+  const fetchItemTypes = async () => {
+    try {
+      const response = await fetch(`${config.apiUrl}/gate/item-types`);
+      if (!response.ok) throw new Error('Failed to fetch item types');
+      const data = await response.json();
+      setItemTypes(data);
+    } catch (error) {
+      console.error('Error fetching item types:', error);
+      alert('Failed to fetch item types');
+    }
+  };
 
   const handleAddNewSupplier = async () => {
     try {
@@ -164,7 +181,7 @@ const PurchaseForm = () => {
   const handlePrint = () => {
     const printWindow = window.open('', '_blank');
     const currentDate = format(new Date(), 'dd/MM/yyyy');
-    const selectedSupplier = suppliers.find(s => s.id === formData.supplierId);
+    const selectedSupplier = accounts.find(s => s.id === formData.supplierId);
 
     printWindow.document.write(`
       <!DOCTYPE html>
@@ -404,6 +421,35 @@ const PurchaseForm = () => {
     }
   };
 
+  const handleAddNewItemType = async () => {
+    try {
+      setLoading(true);
+      const response = await fetch(`${config.apiUrl}/gate/item-types`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(newItemType),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to add item type');
+      }
+
+      const result = await response.json();
+      setItemTypes(prev => [...prev, result]);
+      setOpenNewItemType(false);
+      setNewItemType({ name: '', description: '' });
+      
+    } catch (error) {
+      console.error('Error adding item type:', error);
+      alert('Failed to add item type: ' + error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="gate-form">
       <Paper className="content-paper">
@@ -469,21 +515,15 @@ const PurchaseForm = () => {
                       ...prev,
                       supplierId: e.target.value
                     }))}
-                    disabled={suppliersLoading}
+                    disabled={accountsLoading}
                     onKeyPress={(e) => handleKeyPress(e, 'itemType')}
                   >
-                    {suppliers.map((supplier) => (
+                    {accounts.map((supplier) => (
                       <MenuItem key={supplier.id} value={supplier.id}>
                         {supplier.account_name}
                       </MenuItem>
                     ))}
                   </TextField>
-                  <Button
-                    variant="outlined"
-                    onClick={() => setOpenNewSupplier(true)}
-                  >
-                    New
-                  </Button>
                 </Stack>
               </Grid>
 
@@ -513,23 +553,32 @@ const PurchaseForm = () => {
               </Grid>
 
               <Grid item xs={12} md={6}>
-                <TextField
-                  fullWidth
-                  select
-                  label="Item Type"
-                  required
-                  value={formData.itemType}
-                  onChange={(e) => setFormData(prev => ({
-                    ...prev,
-                    itemType: e.target.value
-                  }))}
-                >
-                  {itemTypes.map((option) => (
-                    <MenuItem key={option} value={option}>
-                      {option}
-                    </MenuItem>
-                  ))}
-                </TextField>
+                <Stack direction="row" spacing={1}>
+                  <TextField
+                    fullWidth
+                    select
+                    label="Item Type"
+                    required
+                    value={formData.itemType}
+                    onChange={(e) => setFormData(prev => ({
+                      ...prev,
+                      itemType: e.target.value
+                    }))}
+                  >
+                    {itemTypes.map((type) => (
+                      <MenuItem key={type.id} value={type.name}>
+                        {type.name}
+                      </MenuItem>
+                    ))}
+                  </TextField>
+                  <Button
+                    variant="outlined"
+                    onClick={() => setOpenNewItemType(true)}
+                    startIcon={<Add />}
+                  >
+                    New
+                  </Button>
+                </Stack>
               </Grid>
 
               <Grid item xs={12} md={6}>
@@ -674,6 +723,46 @@ const PurchaseForm = () => {
           <Button onClick={() => setOpenNewSupplier(false)}>Cancel</Button>
           <Button onClick={handleAddNewSupplier} variant="contained">
             Add Supplier
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* New Item Type Dialog */}
+      <Dialog open={openNewItemType} onClose={() => setOpenNewItemType(false)}>
+        <DialogTitle>Add New Item Type</DialogTitle>
+        <DialogContent>
+          <Grid container spacing={2} sx={{ mt: 1 }}>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                label="Item Type Name"
+                required
+                value={newItemType.name}
+                onChange={(e) => setNewItemType(prev => ({
+                  ...prev,
+                  name: e.target.value
+                }))}
+              />
+            </Grid>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                label="Description"
+                multiline
+                rows={3}
+                value={newItemType.description}
+                onChange={(e) => setNewItemType(prev => ({
+                  ...prev,
+                  description: e.target.value
+                }))}
+              />
+            </Grid>
+          </Grid>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setOpenNewItemType(false)}>Cancel</Button>
+          <Button onClick={handleAddNewItemType} variant="contained">
+            Add Item Type
           </Button>
         </DialogActions>
       </Dialog>

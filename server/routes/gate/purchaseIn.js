@@ -2,6 +2,42 @@ const express = require('express');
 const router = express.Router();
 const pool = require('../../db');
 
+// Get all item types
+router.get('/item-types', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT * FROM item_types ORDER BY name');
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Error fetching item types:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Add new item type
+router.post('/item-types', async (req, res) => {
+  try {
+    const { name, description } = req.body;
+    
+    if (!name) {
+      return res.status(400).json({ error: 'Item type name is required' });
+    }
+
+    const result = await pool.query(
+      'INSERT INTO item_types (name, description) VALUES ($1, $2) RETURNING *',
+      [name, description]
+    );
+    
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error('Error adding item type:', error);
+    if (error.code === '23505') { // Unique violation
+      res.status(400).json({ error: 'Item type already exists' });
+    } else {
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  }
+});
+
 // Purchase In
 router.post('/in/purchase', async (req, res) => {
   const client = await pool.connect();

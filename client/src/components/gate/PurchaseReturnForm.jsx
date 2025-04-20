@@ -10,12 +10,16 @@ import {
   Stack,
   MenuItem,
   CircularProgress,
-  Divider
+  Divider,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions
 } from '@mui/material';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { DateTimePicker } from '@mui/x-date-pickers/DateTimePicker';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
-import { Print } from '@mui/icons-material';
+import { Print, Add } from '@mui/icons-material';
 import '../../styles/forms/GateForm.css';
 import useAccounts from '../../hooks/useAccounts';
 import { format } from 'date-fns';
@@ -26,6 +30,12 @@ const PurchaseReturnForm = () => {
   const [purchaseGRNs, setPurchaseGRNs] = useState([]);
   const [selectedPurchase, setSelectedPurchase] = useState(null);
   const [isPrinted, setIsPrinted] = useState(false);
+  const [itemTypes, setItemTypes] = useState([]);
+  const [openNewItemType, setOpenNewItemType] = useState(false);
+  const [newItemType, setNewItemType] = useState({
+    name: '',
+    description: ''
+  });
   
   const [formData, setFormData] = useState({
     returnNumber: '',
@@ -41,16 +51,6 @@ const PurchaseReturnForm = () => {
     dateTime: new Date(),
     remarks: ''
   });
-
-  const itemTypes = [
-    'Petti',
-    'Mix Maal',
-    'Dabbi',
-    'Cement Bag',
-    'Pulp',
-    'Boiler Fuel (Toori)',
-    'Boiler Fuel (Tukka)'
-  ];
 
   const units = [
     'KG',
@@ -112,6 +112,52 @@ const PurchaseReturnForm = () => {
 
     fetchPurchaseGRNs();
   }, [formData.supplierId]);
+
+  // Fetch item types on component mount
+  useEffect(() => {
+    fetchItemTypes();
+  }, []);
+
+  const fetchItemTypes = async () => {
+    try {
+      const response = await fetch(`${config.apiUrl}/gate/item-types`);
+      if (!response.ok) throw new Error('Failed to fetch item types');
+      const data = await response.json();
+      setItemTypes(data);
+    } catch (error) {
+      console.error('Error fetching item types:', error);
+      alert('Failed to fetch item types');
+    }
+  };
+
+  const handleAddNewItemType = async () => {
+    try {
+      setLoading(true);
+      const response = await fetch(`${config.apiUrl}/gate/item-types`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(newItemType),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to add item type');
+      }
+
+      const result = await response.json();
+      setItemTypes(prev => [...prev, result]);
+      setOpenNewItemType(false);
+      setNewItemType({ name: '', description: '' });
+      
+    } catch (error) {
+      console.error('Error adding item type:', error);
+      alert('Failed to add item type: ' + error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Update form when GRN is selected
   const handleGRNSelect = (grnNumber) => {
@@ -513,24 +559,33 @@ const PurchaseReturnForm = () => {
               </Grid>
 
               <Grid item xs={12} md={6}>
-                <TextField
-                  fullWidth
-                  select
-                  label="Item Type"
-                  required
-                  value={formData.itemType}
-                  onChange={(e) => setFormData(prev => ({
-                    ...prev,
-                    itemType: e.target.value
-                  }))}
-                  onKeyPress={(e) => handleKeyPress(e, 'unit')}
-                >
-                  {itemTypes.map((option) => (
-                    <MenuItem key={option} value={option}>
-                      {option}
-                    </MenuItem>
-                  ))}
-                </TextField>
+                <Stack direction="row" spacing={1}>
+                  <TextField
+                    fullWidth
+                    select
+                    label="Item Type"
+                    required
+                    value={formData.itemType}
+                    onChange={(e) => setFormData(prev => ({
+                      ...prev,
+                      itemType: e.target.value
+                    }))}
+                    onKeyPress={(e) => handleKeyPress(e, 'unit')}
+                  >
+                    {itemTypes.map((type) => (
+                      <MenuItem key={type.id} value={type.name}>
+                        {type.name}
+                      </MenuItem>
+                    ))}
+                  </TextField>
+                  <Button
+                    variant="outlined"
+                    onClick={() => setOpenNewItemType(true)}
+                    startIcon={<Add />}
+                  >
+                    New
+                  </Button>
+                </Stack>
               </Grid>
 
               <Grid item xs={12} md={6}>
@@ -641,6 +696,46 @@ const PurchaseReturnForm = () => {
           </form>
         </Box>
       </Paper>
+
+      {/* New Item Type Dialog */}
+      <Dialog open={openNewItemType} onClose={() => setOpenNewItemType(false)}>
+        <DialogTitle>Add New Item Type</DialogTitle>
+        <DialogContent>
+          <Grid container spacing={2} sx={{ mt: 1 }}>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                label="Item Type Name"
+                required
+                value={newItemType.name}
+                onChange={(e) => setNewItemType(prev => ({
+                  ...prev,
+                  name: e.target.value
+                }))}
+              />
+            </Grid>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                label="Description"
+                multiline
+                rows={3}
+                value={newItemType.description}
+                onChange={(e) => setNewItemType(prev => ({
+                  ...prev,
+                  description: e.target.value
+                }))}
+              />
+            </Grid>
+          </Grid>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setOpenNewItemType(false)}>Cancel</Button>
+          <Button onClick={handleAddNewItemType} variant="contained">
+            Add Item Type
+          </Button>
+        </DialogActions>
+      </Dialog>
     </div>
   );
 };

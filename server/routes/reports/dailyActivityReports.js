@@ -13,19 +13,22 @@ router.get('/daily-activity/purchases', async (req, res) => {
     
     const query = `
       SELECT 
+        ge.id,
         ge.grn_number,
-        ge.paper_type,
-        ge.quantity,
+        ge.vehicle_number,
+        ge.driver_name,
+        ge.item_type,
+        COALESCE(gep.final_quantity, ge.quantity) as quantity,
         ge.unit,
-        TO_CHAR(ge.date_time, 'HH24:MI') as time,
-        a.account_name as supplier_name,
         gep.price_per_unit,
-        gep.total_amount
+        gep.total_amount,
+        s.account_name as supplier_name,
+        TO_CHAR(ge.date_time, 'HH24:MI') as time
       FROM gate_entries ge
-      LEFT JOIN accounts a ON ge.purchaser_id = a.id
-      LEFT JOIN gate_entries_pricing gep ON ge.grn_number = gep.grn_number
-      WHERE ge.entry_type = 'PURCHASE'
-      AND DATE(ge.date_time) = $1
+      JOIN gate_entries_pricing gep ON ge.grn_number = gep.grn_number
+      JOIN accounts s ON ge.supplier_id = s.id
+      WHERE DATE(ge.date_time) = $1
+      AND ge.entry_type = 'PURCHASE_IN'
       ORDER BY ge.date_time
     `;
     
@@ -177,26 +180,27 @@ router.get('/daily-activity/maintenance', async (req, res) => {
       return res.status(400).json({ error: 'Date parameter is required' });
     }
     
-    // Return empty array for now since maintenance table doesn't exist yet
-    res.json([]);
-    
-    /* Uncomment this when maintenance table is created
     const query = `
       SELECT 
-        m.id,
-        m.machine_name,
-        m.description,
-        m.status,
-        m.cost,
-        TO_CHAR(m.maintenance_date, 'HH24:MI') as time
-      FROM maintenance m
-      WHERE DATE(m.maintenance_date) = $1
-      ORDER BY m.maintenance_date
+        mi.id,
+        mi.department_code,
+        d.name as department_name,
+        mii.item_code,
+        si.item_name,
+        mii.quantity,
+        mii.unit_price,
+        (mii.quantity * mii.unit_price) as total_cost,
+        TO_CHAR(mi.issue_date, 'HH24:MI') as time
+      FROM maintenance_issues mi
+      JOIN maintenance_issue_items mii ON mi.id = mii.issue_id
+      JOIN store_items si ON mii.item_code = si.item_code
+      JOIN departments d ON mi.department_code = d.code
+      WHERE DATE(mi.issue_date) = $1
+      ORDER BY mi.issue_date
     `;
     
     const result = await pool.query(query, [date]);
     res.json(result.rows);
-    */
   } catch (error) {
     console.error('Error fetching daily maintenance activities:', error);
     res.status(500).json({ error: 'Internal server error' });

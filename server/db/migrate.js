@@ -9,26 +9,11 @@ const runMigration = async () => {
 
     // Run migrations in correct order (dependencies first)
     const migrations = [
-      '001_create_gate_tables.sql',       // First create basic tables
-      '003_create_accounts_tables.sql',   // Then accounts tables
+      '003_create_accounts_tables.sql',   // First create accounts tables
+      '001_create_gate_tables.sql',       // Then create gate tables
       '002_create_store_tables.sql',      // Then store tables
       '006_fix_gate_entries_foreign_keys.sql'  // Finally, fix foreign keys
     ];
-
-    // First drop all existing tables to ensure clean state
-    await client.query(`
-      DROP TABLE IF EXISTS gate_entries_pricing CASCADE;
-      DROP TABLE IF EXISTS pricing_entries CASCADE;
-      DROP TABLE IF EXISTS store_entries CASCADE;
-      DROP TABLE IF EXISTS store_items CASCADE;
-      DROP TABLE IF EXISTS transactions CASCADE;
-      DROP TABLE IF EXISTS gate_entries CASCADE;
-      DROP TABLE IF EXISTS gate_returns CASCADE;
-      DROP TABLE IF EXISTS accounts CASCADE;
-      DROP TABLE IF EXISTS suppliers CASCADE;
-      DROP TABLE IF EXISTS purchasers CASCADE;
-    `);
-    console.log('Dropped existing tables');
 
     // Run migrations
     for (const migration of migrations) {

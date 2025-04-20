@@ -52,15 +52,20 @@ const Dashboard = () => {
         productionResponse.json()
       ]);
 
-      // Ensure we have arrays even if the response is null or undefined
-      setCashBalances(Array.isArray(cashData) ? cashData : []);
+      // Transform cash data into the expected format
+      const transformedCashData = [{
+        id: 1,
+        name: 'Cash in Hand',
+        amount: Number(cashData.cash_in_hand || 0)
+      }];
+
+      setCashBalances(transformedCashData);
       setBankAccounts(Array.isArray(bankData) ? bankData : []);
       setStockData(Array.isArray(stockData) ? stockData : []);
       setProductionData(Array.isArray(productionData) ? productionData : []);
     } catch (error) {
-      console.error('Error:', error);
+      console.error('Error fetching dashboard data:', error);
       alert('Failed to fetch dashboard data');
-      // Set empty arrays on error
       setCashBalances([]);
       setBankAccounts([]);
       setStockData([]);
@@ -78,12 +83,27 @@ const Dashboard = () => {
 
   // Helper function to safely format numbers
   const formatNumber = (value) => {
-    if (value === undefined || value === null) return '0';
+    if (value === undefined || value === null || isNaN(value)) return '0';
     return Number(value).toLocaleString();
   };
 
+  // Calculate total balance safely
+  const calculateTotalBalance = () => {
+    const cashTotal = cashBalances.reduce((sum, balance) => {
+      const amount = Number(balance.amount);
+      return sum + (isNaN(amount) ? 0 : amount);
+    }, 0);
+
+    const bankTotal = bankAccounts.reduce((sum, account) => {
+      const balance = Number(account.balance);
+      return sum + (isNaN(balance) ? 0 : balance);
+    }, 0);
+
+    return cashTotal + bankTotal;
+  };
+
   return (
-    <Box sx={{ p: 3 }}>
+    <Box sx={{ p: 3, ml: '300px', mt: '20px' }}>
       <Box sx={{ 
         display: 'flex', 
         justifyContent: 'space-between', 
@@ -140,20 +160,35 @@ const Dashboard = () => {
                           </TableHead>
                           <TableBody>
                         {cashBalances.length > 0 ? (
-                          cashBalances.map((balance) => (
-                            <TableRow key={balance.id}>
-                              <TableCell>{balance.name || '-'}</TableCell>
+                          <>
+                            {cashBalances.map((balance) => (
+                              <TableRow key={balance.id}>
+                                <TableCell>{balance.name || '-'}</TableCell>
                                 <TableCell align="right">
-                                Rs. {formatNumber(balance.amount)}
+                                  Rs. {formatNumber(balance.amount)}
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                            <TableRow>
+                              <TableCell>
+                                <strong>Total Cash</strong>
+                              </TableCell>
+                              <TableCell align="right">
+                                <strong>
+                                  Rs. {formatNumber(cashBalances.reduce((sum, balance) => {
+                                    const amount = Number(balance.amount);
+                                    return sum + (isNaN(amount) ? 0 : amount);
+                                  }, 0))}
+                                </strong>
                               </TableCell>
                             </TableRow>
-                          ))
+                          </>
                         ) : (
                           <TableRow>
                             <TableCell colSpan={2} align="center">
                               No cash balances available
-                                </TableCell>
-                              </TableRow>
+                            </TableCell>
+                          </TableRow>
                         )}
                           </TableBody>
                         </Table>
@@ -182,15 +217,30 @@ const Dashboard = () => {
                         </TableHead>
                         <TableBody>
                         {bankAccounts.length > 0 ? (
-                          bankAccounts.map((account) => (
-                            <TableRow key={account.id}>
-                              <TableCell>{account.bank_name || '-'}</TableCell>
-                              <TableCell>{account.account_number || '-'}</TableCell>
+                          <>
+                            {bankAccounts.map((account) => (
+                              <TableRow key={account.id}>
+                                <TableCell>{account.bank_name || '-'}</TableCell>
+                                <TableCell>{account.account_number || '-'}</TableCell>
                               <TableCell align="right">
-                                Rs. {formatNumber(account.balance)}
+                                  Rs. {formatNumber(account.balance)}
+                              </TableCell>
+                              </TableRow>
+                            ))}
+                            <TableRow>
+                              <TableCell colSpan={2}>
+                                <strong>Total Bank Balance</strong>
+                              </TableCell>
+                              <TableCell align="right">
+                                <strong>
+                                  Rs. {formatNumber(bankAccounts.reduce((sum, account) => {
+                                    const balance = Number(account.balance);
+                                    return sum + (isNaN(balance) ? 0 : balance);
+                                  }, 0))}
+                                </strong>
                               </TableCell>
                             </TableRow>
-                          ))
+                          </>
                         ) : (
                           <TableRow>
                             <TableCell colSpan={3} align="center">
@@ -206,14 +256,30 @@ const Dashboard = () => {
                   </Paper>
                 </Grid>
 
+          {/* Total Balance Card */}
+                <Grid item xs={12}>
+            <Paper elevation={3}>
+              <Card>
+                <CardContent>
+                  <Typography variant="h6" gutterBottom>
+                    Total Available Balance
+                                </Typography>
+                  <Typography variant="h4" color="primary" align="center">
+                    Rs. {formatNumber(calculateTotalBalance())}
+                  </Typography>
+                </CardContent>
+              </Card>
+              </Paper>
+            </Grid>
+
           {/* Stock Overview */}
-                        <Grid item xs={12} md={6}>
+            <Grid item xs={12} md={6}>
             <Paper elevation={3}>
               <Card>
                 <CardContent>
                   <Typography variant="h6" gutterBottom>
                     Stock Overview
-                  </Typography>
+                    </Typography>
                   <TableContainer>
                     <Table size="small">
                       <TableHead>
@@ -224,11 +290,13 @@ const Dashboard = () => {
                         </TableRow>
                       </TableHead>
                       <TableBody>
-                        {stockData.length > 0 ? (
+                        {stockData && stockData.length > 0 ? (
                           stockData.map((item) => (
-                            <TableRow key={item.id}>
-                              <TableCell>{item.name || '-'}</TableCell>
-                              <TableCell align="right">{formatNumber(item.quantity)}</TableCell>
+                            <TableRow key={item.item_type}>
+                              <TableCell>{item.item_type || '-'}</TableCell>
+                            <TableCell align="right">
+                                {formatNumber(item.current_quantity)}
+                              </TableCell>
                               <TableCell>{item.unit || '-'}</TableCell>
                             </TableRow>
                           ))
@@ -263,25 +331,48 @@ const Dashboard = () => {
                           <TableCell>Type</TableCell>
                           <TableCell align="right">Quantity</TableCell>
                           <TableCell>Unit</TableCell>
+                          <TableCell align="right">Cost per kg</TableCell>
                         </TableRow>
                       </TableHead>
                       <TableBody>
                         {productionData.length > 0 ? (
-                          productionData.slice(0, 5).map((record) => (
-                            <TableRow key={record.id}>
-                              <TableCell>
-                                {record.date_time ? new Date(record.date_time).toLocaleDateString() : '-'}
-                              </TableCell>
-                              <TableCell>{record.paper_type || '-'}</TableCell>
+                          productionData.slice(0, 5).map((record) => {
+                            // Calculate costs similar to ProductionHistory.jsx
+                            const raddiCost = record.recipe?.reduce((total, item) => {
+                              return total + (parseFloat(item.quantity_used || 0) * parseFloat(item.unit_price || 0));
+                            }, 0) || 0;
+
+                            const boilerFuelCost = parseFloat(record.boiler_fuel_quantity || 0) * parseFloat(record.boiler_fuel_price || 0);
+                            const electricityCost = parseFloat(record.electricity_cost || 0);
+                            const maintenanceCost = parseFloat(record.maintenance_cost || 0);
+                            const laborCost = parseFloat(record.labor_cost || 0);
+                            const contractorsCost = parseFloat(record.contractors_cost || 0);
+                            const dailyExpenses = parseFloat(record.daily_expenses || 0);
+
+                            const totalCost = raddiCost + boilerFuelCost + electricityCost + maintenanceCost + 
+                                            laborCost + contractorsCost + dailyExpenses;
+                            const totalWeight = parseFloat(record.total_weight || 1);
+                            const costPerKg = totalCost / totalWeight;
+
+                            return (
+                              <TableRow key={record.id}>
+                                <TableCell>
+                                  {record.date_time ? new Date(record.date_time).toLocaleDateString() : '-'}
+                                </TableCell>
+                                <TableCell>{record.paper_type || '-'}</TableCell>
+                                <TableCell align="right">
+                                  {formatNumber(record.total_weight)}
+                                </TableCell>
+                                <TableCell>kg</TableCell>
                             <TableCell align="right">
-                                {formatNumber(record.total_weight)}
-                              </TableCell>
-                              <TableCell>kg</TableCell>
-                            </TableRow>
-                          ))
+                                  Rs. {formatNumber(costPerKg)}
+                                </TableCell>
+                              </TableRow>
+                            );
+                          })
                         ) : (
                           <TableRow>
-                            <TableCell colSpan={4} align="center">
+                            <TableCell colSpan={5} align="center">
                               No production data available
                             </TableCell>
                           </TableRow>

@@ -31,6 +31,7 @@ const SaleSummary = () => {
   const [history, setHistory] = useState([]);
   const [itemSummary, setItemSummary] = useState([]);
   const [customers, setCustomers] = useState([]);
+  const [paperTypes, setPaperTypes] = useState([]);
   const [filters, setFilters] = useState({
     paperType: '',
     customerId: '',
@@ -41,14 +42,9 @@ const SaleSummary = () => {
   const printRef = useRef();
   const { user } = useAuth();
 
-  const paperTypes = [
-    'SUPER',
-    'CMP',
-    'BOARD'
-  ];
-
   useEffect(() => {
     fetchCustomers();
+    fetchPaperTypes();
   }, []);
 
   useEffect(() => {
@@ -65,6 +61,17 @@ const SaleSummary = () => {
       setCustomers(data);
     } catch (error) {
       console.error('Error fetching customers:', error);
+    }
+  };
+
+  const fetchPaperTypes = async () => {
+    try {
+      const response = await fetch(`${config.apiUrl}/production/paper-types`);
+      if (!response.ok) throw new Error('Failed to fetch paper types');
+      const data = await response.json();
+      setPaperTypes(data);
+    } catch (error) {
+      console.error('Error fetching paper types:', error);
     }
   };
 
@@ -329,8 +336,8 @@ const SaleSummary = () => {
             >
               <MenuItem value="">All Papers</MenuItem>
               {paperTypes.map((type) => (
-                <MenuItem key={type} value={type}>
-                  {type}
+                <MenuItem key={type.id} value={type.name}>
+                  {type.name}
                 </MenuItem>
               ))}
             </TextField>

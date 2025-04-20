@@ -24,6 +24,7 @@ const SaleOutForm = () => {
   const [loading, setLoading] = useState(false);
   const { accounts: customers, loading: customersLoading } = useAccounts('CUSTOMER');
   const [isPrinted, setIsPrinted] = useState(false);
+  const [paperTypes, setPaperTypes] = useState([]);
 
   const [formData, setFormData] = useState({
     grnNumber: '',
@@ -38,10 +39,6 @@ const SaleOutForm = () => {
     remarks: ''
   });
 
-  const paperTypes = [
-   'SUPER', 'CMP', 'BOARD'
-  ];
-
   const vehicleTypes = [
     'Mazda',
     '6 Wheeler',
@@ -54,6 +51,21 @@ const SaleOutForm = () => {
     { value: 'KG', label: 'Kilograms (KG)' },
     { value: 'TON', label: 'Tons' }
   ];
+
+  useEffect(() => {
+    fetchPaperTypes();
+  }, []);
+
+  const fetchPaperTypes = async () => {
+    try {
+      const response = await fetch(`${config.apiUrl}/production/paper-types`);
+      if (!response.ok) throw new Error('Failed to fetch paper types');
+      const data = await response.json();
+      setPaperTypes(data);
+    } catch (error) {
+      console.error('Error fetching paper types:', error);
+    }
+  };
 
   // Generate GRN number when purchaser and paper type are selected
   useEffect(() => {
@@ -374,8 +386,8 @@ const SaleOutForm = () => {
                   onKeyPress={(e) => handleKeyPress(e, 'vehicleType')}
                 >
                   {paperTypes.map((type) => (
-                    <MenuItem key={type} value={type}>
-                      {type}
+                    <MenuItem key={type.id} value={type.name}>
+                      {type.name}
                     </MenuItem>
                   ))}
                 </TextField>

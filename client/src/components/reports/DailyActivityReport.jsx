@@ -549,10 +549,14 @@ const DailyActivityReport = () => {
         <table>
           <thead>
             <tr>
-              <th>Machine</th>
+              <th>Department</th>
+              <th>Item</th>
               <th>Description</th>
+              <th class="text-right">Quantity</th>
+              <th class="text-right">Unit Price</th>
+              <th class="text-right">Total Cost</th>
               <th>Status</th>
-              <th class="text-right">Cost</th>
+              <th>Time</th>
             </tr>
           </thead>
           <tbody>
@@ -561,10 +565,18 @@ const DailyActivityReport = () => {
       activities.maintenance.forEach(item => {
         printDocument += `
           <tr>
-            <td>${item.machine_name}</td>
-            <td>${item.description}</td>
-            <td>${item.status}</td>
-            <td class="text-right">${item.cost ? `₨ ${Math.round(item.cost).toLocaleString()}` : '-'}</td>
+            <td>${item.department_name}</td>
+            <td>${item.item_name}</td>
+            <td>${item.description || '-'}</td>
+            <td class="text-right">${Number(item.quantity).toLocaleString()}</td>
+            <td class="text-right">
+              ${item.unit_price ? `₨ ${Number(item.unit_price).toLocaleString()}` : '-'}
+            </td>
+            <td class="text-right">
+              ${item.total_cost ? `₨ ${Math.round(item.total_cost).toLocaleString()}` : '-'}
+            </td>
+            <td>${item.status || '-'}</td>
+            <td>${item.time}</td>
           </tr>
         `;
       });
@@ -1046,21 +1058,31 @@ const DailyActivityReport = () => {
                     <Table size="small">
                       <TableHead>
                         <TableRow>
-                          <TableCell>Machine</TableCell>
+                          <TableCell>Department</TableCell>
+                          <TableCell>Item</TableCell>
                           <TableCell>Description</TableCell>
+                          <TableCell align="right">Quantity</TableCell>
+                          <TableCell align="right">Unit Price</TableCell>
+                          <TableCell align="right">Total Cost</TableCell>
                           <TableCell>Status</TableCell>
-                          <TableCell align="right">Cost</TableCell>
+                          <TableCell>Time</TableCell>
                         </TableRow>
                       </TableHead>
                       <TableBody>
                         {activities.maintenance.map((item, index) => (
                           <TableRow key={index} hover>
-                            <TableCell>{item.machine_name}</TableCell>
-                            <TableCell>{item.description}</TableCell>
-                            <TableCell>{item.status}</TableCell>
+                            <TableCell>{item.department_name}</TableCell>
+                            <TableCell>{item.item_name}</TableCell>
+                            <TableCell>{item.description || '-'}</TableCell>
+                            <TableCell align="right">{Number(item.quantity).toLocaleString()}</TableCell>
                             <TableCell align="right">
-                              {item.cost ? `₨ ${Math.round(item.cost).toLocaleString()}` : '-'}
+                              {item.unit_price ? `₨ ${Number(item.unit_price).toLocaleString()}` : '-'}
                             </TableCell>
+                            <TableCell align="right">
+                              {item.total_cost ? `₨ ${Math.round(item.total_cost).toLocaleString()}` : '-'}
+                            </TableCell>
+                            <TableCell>{item.status || '-'}</TableCell>
+                            <TableCell>{item.time}</TableCell>
                           </TableRow>
                         ))}
                       </TableBody>

@@ -26,6 +26,7 @@ const SaleReturnForm = () => {
   const [saleGRNs, setSaleGRNs] = useState([]);
   const [selectedSale, setSelectedSale] = useState(null);
   const [isPrinted, setIsPrinted] = useState(false);
+  const [paperTypes, setPaperTypes] = useState([]);
   
   const [formData, setFormData] = useState({
     returnNumber: '',
@@ -42,10 +43,6 @@ const SaleReturnForm = () => {
     dateTime: new Date(),
     remarks: ''
   });
-
-  const paperTypes = [
-    'SUPER', 'CMP', 'BOARD'
-  ];
 
   const vehicleTypes = [
     'Mazda',
@@ -388,6 +385,21 @@ const SaleReturnForm = () => {
     }
   };
 
+  useEffect(() => {
+    fetchPaperTypes();
+  }, []);
+
+  const fetchPaperTypes = async () => {
+    try {
+      const response = await fetch(`${config.apiUrl}/production/paper-types`);
+      if (!response.ok) throw new Error('Failed to fetch paper types');
+      const data = await response.json();
+      setPaperTypes(data);
+    } catch (error) {
+      console.error('Error fetching paper types:', error);
+    }
+  };
+
   return (
     <div className="gate-form">
       <Paper className="content-paper">
@@ -554,8 +566,8 @@ const SaleReturnForm = () => {
                   disabled // Disable since it's auto-populated from sale GRN
                 >
                   {paperTypes.map((type) => (
-                    <MenuItem key={type} value={type}>
-                      {type}
+                    <MenuItem key={type.id} value={type.name}>
+                      {type.name}
                     </MenuItem>
                   ))}
                 </TextField>

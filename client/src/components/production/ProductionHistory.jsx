@@ -37,10 +37,10 @@ const ProductionHistory = () => {
   });
   const [dailyExpenses, setDailyExpenses] = useState({});
   const [perKgCosts, setPerKgCosts] = useState({});
-
-  const paperTypes = ['SUPER', 'CMP', 'BOARD'];
+  const [paperTypes, setPaperTypes] = useState([]);
 
   useEffect(() => {
+    fetchPaperTypes();
     fetchHistoryData();
   }, [filters]);
 
@@ -65,6 +65,17 @@ const ProductionHistory = () => {
       });
     }
   }, [history]);
+
+  const fetchPaperTypes = async () => {
+    try {
+      const response = await fetch(`${config.apiUrl}/production/paper-types`);
+      if (!response.ok) throw new Error('Failed to fetch paper types');
+      const data = await response.json();
+      setPaperTypes(data);
+    } catch (error) {
+      console.error('Error fetching paper types:', error);
+    }
+  };
 
   const formatDate = (dateString) => {
     const date = new Date(dateString);
@@ -354,7 +365,7 @@ const ProductionHistory = () => {
             >
               <MenuItem value="">All Types</MenuItem>
               {paperTypes.map(type => (
-                <MenuItem key={type} value={type}>{type}</MenuItem>
+                <MenuItem key={type.id} value={type.name}>{type.name}</MenuItem>
               ))}
             </TextField>
           </Grid>
