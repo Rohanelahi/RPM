@@ -123,7 +123,8 @@ router.post('/received', async (req, res) => {
     voucher_no,
     is_tax_payment,
     created_by,
-    processed_by_role
+    processed_by_role,
+    account_type
   } = req.body;
 
   // Validate required fields
@@ -144,13 +145,13 @@ router.post('/received', async (req, res) => {
       `INSERT INTO payments (
         account_id, amount, payment_date, payment_mode,
         payment_type, receiver_name, remarks,
-        voucher_no, is_tax_payment, created_by, processed_by_role
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+        voucher_no, is_tax_payment, created_by, processed_by_role, account_type
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
       RETURNING *`,
       [
         account_id,
         amount,
-        new Date(payment_date), // Ensure date is properly formatted
+        new Date(payment_date),
         payment_mode,
         'RECEIVED',
         receiver_name,
@@ -158,7 +159,8 @@ router.post('/received', async (req, res) => {
         finalVoucherNo,
         is_tax_payment || false,
         created_by,
-        processed_by_role
+        processed_by_role,
+        account_type
       ]
     );
 
@@ -218,7 +220,8 @@ router.post('/issued', async (req, res) => {
     voucher_no,
     is_tax_payment,
     created_by,
-    processed_by_role
+    processed_by_role,
+    account_type
   } = req.body;
 
   // Validate required fields
@@ -239,13 +242,13 @@ router.post('/issued', async (req, res) => {
       `INSERT INTO payments (
         account_id, amount, payment_date, payment_mode,
         payment_type, receiver_name, remarks,
-        voucher_no, is_tax_payment, created_by, processed_by_role
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+        voucher_no, is_tax_payment, created_by, processed_by_role, account_type
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
       RETURNING *`,
       [
         account_id,
         amount,
-        new Date(payment_date), // Ensure date is properly formatted
+        new Date(payment_date),
         payment_mode,
         'ISSUED',
         receiver_name,
@@ -253,7 +256,8 @@ router.post('/issued', async (req, res) => {
         finalVoucherNo,
         is_tax_payment || false,
         created_by,
-        processed_by_role
+        processed_by_role,
+        account_type
       ]
     );
 

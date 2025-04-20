@@ -203,19 +203,23 @@ const PaymentIssued = () => {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          ...formData,
-          userRole: user.role,
-          bankTransaction: formData.paymentMode === 'ONLINE' ? {
-            bankAccountId: formData.bankAccountId,
-            amount: formData.amount,
-            type: 'DEBIT',
-            reference: formData.remarks || `Payment issued to ${formData.receiverName}`
-          } : null
+          account_id: formData.accountId,
+          amount: formData.amount,
+          payment_date: formData.date,
+          payment_mode: formData.paymentMode,
+          receiver_name: formData.receiverName,
+          remarks: formData.remarks,
+          voucher_no: formData.voucherNo,
+          is_tax_payment: false,
+          created_by: user.id,
+          processed_by_role: user.role,
+          account_type: formData.accountType
         }),
       });
 
       if (!response.ok) {
-        throw new Error('Failed to submit payment');
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to submit payment');
       }
 
       const result = await response.json();
@@ -227,7 +231,8 @@ const PaymentIssued = () => {
       }
       const newVoucherData = await newVoucherResponse.json();
       
-      setFormData({
+      // Reset form with new voucher number
+      setFormData(prev => ({
         date: new Date(),
         paymentMode: '',
         accountType: '',
@@ -237,14 +242,14 @@ const PaymentIssued = () => {
         remarks: '',
         receiverName: '',
         voucherNo: newVoucherData.voucherNo
-      });
+      }));
       setIsPrinted(false);
-      setAccounts([]);
+      setAccounts([]); // Clear accounts list
 
       alert('Payment submitted successfully!');
     } catch (error) {
       console.error('Error submitting payment:', error);
-      alert('Failed to submit payment. Please try again.');
+      alert('Error submitting payment: ' + error.message);
     } finally {
       setLoading(false);
     }
