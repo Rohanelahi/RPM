@@ -203,19 +203,22 @@ const PaymentReceived = () => {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          ...formData,
-          userRole: user.role,
-          bankTransaction: formData.paymentMode === 'ONLINE' ? {
-            bankAccountId: formData.bankAccountId,
-            amount: formData.amount,
-            type: 'CREDIT',
-            reference: formData.remarks || `Payment received from ${formData.receiverName}`
-          } : null
+          account_id: formData.accountId,
+          amount: formData.amount,
+          payment_date: formData.date,
+          payment_mode: formData.paymentMode,
+          receiver_name: formData.receiverName,
+          remarks: formData.remarks,
+          voucher_no: formData.voucherNo,
+          is_tax_payment: false,
+          created_by: user.id,
+          processed_by_role: user.role
         }),
       });
 
       if (!response.ok) {
-        throw new Error('Failed to submit payment');
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to submit payment');
       }
 
       const result = await response.json();
@@ -242,7 +245,7 @@ const PaymentReceived = () => {
       setIsPrinted(false);
       setAccounts([]); // Clear accounts list
 
-      alert(`Payment submitted successfully. Receipt No: ${result.voucherNo}`);
+      alert(`Payment submitted successfully. Receipt No: ${result.voucher_no}`);
     } catch (error) {
       console.error('Error:', error);
       alert('Error submitting payment: ' + error.message);
