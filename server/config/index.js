@@ -1,5 +1,5 @@
 module.exports = {
-  apiUrl: process.env.API_URL || 'http://150.136.153.101:5000/api',
+  apiUrl: process.env.API_URL || 'http://150.230.192.101:5000/api',
   port: process.env.PORT || 5000,
   database: {
     host: process.env.DB_HOST || '150.136.153.101',
