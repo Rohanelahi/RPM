@@ -2,31 +2,72 @@ const express = require('express');
 const router = express.Router();
 const pool = require('../../../db');
 
-// Create expenses table if it doesn't exist
-const createExpensesTable = async () => {
+// Create expenses and expense_types tables if they don't exist
+const createTables = async () => {
   const client = await pool.connect();
   try {
     await client.query(`
+      CREATE TABLE IF NOT EXISTS expense_types (
+        id SERIAL PRIMARY KEY,
+        name VARCHAR(100) NOT NULL UNIQUE,
+        description TEXT,
+        status VARCHAR(20) DEFAULT 'ACTIVE',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+
       CREATE TABLE IF NOT EXISTS expenses (
         id SERIAL PRIMARY KEY,
         date TIMESTAMP NOT NULL,
-        expense_type VARCHAR(50) NOT NULL,
+        expense_type VARCHAR(100) NOT NULL,
         amount DECIMAL(10,2) NOT NULL,
         receiver_name VARCHAR(100),
         remarks TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
-    console.log('Expenses table created successfully or already exists');
+    console.log('Expense tables created successfully or already exist');
   } catch (error) {
-    console.error('Error creating expenses table:', error);
+    console.error('Error creating expense tables:', error);
   } finally {
     client.release();
   }
 };
 
 // Run the migration when the server starts
-createExpensesTable();
+createTables();
+
+// Get all expense types
+router.get('/types', async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT * FROM expense_types 
+      WHERE status = 'ACTIVE'
+      ORDER BY name
+    `);
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Error fetching expense types:', error);
+    res.status(500).json({ error: 'Failed to fetch expense types' });
+  }
+});
+
+// Add new expense type
+router.post('/types', async (req, res) => {
+  const { name, description } = req.body;
+  try {
+    const result = await pool.query(
+      `INSERT INTO expense_types (name, description)
+       VALUES ($1, $2)
+       RETURNING *`,
+      [name, description]
+    );
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error('Error adding expense type:', error);
+    res.status(500).json({ error: 'Failed to add expense type' });
+  }
+});
 
 // Add new expense
 router.post('/', async (req, res) => {
@@ -35,6 +76,16 @@ router.post('/', async (req, res) => {
     await client.query('BEGIN');
     
     const { date, expenseType, amount, receiverName, remarks } = req.body;
+
+    // Get expense type name
+    const { rows: [expenseTypeData] } = await client.query(
+      'SELECT name FROM expense_types WHERE id = $1',
+      [expenseType]
+    );
+
+    if (!expenseTypeData) {
+      throw new Error('Invalid expense type');
+    }
 
     // Update cash in hand
     await client.query(
@@ -46,7 +97,7 @@ router.post('/', async (req, res) => {
       `INSERT INTO expenses (date, expense_type, amount, receiver_name, remarks)
        VALUES ($1, $2, $3, $4, $5)
        RETURNING *`,
-      [new Date(date), expenseType, amount, receiverName, remarks]
+      [new Date(date), expenseTypeData.name, amount, receiverName, remarks]
     );
 
     await client.query('COMMIT');
@@ -66,31 +117,40 @@ router.get('/history', async (req, res) => {
     const { startDate, endDate, expenseType } = req.query;
     
     let query = `
-      SELECT * FROM expenses 
+      SELECT 
+        e.*,
+        e.expense_type as expense_type_name
+      FROM expenses e
       WHERE 1=1
     `;
     const queryParams = [];
     let paramCount = 1;
 
     if (startDate) {
-      query += ` AND DATE(date) >= $${paramCount}`;
+      query += ` AND DATE(e.date) >= $${paramCount}`;
       queryParams.push(startDate);
       paramCount++;
     }
 
     if (endDate) {
-      query += ` AND DATE(date) <= $${paramCount}`;
+      query += ` AND DATE(e.date) <= $${paramCount}`;
       queryParams.push(endDate);
       paramCount++;
     }
 
     if (expenseType) {
-      query += ` AND expense_type = $${paramCount}`;
-      queryParams.push(expenseType);
-      paramCount++;
+      const { rows: [expenseTypeData] } = await pool.query(
+        'SELECT name FROM expense_types WHERE id = $1',
+        [expenseType]
+      );
+      if (expenseTypeData) {
+        query += ` AND e.expense_type = $${paramCount}`;
+        queryParams.push(expenseTypeData.name);
+        paramCount++;
+      }
     }
 
-    query += ` ORDER BY date DESC`;
+    query += ` ORDER BY e.date DESC`;
 
     const { rows } = await pool.query(query, queryParams);
     res.json(rows);

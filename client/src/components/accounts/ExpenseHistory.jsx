@@ -23,6 +23,7 @@ import '../../styles/ExpenseHistory.css';
 
 const ExpenseHistory = () => {
   const [expenses, setExpenses] = useState([]);
+  const [expenseTypes, setExpenseTypes] = useState([]);
   const [loading, setLoading] = useState(false);
   const [filters, setFilters] = useState({
     startDate: null,
@@ -30,17 +31,25 @@ const ExpenseHistory = () => {
     expenseType: ''
   });
 
-  const expenseTypes = [
-    { value: '', label: 'All' },
-    { value: 'PETROL', label: 'Petrol' },
-    { value: 'MESS', label: 'Mess' },
-    { value: 'ADMIN', label: 'Admin' },
-    { value: 'MISC', label: 'Miscellaneous' }
-  ];
+  useEffect(() => {
+    fetchExpenseTypes();
+  }, []);
 
   useEffect(() => {
     fetchExpenses();
   }, [filters]);
+
+  const fetchExpenseTypes = async () => {
+    try {
+      const response = await fetch(`${config.apiUrl}/accounts/expenses/types`);
+      if (!response.ok) throw new Error('Failed to fetch expense types');
+      const data = await response.json();
+      setExpenseTypes(data);
+    } catch (error) {
+      console.error('Error fetching expense types:', error);
+      alert('Failed to fetch expense types');
+    }
+  };
 
   const fetchExpenses = async () => {
     setLoading(true);
@@ -95,9 +104,10 @@ const ExpenseHistory = () => {
                 value={filters.expenseType}
                 onChange={(e) => setFilters(prev => ({ ...prev, expenseType: e.target.value }))}
               >
+                <MenuItem value="">All Types</MenuItem>
                 {expenseTypes.map((type) => (
-                  <MenuItem key={type.value} value={type.value}>
-                    {type.label}
+                  <MenuItem key={type.id} value={type.id}>
+                    {type.name}
                   </MenuItem>
                 ))}
               </TextField>
@@ -132,7 +142,7 @@ const ExpenseHistory = () => {
                       {format(new Date(expense.date), 'HH:mm:ss')}
                     </TableCell>
                     <TableCell className="expense-history-cell">
-                      {expense.expense_type}
+                      {expense.expense_type_name}
                     </TableCell>
                     <TableCell className="expense-history-cell">
                       {expense.receiver_name}

@@ -208,6 +208,7 @@ const StoreOutForm = () => {
   const handlePrint = () => {
     const printWindow = window.open('', '_blank');
     const currentDate = format(new Date(), 'dd/MM/yyyy');
+    const currentTime = format(new Date(), 'HH:mm:ss');
     const selectedVendor = vendors.find(v => v.id === formData.vendorId);
 
     printWindow.document.write(`
@@ -285,6 +286,10 @@ const StoreOutForm = () => {
             <tr>
               <td><strong>Date:</strong></td>
               <td>${currentDate}</td>
+            </tr>
+            <tr>
+              <td><strong>Time:</strong></td>
+              <td>${currentTime}</td>
             </tr>
             <tr>
               <td><strong>Original GRN:</strong></td>

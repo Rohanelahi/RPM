@@ -54,6 +54,30 @@ const createTables = async () => {
 // Create tables when the server starts
 createTables();
 
+// Add remarks column if it doesn't exist
+const addRemarksColumn = async () => {
+  try {
+    await pool.query(`
+      DO $$ 
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns 
+          WHERE table_name = 'bank_transactions' 
+          AND column_name = 'remarks'
+        ) THEN
+          ALTER TABLE bank_transactions ADD COLUMN remarks TEXT;
+        END IF;
+      END $$;
+    `);
+    console.log('Checked/added remarks column successfully');
+  } catch (err) {
+    console.error('Error checking/adding remarks column:', err);
+  }
+};
+
+// Run column check when server starts
+addRemarksColumn();
+
 // Get all bank accounts with latest balance
 router.get('/bank-accounts', async (req, res) => {
   try {
@@ -190,17 +214,31 @@ router.post('/bank-transactions', async (req, res) => {
       [account_id, type, transactionAmount, reference, currentBalance, newBalance]
     );
 
-    // If this is a withdrawal (DEBIT) and updateCash is true
-    if (type === 'DEBIT' && updateCash) {
+    // If this is a deposit (CREDIT) and updateCash is true
+    if (type === 'CREDIT' && updateCash) {
       // Get current cash balance
       const cashBalanceResult = await client.query(`
-        SELECT cash_in_hand
-        FROM cash_tracking
-        LIMIT 1
+        SELECT COALESCE(
+          SUM(CASE WHEN type = 'CREDIT' THEN amount ELSE -amount END),
+          0
+        ) as current_balance
+        FROM cash_transactions
       `);
       
-      const currentCashBalance = Number(cashBalanceResult.rows[0].cash_in_hand || 0);
-      const newCashBalance = currentCashBalance + transactionAmount;
+      const currentCashBalance = Number(cashBalanceResult.rows[0].current_balance);
+      const newCashBalance = currentCashBalance - transactionAmount;
+
+      if (newCashBalance < 0) {
+        throw new Error('Insufficient cash balance');
+      }
+
+      // Create cash transaction record
+      await client.query(
+        `INSERT INTO cash_transactions 
+         (type, amount, reference, remarks, balance, balance_after, transaction_date)
+         VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP)`,
+        ['DEBIT', transactionAmount, 'Bank Deposit', reference, currentCashBalance, newCashBalance]
+      );
 
       // Update cash_tracking table
       await client.query(
@@ -209,6 +247,21 @@ router.post('/bank-transactions', async (req, res) => {
              last_updated = CURRENT_TIMESTAMP`,
         [newCashBalance]
       );
+    }
+
+    // If this is a withdrawal (DEBIT) and updateCash is true
+    if (type === 'DEBIT' && updateCash) {
+      // Get current cash balance
+      const cashBalanceResult = await client.query(`
+        SELECT COALESCE(
+          SUM(CASE WHEN type = 'CREDIT' THEN amount ELSE -amount END),
+          0
+        ) as current_balance
+        FROM cash_transactions
+      `);
+      
+      const currentCashBalance = Number(cashBalanceResult.rows[0].current_balance);
+      const newCashBalance = currentCashBalance + transactionAmount;
 
       // Create cash transaction record
       await client.query(
@@ -216,6 +269,14 @@ router.post('/bank-transactions', async (req, res) => {
          (type, amount, reference, remarks, balance, balance_after, transaction_date)
          VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP)`,
         ['CREDIT', transactionAmount, 'Bank Withdrawal', reference, currentCashBalance, newCashBalance]
+      );
+
+      // Update cash_tracking table
+      await client.query(
+        `UPDATE cash_tracking 
+         SET cash_in_hand = $1,
+             last_updated = CURRENT_TIMESTAMP`,
+        [newCashBalance]
       );
     }
 
@@ -252,24 +313,52 @@ router.get('/bank-transactions', async (req, res) => {
     
     let query = `
       WITH ordered_transactions AS (
-        SELECT 
+        SELECT DISTINCT ON (t.id)
           t.*,
           b.bank_name,
           b.account_number,
           COALESCE(p.receiver_name, '') as receiver_name,
           COALESCE(p.payment_type, '') as payment_type,
-          COALESCE(a.account_name, '') as related_account_name
+          COALESCE(a.account_name, '') as related_account_name,
+          CASE 
+            WHEN t.reference = 'Fund Transfer' THEN
+              CASE 
+                WHEN t.type = 'DEBIT' THEN
+                  (SELECT bank_name FROM bank_accounts WHERE id = (
+                    SELECT account_id FROM bank_transactions 
+                    WHERE reference = 'Fund Transfer' 
+                    AND type = 'CREDIT' 
+                    AND transaction_date = t.transaction_date
+                    AND amount = t.amount
+                    LIMIT 1
+                  ))
+                WHEN t.type = 'CREDIT' THEN
+                  (SELECT bank_name FROM bank_accounts WHERE id = (
+                    SELECT account_id FROM bank_transactions 
+                    WHERE reference = 'Fund Transfer' 
+                    AND type = 'DEBIT' 
+                    AND transaction_date = t.transaction_date
+                    AND amount = t.amount
+                    LIMIT 1
+                  ))
+              END
+            ELSE NULL
+          END as related_bank_name
         FROM bank_transactions t 
         JOIN bank_accounts b ON t.account_id = b.id 
         LEFT JOIN payments p ON p.bank_account_id = t.account_id
           AND t.transaction_date::date = p.payment_date::date
           AND ABS(t.amount) = p.amount
+          AND (
+            (t.type = 'CREDIT' AND p.payment_type = 'RECEIVED') OR
+            (t.type = 'DEBIT' AND p.payment_type = 'ISSUED')
+          )
         LEFT JOIN accounts a ON p.account_id = a.id
         WHERE 1=1
         ${accountId ? ' AND t.account_id = $1' : ''}
         ${startDate ? ` AND t.transaction_date >= ${accountId ? '$2' : '$1'}` : ''}
         ${endDate ? ` AND t.transaction_date <= ${accountId ? '$3' : '$2'} ` : ''}
-        ORDER BY t.transaction_date ASC, t.id ASC
+        ORDER BY t.id, t.transaction_date ASC
       )
       SELECT 
         t.*,
@@ -546,6 +635,102 @@ router.post('/payments/issued', async (req, res) => {
     console.error('Error processing payment:', err);
     res.status(500).json({ 
       error: err.message || 'Failed to process payment'
+    });
+  } finally {
+    client.release();
+  }
+});
+
+// Process fund transfer between bank accounts
+router.post('/bank-transactions/transfer', async (req, res) => {
+  const { from_account_id, to_account_id, amount, remarks } = req.body;
+  const client = await pool.connect();
+  
+  try {
+    await client.query('BEGIN');
+
+    // Get current balances for both accounts
+    const fromBalanceResult = await client.query(`
+      SELECT COALESCE(
+        SUM(CASE WHEN type = 'CREDIT' THEN amount ELSE -amount END),
+        0
+      ) as current_balance
+      FROM bank_transactions
+      WHERE account_id = $1
+    `, [from_account_id]);
+    
+    const toBalanceResult = await client.query(`
+      SELECT COALESCE(
+        SUM(CASE WHEN type = 'CREDIT' THEN amount ELSE -amount END),
+        0
+      ) as current_balance
+      FROM bank_transactions
+      WHERE account_id = $1
+    `, [to_account_id]);
+    
+    const fromCurrentBalance = Number(fromBalanceResult.rows[0].current_balance);
+    const toCurrentBalance = Number(toBalanceResult.rows[0].current_balance);
+    const transferAmount = Number(amount);
+    
+    // Check if source account has sufficient balance
+    if (fromCurrentBalance < transferAmount) {
+      throw new Error('Insufficient balance in source account');
+    }
+
+    // Calculate new balances
+    const fromNewBalance = fromCurrentBalance - transferAmount;
+    const toNewBalance = toCurrentBalance + transferAmount;
+
+    // Create debit transaction for source account
+    await client.query(
+      `INSERT INTO bank_transactions 
+       (account_id, type, amount, reference, balance, balance_after, transaction_date)
+       VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP)`,
+      [
+        from_account_id,
+        'DEBIT',
+        transferAmount,
+        'Fund Transfer',
+        fromCurrentBalance,
+        fromNewBalance
+      ]
+    );
+
+    // Create credit transaction for destination account
+    await client.query(
+      `INSERT INTO bank_transactions 
+       (account_id, type, amount, reference, balance, balance_after, transaction_date)
+       VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP)`,
+      [
+        to_account_id,
+        'CREDIT',
+        transferAmount,
+        'Fund Transfer',
+        toCurrentBalance,
+        toNewBalance
+      ]
+    );
+
+    await client.query('COMMIT');
+
+    // Return success response
+    res.json({
+      success: true,
+      message: 'Funds transferred successfully',
+      from_account: {
+        id: from_account_id,
+        new_balance: fromNewBalance
+      },
+      to_account: {
+        id: to_account_id,
+        new_balance: toNewBalance
+      }
+    });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('Error processing transfer:', err);
+    res.status(500).json({ 
+      error: err.message || 'Failed to process transfer'
     });
   } finally {
     client.release();

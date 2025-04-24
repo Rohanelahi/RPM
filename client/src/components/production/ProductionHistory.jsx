@@ -16,12 +16,18 @@ import {
   CircularProgress,
   IconButton,
   Collapse,
-  Button
+  Button,
+  Card,
+  CardContent,
+  Tabs,
+  Tab,
+  Stack,
+  Chip
 } from '@mui/material';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
-import { KeyboardArrowDown, KeyboardArrowUp, Print } from '@mui/icons-material';
+import { KeyboardArrowDown, KeyboardArrowUp, Print, FilterList, ExpandMore, ExpandLess } from '@mui/icons-material';
 import { format } from 'date-fns';
 import config from '../../config';
 
@@ -38,6 +44,8 @@ const ProductionHistory = () => {
   const [dailyExpenses, setDailyExpenses] = useState({});
   const [perKgCosts, setPerKgCosts] = useState({});
   const [paperTypes, setPaperTypes] = useState([]);
+  const [showFilters, setShowFilters] = useState(false);
+  const [activeTab, setActiveTab] = useState(0);
 
   useEffect(() => {
     fetchPaperTypes();
@@ -57,10 +65,10 @@ const ProductionHistory = () => {
   useEffect(() => {
     if (history.length > 0) {
       history.forEach(async (row) => {
-        const cost = await calculatePerKgCost(row);
+        const costs = await calculatePerKgCost(row);
         setPerKgCosts(prev => ({
           ...prev,
-          [row.id]: cost
+          ...costs
         }));
       });
     }
@@ -102,7 +110,15 @@ const ProductionHistory = () => {
       const response = await fetch(`${config.apiUrl}/production/history?${queryParams}`);
       if (!response.ok) throw new Error('Failed to fetch history data');
       const data = await response.json();
-      setHistory(data);
+      
+      // Process the data to include paper types and their details
+      const processedData = data.map(record => ({
+        ...record,
+        paper_types: record.paper_types || [],
+        totalWeight: record.paper_types?.reduce((sum, type) => sum + parseFloat(type.total_weight || 0), 0) || 0
+      }));
+      
+      setHistory(processedData);
     } catch (error) {
       console.error('Error fetching history data:', error);
     } finally {
@@ -110,10 +126,12 @@ const ProductionHistory = () => {
     }
   };
 
-  const formatRaddiUsed = (recipe) => {
-    if (!recipe) return '';
-    return recipe.map(item => 
-      `${item.raddi_type}: ${parseFloat(item.quantity_used || 0).toFixed(2)} kg`
+  const formatRaddiUsed = (paperTypes) => {
+    if (!paperTypes) return '';
+    return paperTypes.map(type => 
+      type.recipe?.map(item => 
+        `${item.raddi_type}: ${parseFloat(item.quantity_used || 0).toFixed(2)} kg`
+      ).join(', ')
     ).join(', ');
   };
 
@@ -147,52 +165,53 @@ const ProductionHistory = () => {
   };
 
   const calculatePerKgCost = async (row) => {
-    if (!row || !row.recipe) return '0.00';
-    
-    // Ensure recipe is an array
-    const recipe = Array.isArray(row.recipe) ? row.recipe : [];
-    
-    const raddiCost = recipe.reduce((total, item) => {
-      return total + (parseFloat(item.quantity_used || 0) * parseFloat(item.unit_price || 0));
-    }, 0);
+    if (!row || !row.paper_types) return {};
 
+    const costs = {};
+    
+    // Calculate total common costs
     const boilerFuelCost = parseFloat(row.boiler_fuel_quantity || 0) * parseFloat(row.boiler_fuel_price || 0);
     const electricityCost = parseFloat(row.electricity_cost || 0);
     const maintenanceCost = parseFloat(row.maintenance_cost || 0);
     const laborCost = parseFloat(row.labor_cost || 0);
     const contractorsCost = parseFloat(row.contractors_cost || 0);
     const dailyExpenses = parseFloat(row.daily_expenses || 0);
+    const totalCommonCost = boilerFuelCost + electricityCost + maintenanceCost + 
+                           laborCost + contractorsCost + dailyExpenses;
 
-    const totalCost = raddiCost + boilerFuelCost + electricityCost + maintenanceCost + 
-                     laborCost + contractorsCost + dailyExpenses;
+    // Calculate total weight for all paper types
+    const totalWeight = row.paper_types.reduce((sum, type) => 
+      sum + parseFloat(type.total_weight || 0), 0);
 
-    return (totalCost / parseFloat(row.total_weight || 1)).toFixed(2);
+    // Calculate cost per kg for each paper type
+    row.paper_types.forEach(paperType => {
+      const paperTypeWeight = parseFloat(paperType.total_weight || 0);
+      const weightRatio = totalWeight > 0 ? paperTypeWeight / totalWeight : 0;
+      
+      // Calculate recipe costs
+      const recipeCost = paperType.recipe?.reduce((total, item) => {
+        return total + (parseFloat(item.quantity_used || 0) * parseFloat(item.unit_price || 0));
+      }, 0) || 0;
+
+      // Calculate total cost (recipe cost + proportional common costs)
+      const totalCost = recipeCost + (totalCommonCost * weightRatio);
+      const perKgCost = paperTypeWeight > 0 ? totalCost / paperTypeWeight : 0;
+
+      costs[paperType.id] = perKgCost.toFixed(2);
+    });
+
+    return costs;
   };
 
   const handlePrintCosts = async (row) => {
-    const dailyExpense = dailyExpenses[row.date_time] || await fetchDailyExpenses(row.date_time);
     const printWindow = window.open('', '_blank');
+    const dailyExpense = dailyExpenses[row.date_time] || await fetchDailyExpenses(row.date_time);
     
-    // Calculate all costs
-    const raddiCost = row.recipe.reduce((total, item) => {
-      return total + (parseFloat(item.quantity_used || 0) * parseFloat(item.unit_price || 0));
-    }, 0);
-
-    const boilerFuelCost = parseFloat(row.boiler_fuel_quantity || 0) * parseFloat(row.boiler_fuel_price || 0);
-    const electricityCost = parseFloat(row.electricity_cost || 0);
-    const maintenanceCost = parseFloat(row.maintenance_cost || 0);
-    const laborCost = parseFloat(row.labor_cost || 0);
-    const contractorsCost = parseFloat(row.contractors_cost || 0);
-    const totalCost = raddiCost + boilerFuelCost + electricityCost + maintenanceCost + 
-                      laborCost + contractorsCost + dailyExpense;
-    const totalWeight = parseFloat(row.total_weight || 1);
-    const perKgCost = totalCost / totalWeight;
-
     printWindow.document.write(`
       <!DOCTYPE html>
       <html>
         <head>
-          <title>Production Costs - ${format(new Date(row.date_time), 'dd/MM/yyyy')}</title>
+          <title>Production Report - ${format(new Date(row.date_time), 'dd/MM/yyyy')}</title>
           <style>
             body {
               font-family: Arial, sans-serif;
@@ -212,32 +231,38 @@ const ProductionHistory = () => {
               font-size: 20px;
               margin-bottom: 10px;
             }
-            .cost-section {
+            .section {
               margin-bottom: 30px;
             }
-            .cost-table {
+            .section-title {
+              font-size: 18px;
+              font-weight: bold;
+              margin-bottom: 15px;
+              border-bottom: 2px solid #000;
+              padding-bottom: 5px;
+            }
+            table {
               width: 100%;
               border-collapse: collapse;
               margin-bottom: 20px;
             }
-            .cost-table th, .cost-table td {
+            th, td {
               border: 1px solid #ddd;
               padding: 12px;
               text-align: left;
             }
-            .cost-table th {
+            th {
               background-color: #f5f5f5;
             }
             .total-row {
               font-weight: bold;
               background-color: #f8f8f8;
             }
-            .per-kg-cost {
-              font-size: 18px;
-              font-weight: bold;
-              text-align: right;
-              margin-top: 20px;
-              color: #2196F3;
+            .cost-summary {
+              margin-top: 30px;
+              padding: 15px;
+              background-color: #f9f9f9;
+              border: 1px solid #ddd;
             }
             .signature-section {
               margin-top: 50px;
@@ -253,82 +278,119 @@ const ProductionHistory = () => {
               margin-top: 50px;
               padding-top: 5px;
             }
+            @media print {
+              .no-print {
+                display: none;
+              }
+            }
           </style>
         </head>
         <body>
           <div class="header">
             <div class="company-name">ROSE PAPER MILL</div>
-            <div class="document-title">Production Cost Analysis</div>
+            <div class="document-title">Production Report</div>
             <div>Date: ${format(new Date(row.date_time), 'dd/MM/yyyy')}</div>
-            <div>Paper Type: ${row.paper_type}</div>
-            <div>Total Weight: ${row.total_weight} kg</div>
           </div>
 
-          <div class="cost-section">
-            <table class="cost-table">
-              <thead>
-                <tr>
-                  <th>Cost Component</th>
-                  <th>Details</th>
-                  <th>Amount (PKR)</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td>Raw Material (Raddi)</td>
-                  <td>${row.recipe.map(item => 
-                    `${item.raddi_type}: ${parseFloat(item.quantity_used || 0).toFixed(2)} kg @ ${parseFloat(item.unit_price || 0).toFixed(2)}/kg`
-                  ).join('<br>')}</td>
-                  <td>${raddiCost.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
-                </tr>
-                <tr>
-                  <td>Boiler Fuel</td>
-                  <td>${row.boiler_fuel_type}: ${row.boiler_fuel_quantity} kg @ ${parseFloat(row.boiler_fuel_price || 0).toFixed(2)}/kg</td>
-                  <td>${boilerFuelCost.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
-                </tr>
-                <tr>
-                  <td>Electricity</td>
-                  <td>${row.electricity_units} units @ ${row.electricity_unit_price}/unit</td>
-                  <td>${electricityCost.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
-                </tr>
-                <tr>
-                  <td>Maintenance</td>
-                  <td>Daily maintenance cost</td>
-                  <td>${maintenanceCost.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
-                </tr>
-                <tr>
-                  <td>Labor</td>
-                  <td>Daily labor cost</td>
-                  <td>${laborCost.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
-                </tr>
-                <tr>
-                  <td>Contractors</td>
-                  <td>Daily contractors cost</td>
-                  <td>${contractorsCost.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
-                </tr>
-                <tr>
-                  <td>Daily Expenses</td>
-                  <td>Misc. expenses for the day</td>
-                  <td>${dailyExpense.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
-                </tr>
-                <tr class="total-row">
-                  <td colspan="2">Total Cost</td>
-                  <td>${totalCost.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
-                </tr>
-              </tbody>
+          <div class="section">
+            <div class="section-title">Production Summary</div>
+            <table>
+              <tr>
+                <th>Total Weight</th>
+                <td>${row.paper_types?.reduce((sum, type) => 
+                  sum + parseFloat(type.total_weight || 0), 0).toFixed(2)} kg</td>
+              </tr>
+              <tr>
+                <th>Electricity Units</th>
+                <td>${row.electricity_units} units</td>
+              </tr>
+              <tr>
+                <th>Boiler Fuel</th>
+                <td>${row.boiler_fuel_type}: ${row.boiler_fuel_quantity} kg</td>
+              </tr>
             </table>
+          </div>
 
-            <div class="per-kg-cost">
-              Cost per kg: PKR ${perKgCost.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-            </div>
+          <div class="section">
+            <div class="section-title">Paper Types</div>
+            ${row.paper_types?.map(paperType => `
+              <div style="margin-bottom: 20px;">
+                <h3>${paperType.paper_type}</h3>
+                <table>
+                  <tr>
+                    <th>Weight</th>
+                    <td>${paperType.total_weight} kg</td>
+                  </tr>
+                  <tr>
+                    <th>Cost per kg</th>
+                    <td>Rs. ${perKgCosts[paperType.id] || 'Calculating...'}</td>
+                  </tr>
+                  <tr>
+                    <th colspan="2">Recipe</th>
+                  </tr>
+                  ${paperType.recipe?.map(item => `
+                    <tr>
+                      <td>${item.raddi_type}</td>
+                      <td>
+                        ${item.percentage_used}% (${item.quantity_used} kg) - 
+                        Yield: ${item.yield_percentage}%
+                      </td>
+                    </tr>
+                  `).join('')}
+                </table>
+              </div>
+            `).join('')}
+          </div>
+
+          <div class="section">
+            <div class="section-title">Cost Breakdown</div>
+            <table>
+              <tr>
+                <th>Cost Type</th>
+                <th>Amount (Rs)</th>
+              </tr>
+              <tr>
+                <td>Boiler Fuel</td>
+                <td>${row.boiler_fuel_cost}</td>
+              </tr>
+              <tr>
+                <td>Electricity</td>
+                <td>${row.electricity_cost}</td>
+              </tr>
+              <tr>
+                <td>Maintenance</td>
+                <td>${row.maintenance_cost}</td>
+              </tr>
+              <tr>
+                <td>Labor</td>
+                <td>${row.labor_cost}</td>
+              </tr>
+              <tr>
+                <td>Contractors</td>
+                <td>${row.contractors_cost}</td>
+              </tr>
+              <tr>
+                <td>Daily Expenses</td>
+                <td>${dailyExpense}</td>
+              </tr>
+              <tr class="total-row">
+                <td>Total Cost</td>
+                <td>${Number(row.boiler_fuel_cost || 0) + 
+                    Number(row.electricity_cost || 0) + 
+                    Number(row.maintenance_cost || 0) + 
+                    Number(row.labor_cost || 0) + 
+                    Number(row.contractors_cost || 0) + 
+                    Number(dailyExpense || 0)}</td>
+              </tr>
+            </table>
           </div>
 
           <div class="signature-section">
             <div class="signature-box">
-              <div class="signature-line">Accounts Manager</div>
+              <div class="signature-line">Production Manager</div>
             </div>
             <div class="signature-box">
-              <div class="signature-line">Production Manager</div>
+              <div class="signature-line">Store Manager</div>
             </div>
             <div class="signature-box">
               <div class="signature-line">Director</div>
@@ -346,178 +408,328 @@ const ProductionHistory = () => {
     }, 250);
   };
 
+  const combineRecipeItems = (recipe, totalWeight) => {
+    const combined = {};
+    recipe.forEach(item => {
+      if (!combined[item.raddi_type]) {
+        combined[item.raddi_type] = {
+          raddi_type: item.raddi_type,
+          percentage_used: item.percentage_used,
+          yield_percentage: item.yield_percentage,
+          quantity_used: 0
+        };
+      }
+      // For 80% yield, we need 120% of the target weight
+      const quantity = totalWeight * 1.2;
+      combined[item.raddi_type].quantity_used = quantity;
+    });
+    return Object.values(combined);
+  };
+
   return (
     <Box className="production-history-container">
-      <Paper className="production-history-paper">
-        <Typography variant="h5" className="production-history-title">
-          Production History
-        </Typography>
+      <Paper className="production-history-paper" elevation={3}>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+          <Typography variant="h5" className="production-history-title">
+            Production History
+          </Typography>
+          <Button
+            variant="outlined"
+            startIcon={<FilterList />}
+            onClick={() => setShowFilters(!showFilters)}
+          >
+            {showFilters ? 'Hide Filters' : 'Show Filters'}
+          </Button>
+        </Box>
 
-        {/* Filters */}
-        <Grid container spacing={3} className="production-history-filters">
-          <Grid item xs={12} md={4}>
-            <TextField
-              fullWidth
-              select
-              label="Paper Type"
-              value={filters.paperType}
-              onChange={(e) => setFilters(prev => ({ ...prev, paperType: e.target.value }))}
-            >
-              <MenuItem value="">All Types</MenuItem>
-              {paperTypes.map(type => (
-                <MenuItem key={type.id} value={type.name}>{type.name}</MenuItem>
-              ))}
-            </TextField>
-          </Grid>
-          <LocalizationProvider dateAdapter={AdapterDateFns}>
-            <Grid item xs={12} md={4}>
-              <DatePicker
-                label="Start Date"
-                value={filters.startDate}
-                onChange={(date) => setFilters(prev => ({ ...prev, startDate: date }))}
-                renderInput={(params) => <TextField {...params} fullWidth />}
-              />
-            </Grid>
-            <Grid item xs={12} md={4}>
-              <DatePicker
-                label="End Date"
-                value={filters.endDate}
-                onChange={(date) => setFilters(prev => ({ ...prev, endDate: date }))}
-                renderInput={(params) => <TextField {...params} fullWidth />}
-              />
-            </Grid>
-          </LocalizationProvider>
-        </Grid>
+        {showFilters && (
+          <Card sx={{ mb: 3 }}>
+            <CardContent>
+              <Grid container spacing={3}>
+                <Grid item xs={12} md={4}>
+                  <TextField
+                    fullWidth
+                    select
+                    label="Paper Type"
+                    value={filters.paperType}
+                    onChange={(e) => setFilters(prev => ({ ...prev, paperType: e.target.value }))}
+                  >
+                    <MenuItem value="">All Types</MenuItem>
+                    {paperTypes.map(type => (
+                      <MenuItem key={type.id} value={type.name}>{type.name}</MenuItem>
+                    ))}
+                  </TextField>
+                </Grid>
+                <LocalizationProvider dateAdapter={AdapterDateFns}>
+                  <Grid item xs={12} md={4}>
+                    <DatePicker
+                      label="Start Date"
+                      value={filters.startDate}
+                      onChange={(date) => setFilters(prev => ({ ...prev, startDate: date }))}
+                      renderInput={(params) => <TextField {...params} fullWidth />}
+                    />
+                  </Grid>
+                  <Grid item xs={12} md={4}>
+                    <DatePicker
+                      label="End Date"
+                      value={filters.endDate}
+                      onChange={(date) => setFilters(prev => ({ ...prev, endDate: date }))}
+                      renderInput={(params) => <TextField {...params} fullWidth />}
+                    />
+                  </Grid>
+                </LocalizationProvider>
+              </Grid>
+            </CardContent>
+          </Card>
+        )}
 
         {loading ? (
-          <Box className="production-history-loading">
+          <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
             <CircularProgress />
           </Box>
         ) : (
-          <TableContainer>
-            <Table className="production-history-table">
-              <TableHead>
-                <TableRow className="production-history-table-header">
-                  <TableCell />
-                  <TableCell>Date</TableCell>
-                  <TableCell>Paper Type</TableCell>
-                  <TableCell align="right">Total Weight (kg)</TableCell>
-                  <TableCell>Raddi Used</TableCell>
-                  <TableCell>Boiler Fuel</TableCell>
-                  <TableCell align="right">Electricity Cost (Rs)</TableCell>
-                  <TableCell align="right">Cost per kg</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
+          <Box>
+            <Tabs 
+              value={activeTab} 
+              onChange={(e, newValue) => setActiveTab(newValue)}
+              sx={{ mb: 2 }}
+            >
+              <Tab label="Summary View" />
+              <Tab label="Detailed View" />
+            </Tabs>
+
+            {activeTab === 0 ? (
+              <TableContainer>
+                <Table className="production-history-table">
+                  <TableHead>
+                    <TableRow className="production-history-table-header">
+                      <TableCell width="50px" />
+                      <TableCell>Date</TableCell>
+                      <TableCell>Paper Types</TableCell>
+                      <TableCell align="right">Total Weight (kg)</TableCell>
+                      <TableCell>Boiler Fuel</TableCell>
+                      <TableCell align="right">Electricity Cost (Rs)</TableCell>
+                      <TableCell align="right">Cost per kg</TableCell>
+                      <TableCell width="50px" />
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {history.map((row) => (
+                      <React.Fragment key={row.id}>
+                        <TableRow 
+                          className={`production-history-row ${newEntryId === row.id ? 'highlight-new' : ''}`}
+                          hover
+                        >
+                          <TableCell>
+                            <IconButton
+                              size="small"
+                              onClick={() => setExpandedRow(expandedRow === row.id ? null : row.id)}
+                            >
+                              {expandedRow === row.id ? <ExpandLess /> : <ExpandMore />}
+                            </IconButton>
+                          </TableCell>
+                          <TableCell>{formatDate(row.date_time)}</TableCell>
+                          <TableCell>
+                            <Stack direction="row" spacing={1}>
+                              {row.paper_types?.map(type => (
+                                <Chip 
+                                  key={type.id}
+                                  label={`${type.paper_type}: ${type.total_weight} kg`}
+                                  color="primary"
+                                  variant="outlined"
+                                  size="small"
+                                />
+                              ))}
+                            </Stack>
+                          </TableCell>
+                          <TableCell align="right">
+                            {row.paper_types?.reduce((sum, type) => 
+                              sum + parseFloat(type.total_weight || 0), 0).toFixed(2)}
+                          </TableCell>
+                          <TableCell>{`${row.boiler_fuel_type} (${row.boiler_fuel_quantity} kg)`}</TableCell>
+                          <TableCell align="right">
+                            {`${row.electricity_units} units @ Rs.${row.electricity_unit_price}/unit = Rs.${row.electricity_cost}`}
+                          </TableCell>
+                          <TableCell align="right">
+                            <Stack spacing={0.5}>
+                              {row.paper_types?.map(type => (
+                                <Typography key={type.id} variant="body2">
+                                  {type.paper_type}: Rs. {perKgCosts[type.id] || 'Calculating...'}
+                                </Typography>
+                              ))}
+                            </Stack>
+                          </TableCell>
+                          <TableCell>
+                            <IconButton
+                              size="small"
+                              onClick={() => handlePrintCosts(row)}
+                            >
+                              <Print />
+                            </IconButton>
+                          </TableCell>
+                        </TableRow>
+                        <TableRow>
+                          <TableCell className="production-history-collapse" colSpan={8}>
+                            <Collapse in={expandedRow === row.id} timeout="auto" unmountOnExit>
+                              <Box sx={{ p: 2 }}>
+                                <Grid container spacing={2}>
+                                  {row.paper_types?.map(paperType => (
+                                    <Grid item xs={12} md={6} key={paperType.id}>
+                                      <Card>
+                                        <CardContent>
+                                          <Typography variant="h6" gutterBottom>
+                                            {paperType.paper_type} Details
+                                          </Typography>
+                                          <Table size="small">
+                                            <TableHead>
+                                              <TableRow>
+                                                <TableCell>Raddi Type</TableCell>
+                                                <TableCell align="right">Percentage</TableCell>
+                                                <TableCell align="right">Yield (%)</TableCell>
+                                                <TableCell align="right">Quantity (kg)</TableCell>
+                                              </TableRow>
+                                            </TableHead>
+                                            <TableBody>
+                                              {combineRecipeItems(paperType.recipe || [], paperType.total_weight).map((item) => (
+                                                <TableRow key={item.raddi_type}>
+                                                  <TableCell>{item.raddi_type}</TableCell>
+                                                  <TableCell align="right">{item.percentage_used}%</TableCell>
+                                                  <TableCell align="right">{item.yield_percentage}%</TableCell>
+                                                  <TableCell align="right">{item.quantity_used.toFixed(2)}</TableCell>
+                                                </TableRow>
+                                              ))}
+                                            </TableBody>
+                                          </Table>
+                                        </CardContent>
+                                      </Card>
+                                    </Grid>
+                                  ))}
+                                </Grid>
+                              </Box>
+                            </Collapse>
+                          </TableCell>
+                        </TableRow>
+                      </React.Fragment>
+                    ))}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            ) : (
+              <Box>
                 {history.map((row) => (
-                  <React.Fragment key={row.id}>
-                    <TableRow 
-                      className={`production-history-row ${newEntryId === row.id ? 'highlight-new' : ''}`}
-                      hover
-                    >
-                      <TableCell>
-                        <IconButton
-                          size="small"
-                          onClick={() => setExpandedRow(expandedRow === row.id ? null : row.id)}
-                        >
-                          {expandedRow === row.id ? <KeyboardArrowUp /> : <KeyboardArrowDown />}
-                        </IconButton>
-                        <IconButton
-                          size="small"
-                          onClick={() => handlePrintCosts(row)}
-                          sx={{ ml: 1 }}
-                        >
+                  <Card key={row.id} sx={{ mb: 3 }}>
+                    <CardContent>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                        <Typography variant="h6">
+                          {formatDate(row.date_time)}
+                        </Typography>
+                        <IconButton onClick={() => handlePrintCosts(row)}>
                           <Print />
                         </IconButton>
-                      </TableCell>
-                      <TableCell>{formatDate(row.date_time)}</TableCell>
-                      <TableCell>{row.paper_type}</TableCell>
-                      <TableCell align="right">{row.total_weight}</TableCell>
-                      <TableCell>{formatRaddiUsed(row.recipe)}</TableCell>
-                      <TableCell>{`${row.boiler_fuel_type} (${row.boiler_fuel_quantity} kg)`}</TableCell>
-                      <TableCell align="right">
-                        {`${row.electricity_units} units @ Rs.${row.electricity_unit_price}/unit = Rs.${row.electricity_cost}`}
-                      </TableCell>
-                      <TableCell align="right">
-                        {perKgCosts[row.id] ? `Rs. ${perKgCosts[row.id]}` : <CircularProgress size={20} />}
-                      </TableCell>
-                    </TableRow>
-                    <TableRow>
-                      <TableCell className="production-history-collapse" colSpan={7}>
-                        <Collapse in={expandedRow === row.id} timeout="auto" unmountOnExit>
-                          <Box sx={{ margin: 1 }}>
-                            <Typography variant="h6" gutterBottom component="div">
-                              Reels
-                            </Typography>
-                            <Table size="small">
-                              <TableHead>
-                                <TableRow>
-                                  <TableCell>Size</TableCell>
-                                  <TableCell align="right">Weight (kg)</TableCell>
-                                </TableRow>
-                              </TableHead>
-                              <TableBody>
-                                {row.reels?.map((reel) => (
-                                  <TableRow key={reel.id}>
-                                    <TableCell>{reel.size}</TableCell>
-                                    <TableCell align="right">{reel.weight}</TableCell>
-                                  </TableRow>
-                                ))}
-                              </TableBody>
-                            </Table>
+                      </Box>
+                      
+                      <Grid container spacing={2}>
+                        <Grid item xs={12} md={6}>
+                          <Typography variant="subtitle1" gutterBottom>
+                            Production Summary
+                          </Typography>
+                          <Table size="small">
+                            <TableBody>
+                              <TableRow>
+                                <TableCell>Total Weight</TableCell>
+                                <TableCell align="right">
+                                  {row.paper_types?.reduce((sum, type) => 
+                                    sum + parseFloat(type.total_weight || 0), 0).toFixed(2)} kg
+                                </TableCell>
+                              </TableRow>
+                              <TableRow>
+                                <TableCell>Boiler Fuel</TableCell>
+                                <TableCell align="right">
+                                  {`${row.boiler_fuel_type} (${row.boiler_fuel_quantity} kg)`}
+                                </TableCell>
+                              </TableRow>
+                              <TableRow>
+                                <TableCell>Electricity</TableCell>
+                                <TableCell align="right">
+                                  {`${row.electricity_units} units @ Rs.${row.electricity_unit_price}/unit`}
+                                </TableCell>
+                              </TableRow>
+                            </TableBody>
+                          </Table>
+                        </Grid>
 
-                            <Typography variant="h6" gutterBottom component="div" sx={{ mt: 2 }}>
-                              Recipe
-                            </Typography>
-                            <Table size="small">
-                              <TableHead>
-                                <TableRow>
-                                  <TableCell>Raddi Type</TableCell>
-                                  <TableCell align="right">Percentage</TableCell>
-                                  <TableCell align="right">Yield (%)</TableCell>
-                                  <TableCell align="right">Quantity (kg)</TableCell>
-                                </TableRow>
-                              </TableHead>
-                              <TableBody>
-                                {row.recipe?.map((item) => (
-                                  <TableRow key={item.id}>
-                                    <TableCell>{item.raddi_type}</TableCell>
-                                    <TableCell align="right">{item.percentage_used}%</TableCell>
-                                    <TableCell align="right">{item.yield_percentage}%</TableCell>
-                                    <TableCell align="right">{item.quantity_used}</TableCell>
-                                  </TableRow>
-                                ))}
-                              </TableBody>
-                            </Table>
+                        <Grid item xs={12} md={6}>
+                          <Typography variant="subtitle1" gutterBottom>
+                            Cost Summary
+                          </Typography>
+                          <Table size="small">
+                            <TableBody>
+                              <TableRow>
+                                <TableCell>Boiler Fuel Cost</TableCell>
+                                <TableCell align="right">Rs. {row.boiler_fuel_cost}</TableCell>
+                              </TableRow>
+                              <TableRow>
+                                <TableCell>Electricity Cost</TableCell>
+                                <TableCell align="right">Rs. {row.electricity_cost}</TableCell>
+                              </TableRow>
+                              <TableRow>
+                                <TableCell>Maintenance Cost</TableCell>
+                                <TableCell align="right">Rs. {row.maintenance_cost}</TableCell>
+                              </TableRow>
+                              <TableRow>
+                                <TableCell>Labor Cost</TableCell>
+                                <TableCell align="right">Rs. {row.labor_cost}</TableCell>
+                              </TableRow>
+                              <TableRow>
+                                <TableCell>Contractors Cost</TableCell>
+                                <TableCell align="right">Rs. {row.contractors_cost}</TableCell>
+                              </TableRow>
+                              <TableRow>
+                                <TableCell>Daily Expenses</TableCell>
+                                <TableCell align="right">Rs. {row.daily_expenses}</TableCell>
+                              </TableRow>
+                            </TableBody>
+                          </Table>
+                        </Grid>
 
-                            <Typography variant="h6" gutterBottom component="div" sx={{ mt: 2 }}>
-                              Electricity Details
-                            </Typography>
-                            <Table size="small">
-                              <TableHead>
-                                <TableRow>
-                                  <TableCell>Units Consumed</TableCell>
-                                  <TableCell align="right">Unit Price (Rs)</TableCell>
-                                  <TableCell align="right">Total Cost (Rs)</TableCell>
-                                </TableRow>
-                              </TableHead>
-                              <TableBody>
-                                <TableRow>
-                                  <TableCell>{row.electricity_units}</TableCell>
-                                  <TableCell align="right">{row.electricity_unit_price}</TableCell>
-                                  <TableCell align="right">{row.electricity_cost}</TableCell>
-                                </TableRow>
-                              </TableBody>
-                            </Table>
-                          </Box>
-                        </Collapse>
-                      </TableCell>
-                    </TableRow>
-                  </React.Fragment>
+                        {row.paper_types?.map(paperType => (
+                          <Grid item xs={12} key={paperType.id}>
+                            <Card variant="outlined">
+                              <CardContent>
+                                <Typography variant="subtitle1" gutterBottom>
+                                  {paperType.paper_type} Details
+                                </Typography>
+                                <Table size="small">
+                                  <TableHead>
+                                    <TableRow>
+                                      <TableCell>Raddi Type</TableCell>
+                                      <TableCell align="right">Percentage</TableCell>
+                                      <TableCell align="right">Yield (%)</TableCell>
+                                      <TableCell align="right">Quantity (kg)</TableCell>
+                                    </TableRow>
+                                  </TableHead>
+                                  <TableBody>
+                                    {combineRecipeItems(paperType.recipe || [], paperType.total_weight).map((item) => (
+                                      <TableRow key={item.raddi_type}>
+                                        <TableCell>{item.raddi_type}</TableCell>
+                                        <TableCell align="right">{item.percentage_used}%</TableCell>
+                                        <TableCell align="right">{item.yield_percentage}%</TableCell>
+                                        <TableCell align="right">{item.quantity_used.toFixed(2)}</TableCell>
+                                      </TableRow>
+                                    ))}
+                                  </TableBody>
+                                </Table>
+                              </CardContent>
+                            </Card>
+                          </Grid>
+                        ))}
+                      </Grid>
+                    </CardContent>
+                  </Card>
                 ))}
-              </TableBody>
-            </Table>
-          </TableContainer>
+              </Box>
+            )}
+          </Box>
         )}
       </Paper>
     </Box>

@@ -215,6 +215,7 @@ const SaleReturnForm = () => {
   const handlePrint = () => {
     const printWindow = window.open('', '_blank');
     const currentDate = format(new Date(), 'dd/MM/yyyy');
+    const currentTime = format(new Date(), 'HH:mm:ss');
     const selectedCustomer = customers.find(c => c.id === formData.purchaserId);
 
     printWindow.document.write(`
@@ -292,6 +293,10 @@ const SaleReturnForm = () => {
             <tr>
               <td><strong>Date:</strong></td>
               <td>${currentDate}</td>
+            </tr>
+            <tr>
+              <td><strong>Time:</strong></td>
+              <td>${currentTime}</td>
             </tr>
             <tr>
               <td><strong>Customer:</strong></td>

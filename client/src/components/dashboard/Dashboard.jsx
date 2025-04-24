@@ -36,13 +36,18 @@ const Dashboard = () => {
     const handleCashBalanceUpdated = () => {
       fetchDashboardData();
     };
+    const handleBankBalanceUpdated = () => {
+      fetchDashboardData();
+    };
     
     window.addEventListener('paymentReceived', handlePaymentReceived);
     window.addEventListener('cashBalanceUpdated', handleCashBalanceUpdated);
+    window.addEventListener('bankBalanceUpdated', handleBankBalanceUpdated);
     
     return () => {
       window.removeEventListener('paymentReceived', handlePaymentReceived);
       window.removeEventListener('cashBalanceUpdated', handleCashBalanceUpdated);
+      window.removeEventListener('bankBalanceUpdated', handleBankBalanceUpdated);
     };
   }, []);
 
@@ -299,9 +304,10 @@ const Dashboard = () => {
                     <Table size="small">
                       <TableHead>
                         <TableRow>
-                          <TableCell>Item</TableCell>
-                          <TableCell align="right">Quantity</TableCell>
+                          <TableCell>Item Type</TableCell>
+                          <TableCell align="right">Current Quantity</TableCell>
                           <TableCell>Unit</TableCell>
+                          <TableCell align="right">Latest Price (Rs.)</TableCell>
                         </TableRow>
                       </TableHead>
                       <TableBody>
@@ -309,15 +315,23 @@ const Dashboard = () => {
                           stockData.map((item) => (
                             <TableRow key={item.item_type}>
                               <TableCell>{item.item_type || '-'}</TableCell>
-                            <TableCell align="right">
+                              <TableCell align="right">
                                 {formatNumber(item.current_quantity)}
                               </TableCell>
                               <TableCell>{item.unit || '-'}</TableCell>
+                            <TableCell align="right">
+                                {item.latest_price ? 
+                                  Number(item.latest_price).toLocaleString(undefined, {
+                                    minimumFractionDigits: 2,
+                                    maximumFractionDigits: 2
+                                  }) : 
+                                  '-'}
+                              </TableCell>
                             </TableRow>
                           ))
                         ) : (
                           <TableRow>
-                            <TableCell colSpan={3} align="center">
+                            <TableCell colSpan={4} align="center">
                               No stock data available
                             </TableCell>
                           </TableRow>
@@ -337,14 +351,14 @@ const Dashboard = () => {
                 <CardContent>
                   <Typography variant="h6" gutterBottom>
                     Recent Production
-                    </Typography>
+                  </Typography>
                   <TableContainer>
                     <Table size="small">
                       <TableHead>
                         <TableRow>
                           <TableCell>Date</TableCell>
-                          <TableCell>Type</TableCell>
-                          <TableCell align="right">Quantity</TableCell>
+                          <TableCell>Paper Types</TableCell>
+                          <TableCell align="right">Total Weight</TableCell>
                           <TableCell>Unit</TableCell>
                           <TableCell align="right">Cost per kg</TableCell>
                         </TableRow>
@@ -352,35 +366,61 @@ const Dashboard = () => {
                       <TableBody>
                         {productionData.length > 0 ? (
                           productionData.slice(0, 5).map((record) => {
-                            // Calculate costs similar to ProductionHistory.jsx
-                            const raddiCost = record.recipe?.reduce((total, item) => {
-                              return total + (parseFloat(item.quantity_used || 0) * parseFloat(item.unit_price || 0));
-                            }, 0) || 0;
-
+                            // Calculate common costs
                             const boilerFuelCost = parseFloat(record.boiler_fuel_quantity || 0) * parseFloat(record.boiler_fuel_price || 0);
                             const electricityCost = parseFloat(record.electricity_cost || 0);
                             const maintenanceCost = parseFloat(record.maintenance_cost || 0);
                             const laborCost = parseFloat(record.labor_cost || 0);
                             const contractorsCost = parseFloat(record.contractors_cost || 0);
                             const dailyExpenses = parseFloat(record.daily_expenses || 0);
+                            const totalCommonCost = boilerFuelCost + electricityCost + maintenanceCost + 
+                                                  laborCost + contractorsCost + dailyExpenses;
 
-                            const totalCost = raddiCost + boilerFuelCost + electricityCost + maintenanceCost + 
-                                            laborCost + contractorsCost + dailyExpenses;
-                            const totalWeight = parseFloat(record.total_weight || 1);
-                            const costPerKg = totalCost / totalWeight;
+                            // Calculate total weight for all paper types
+                            const totalWeight = record.paper_types?.reduce((sum, type) => 
+                              sum + parseFloat(type.total_weight || 0), 0) || 0;
+
+                            // Get all paper types and their costs
+                            const paperTypes = record.paper_types || [];
+                            const paperTypesList = paperTypes.map(pt => {
+                              const paperTypeWeight = parseFloat(pt.total_weight || 0);
+                              const weightRatio = totalWeight > 0 ? paperTypeWeight / totalWeight : 0;
+                              
+                              // Calculate recipe costs
+                              const recipeCost = pt.recipe?.reduce((total, item) => {
+                                return total + (parseFloat(item.quantity_used || 0) * parseFloat(item.unit_price || 0));
+                              }, 0) || 0;
+
+                              // Calculate total cost (recipe cost + proportional common costs)
+                              const totalCost = recipeCost + (totalCommonCost * weightRatio);
+                              const perKgCost = paperTypeWeight > 0 ? totalCost / paperTypeWeight : 0;
+
+                              return {
+                                name: pt.paper_type,
+                                weight: paperTypeWeight,
+                                costPerKg: perKgCost
+                              };
+                            });
+
+                            // Calculate average cost per kg for the production
+                            const totalCost = paperTypesList.reduce((sum, pt) => 
+                              sum + (pt.costPerKg * pt.weight), 0);
+                            const avgCostPerKg = totalWeight > 0 ? totalCost / totalWeight : 0;
 
                             return (
                               <TableRow key={record.id}>
                                 <TableCell>
                                   {record.date_time ? new Date(record.date_time).toLocaleDateString() : '-'}
                                 </TableCell>
-                                <TableCell>{record.paper_type || '-'}</TableCell>
+                                <TableCell>
+                                  {paperTypesList.map(pt => `${pt.name} (${pt.costPerKg.toFixed(2)}/kg)`).join(', ')}
+                                </TableCell>
                                 <TableCell align="right">
-                                  {formatNumber(record.total_weight)}
+                                  {formatNumber(totalWeight)}
                                 </TableCell>
                                 <TableCell>kg</TableCell>
-                            <TableCell align="right">
-                                  Rs. {formatNumber(costPerKg)}
+                                <TableCell align="right">
+                                  Rs. {avgCostPerKg.toFixed(2)}
                                 </TableCell>
                               </TableRow>
                             );
@@ -397,9 +437,9 @@ const Dashboard = () => {
                   </TableContainer>
                 </CardContent>
               </Card>
-              </Paper>
-            </Grid>
+            </Paper>
           </Grid>
+        </Grid>
         )}
       </Box>
   );

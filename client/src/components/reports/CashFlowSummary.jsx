@@ -364,8 +364,17 @@ const CashFlowSummary = () => {
             <tbody>
               ${getFilteredData().map(item => `
                 <tr>
-                  <td class="date-column">${format(new Date(item.date), 'dd/MM/yyyy')}</td>
-                  <td class="description-column">${item.description}</td>
+                  <td class="date-column">${format(new Date(item.date), 'dd/MM/yyyy HH:mm')}</td>
+                  <td class="description-column">
+                    ${item.source_type === 'PAYMENT' ? `
+                      ${item.payment_type === 'RECEIVED' ? 'Receipt' : 'Payment'} 
+                      ${item.payment_mode === 'ONLINE' && item.bank_name ? `(ONLINE - ${item.bank_name})` : `(${item.payment_mode})`} 
+                      ${item.voucher_no ? `[${item.voucher_no}]` : ''}
+                      from ${item.related_account_name || item.receiver_name}
+                      ${item.receiver_name && item.receiver_name !== item.related_account_name ? ` (${item.receiver_name})` : ''}
+                      ${item.remarks ? ` - ${item.remarks}` : ''}
+                    ` : item.description}
+                  </td>
                   <td class="credit-amount">${item.flow_type === 'CREDIT' ? Number(item.amount).toLocaleString() : ''}</td>
                   <td class="debit-amount">${item.flow_type === 'DEBIT' ? Number(item.amount).toLocaleString() : ''}</td>
                   <td class="balance-cell">${Number(item.balanceAmount).toLocaleString()} ${item.balanceType}</td>
@@ -521,8 +530,19 @@ const CashFlowSummary = () => {
               <TableBody>
                 {getFilteredData().map((item, index) => (
                   <TableRow key={index} hover>
-                    <TableCell>{format(new Date(item.date), 'dd/MM/yyyy')}</TableCell>
-                    <TableCell className="description-column">{item.description}</TableCell>
+                    <TableCell>{format(new Date(item.date), 'dd/MM/yyyy HH:mm')}</TableCell>
+                    <TableCell className="description-column">
+                      {item.source_type === 'PAYMENT' ? (
+                        <>
+                          {item.payment_type === 'RECEIVED' ? 'Receipt' : 'Payment'} {' '}
+                          {item.payment_mode === 'ONLINE' && item.bank_name ? `(ONLINE - ${item.bank_name})` : `(${item.payment_mode})`} {' '}
+                          {item.voucher_no && `[${item.voucher_no}] `}
+                          from {item.related_account_name || item.receiver_name}
+                          {item.receiver_name && item.receiver_name !== item.related_account_name ? ` (${item.receiver_name})` : ''}
+                          {item.remarks && ` - ${item.remarks}`}
+                        </>
+                      ) : item.description}
+                    </TableCell>
                     <TableCell 
                       align="right"
                       sx={{

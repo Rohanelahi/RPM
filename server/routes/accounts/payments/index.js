@@ -77,10 +77,36 @@ const addProcessedByRoleColumn = async () => {
   }
 };
 
+// Add bank_account_id column if it doesn't exist
+const addBankAccountIdColumn = async () => {
+  const client = await pool.connect();
+  try {
+    await client.query(`
+      DO $$ 
+      BEGIN 
+        IF NOT EXISTS (
+          SELECT 1 
+          FROM information_schema.columns 
+          WHERE table_name = 'payments' 
+          AND column_name = 'bank_account_id'
+        ) THEN 
+          ALTER TABLE payments ADD COLUMN bank_account_id INTEGER REFERENCES bank_accounts(id);
+        END IF;
+      END $$;
+    `);
+    console.log('Bank account ID column added successfully or already exists');
+  } catch (error) {
+    console.error('Error adding bank_account_id column:', error);
+  } finally {
+    client.release();
+  }
+};
+
 // Run the migration when the server starts
 addReceiverNameColumn();
 addVoucherNoColumn();
 addProcessedByRoleColumn();
+addBankAccountIdColumn();
 
 // Generate next voucher number
 const generateVoucherNo = async (type, client) => {
@@ -413,7 +439,10 @@ router.get('/history', async (req, res) => {
         p.*,
         a.account_name,
         a.account_type,
-        b.bank_name
+        CASE 
+          WHEN p.bank_account_id IS NOT NULL THEN b.bank_name
+          ELSE NULL
+        END as bank_name
       FROM payments p
       JOIN accounts a ON p.account_id = a.id
       LEFT JOIN bank_accounts b ON p.bank_account_id = b.id

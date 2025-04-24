@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Box,
   TextField,
@@ -8,12 +8,18 @@ import {
   Typography,
   Grid,
   CircularProgress,
-  Stack
+  Stack,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  IconButton,
+  Tooltip
 } from '@mui/material';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
-import { Print } from '@mui/icons-material';
+import { Print, Add as AddIcon } from '@mui/icons-material';
 import { format } from 'date-fns';
 import config from '../../config';
 import '../../styles/Payment.css';
@@ -21,6 +27,9 @@ import '../../styles/Payment.css';
 const ExpenseForm = () => {
   const [loading, setLoading] = useState(false);
   const [isPrinted, setIsPrinted] = useState(false);
+  const [expenseTypes, setExpenseTypes] = useState([]);
+  const [newExpenseType, setNewExpenseType] = useState({ name: '', description: '' });
+  const [openDialog, setOpenDialog] = useState(false);
   const [formData, setFormData] = useState({
     date: new Date(),
     expenseType: '',
@@ -29,12 +38,44 @@ const ExpenseForm = () => {
     remarks: ''
   });
 
-  const expenseTypes = [
-    { value: 'PETROL', label: 'Petrol' },
-    { value: 'MESS', label: 'Mess' },
-    { value: 'ADMIN', label: 'Admin' },
-    { value: 'MISC', label: 'Miscellaneous' }
-  ];
+  useEffect(() => {
+    fetchExpenseTypes();
+  }, []);
+
+  const fetchExpenseTypes = async () => {
+    try {
+      const response = await fetch(`${config.apiUrl}/accounts/expenses/types`);
+      if (!response.ok) throw new Error('Failed to fetch expense types');
+      const data = await response.json();
+      setExpenseTypes(data);
+    } catch (error) {
+      console.error('Error fetching expense types:', error);
+      alert('Failed to fetch expense types');
+    }
+  };
+
+  const handleAddExpenseType = async () => {
+    try {
+      const response = await fetch(`${config.apiUrl}/accounts/expenses/types`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(newExpenseType),
+      });
+
+      if (!response.ok) throw new Error('Failed to add expense type');
+
+      const data = await response.json();
+      setExpenseTypes([...expenseTypes, data]);
+      setNewExpenseType({ name: '', description: '' });
+      setOpenDialog(false);
+      alert('Expense type added successfully');
+    } catch (error) {
+      console.error('Error:', error);
+      alert('Error adding expense type: ' + error.message);
+    }
+  };
 
   const handlePrint = () => {
     if (!formData.amount || !formData.expenseType || !formData.receiverName) {
@@ -55,7 +96,7 @@ const ExpenseForm = () => {
             <tr>
               <td style="padding: 8px; border: 1px solid #ddd;"><strong>Expense Type:</strong></td>
               <td style="padding: 8px; border: 1px solid #ddd;">${
-                expenseTypes.find(type => type.value === formData.expenseType)?.label || formData.expenseType
+                expenseTypes.find(type => type.id === formData.expenseType)?.name || formData.expenseType
               }</td>
             </tr>
             <tr>
@@ -112,7 +153,10 @@ const ExpenseForm = () => {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(formData),
+        body: JSON.stringify({
+          ...formData,
+          expenseType: formData.expenseType // Send the expense type ID
+        }),
       });
 
       if (!response.ok) {
@@ -156,20 +200,34 @@ const ExpenseForm = () => {
                 />
               </Grid>
               <Grid item xs={12} md={6}>
-                <TextField
-                  select
-                  fullWidth
-                  label="Expense Type"
-                  value={formData.expenseType}
-                  onChange={(e) => setFormData(prev => ({ ...prev, expenseType: e.target.value }))}
-                  required
-                >
-                  {expenseTypes.map((type) => (
-                    <MenuItem key={type.value} value={type.value}>
-                      {type.label}
-                    </MenuItem>
-                  ))}
-                </TextField>
+                <Box sx={{ display: 'flex', gap: 1 }}>
+                  <TextField
+                    select
+                    fullWidth
+                    label="Expense Type"
+                    value={formData.expenseType}
+                    onChange={(e) => setFormData(prev => ({ ...prev, expenseType: e.target.value }))}
+                    required
+                  >
+                    {expenseTypes.map((type) => (
+                      <MenuItem key={type.id} value={type.id}>
+                        {type.name}
+                      </MenuItem>
+                    ))}
+                  </TextField>
+                  <Tooltip title="Add New Expense Type">
+                    <IconButton
+                      onClick={() => setOpenDialog(true)}
+                      sx={{ 
+                        bgcolor: '#1a1a1a', 
+                        '&:hover': { bgcolor: '#000' },
+                        color: 'white'
+                      }}
+                    >
+                      <AddIcon />
+                    </IconButton>
+                  </Tooltip>
+                </Box>
               </Grid>
               <Grid item xs={12} md={6}>
                 <TextField
@@ -222,6 +280,41 @@ const ExpenseForm = () => {
             </Grid>
           </form>
         </Paper>
+
+        {/* Add Expense Type Dialog */}
+        <Dialog open={openDialog} onClose={() => setOpenDialog(false)}>
+          <DialogTitle>Add New Expense Type</DialogTitle>
+          <DialogContent>
+            <Box sx={{ pt: 2 }}>
+              <TextField
+                fullWidth
+                label="Name"
+                value={newExpenseType.name}
+                onChange={(e) => setNewExpenseType(prev => ({ ...prev, name: e.target.value }))}
+                sx={{ mb: 2 }}
+                required
+              />
+              <TextField
+                fullWidth
+                label="Description"
+                value={newExpenseType.description}
+                onChange={(e) => setNewExpenseType(prev => ({ ...prev, description: e.target.value }))}
+                multiline
+                rows={2}
+              />
+            </Box>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setOpenDialog(false)}>Cancel</Button>
+            <Button 
+              onClick={handleAddExpenseType}
+              variant="contained"
+              disabled={!newExpenseType.name}
+            >
+              Add
+            </Button>
+          </DialogActions>
+        </Dialog>
       </Box>
     </LocalizationProvider>
   );

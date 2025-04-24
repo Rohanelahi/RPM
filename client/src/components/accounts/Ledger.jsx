@@ -61,9 +61,11 @@ const Ledger = () => {
 
   const formatTransactionDetails = (transaction) => {
     // For payment transactions, show description as is (bank name is already included)
-    if (transaction.description?.includes('Payment received from') || 
-        transaction.description?.includes('Payment issued to')) {
-      return transaction.description;
+    if (transaction.description?.includes('Payment received from')) {
+      return transaction.description.replace('Payment received from', 'Receipt from');
+    }
+    if (transaction.description?.includes('Payment issued to')) {
+      return transaction.description.replace('Payment issued to', 'Payment to');
     }
     
     // Helper functions

@@ -208,6 +208,28 @@ const api = {
       throw new Error('Failed to delete employee');
     }
   },
+
+  put: async (endpoint, data) => {
+    try {
+      const response = await fetch(`${config.apiUrl}${endpoint}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(data),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to update data');
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error('API Error:', error);
+      throw error;
+    }
+  },
 };
 
 export default api; 

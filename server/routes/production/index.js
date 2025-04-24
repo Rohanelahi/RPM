@@ -11,58 +11,23 @@ router.post('/add', async (req, res) => {
     
     const {
       date,
-      paperType,
-      totalWeight,
+      paperTypes,
       boilerFuelType,
       boilerFuelQuantity,
       boilerFuelCost,
       electricityUnits,
       electricityUnitPrice,
       electricityCost,
-      recipe,
-      totalYield
+      maintenanceCost,
+      laborCost,
+      contractorsCost,
+      dailyExpenses
     } = req.body;
 
-    // Validate numeric fields with proper limits
-    const validatedTotalWeight = totalWeight === '' ? 0 : 
-      Math.min(parseFloat(totalWeight), 9999999.99); // Limit to fit within NUMERIC(10,2)
+    // Calculate total weight for all paper types
+    const totalWeight = paperTypes.reduce((sum, type) => sum + parseFloat(type.totalWeight || 0), 0);
 
-    const validatedBoilerFuelQuantity = boilerFuelQuantity === '' ? 0 : 
-      Math.min(parseFloat(boilerFuelQuantity), 9999999.99);
-
-    const validatedBoilerFuelCost = boilerFuelCost === '' ? 0 : 
-      Math.min(parseFloat(boilerFuelCost), 9999999.99);
-
-    const validatedElectricityUnits = electricityUnits === '' ? 0 : 
-      Math.min(parseFloat(electricityUnits), 9999999.99);
-
-    const validatedElectricityUnitPrice = electricityUnitPrice === '' ? 0 : 
-      Math.min(parseFloat(electricityUnitPrice), 9999999.99);
-
-    const validatedElectricityCost = electricityCost === '' ? 0 : 
-      Math.min(parseFloat(electricityCost), 9999999.99);
-
-    const validatedTotalYield = totalYield === '' ? 0 : 
-      Math.min(parseFloat(totalYield), 100); // Yield should be a percentage
-
-    // Validate recipe calculations
-    const validatedRecipe = recipe.map(item => {
-      const percentageUsed = parseFloat(item.percentageUsed) || 0;
-      const yieldPercentage = parseFloat(item.yield) || 0;
-      
-      // New formula: (totalWeight + (totalWeight - totalWeight * (yield/100))) * (percentage/100)
-      const wastage = validatedTotalWeight - (validatedTotalWeight * (yieldPercentage / 100));
-      const totalRequired = validatedTotalWeight + wastage;
-      const calculatedQuantity = totalRequired * (percentageUsed / 100);
-      
-      return {
-        ...item,
-        quantity_used: calculatedQuantity.toFixed(2),
-        yield_percentage: yieldPercentage
-      };
-    });
-
-    // Insert main production record with electricity fields
+    // Insert main production record with common costs
     const productionResult = await client.query(
       `INSERT INTO production (
         date_time,
@@ -74,68 +39,92 @@ router.post('/add', async (req, res) => {
         boiler_fuel_cost,
         electricity_units,
         electricity_unit_price,
-        electricity_cost,
-        total_yield_percentage
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING id`,
+        electricity_cost
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING id`,
       [
         new Date(date),
-        paperType,
-        validatedTotalWeight,
-        0, // Set total_reels to 0 since we're not using reels anymore
+        paperTypes[0].paperType, // Use the first paper type as the main paper type
+        totalWeight,
+        0, // Default value for total_reels
         boilerFuelType || null,
-        validatedBoilerFuelQuantity,
-        validatedBoilerFuelCost,
-        validatedElectricityUnits,
-        validatedElectricityUnitPrice,
-        validatedElectricityCost,
-        validatedTotalYield
+        boilerFuelQuantity || 0,
+        boilerFuelCost || 0,
+        electricityUnits || 0,
+        electricityUnitPrice || 0,
+        electricityCost || 0
       ]
     );
 
     const productionId = productionResult.rows[0].id;
 
-    // Insert recipe items with validation and calculated quantity
-    for (const item of validatedRecipe) {
-      await client.query(
-        `INSERT INTO production_recipe (
+    // Process each paper type
+    for (const paperType of paperTypes) {
+      const paperTypeWeight = parseFloat(paperType.totalWeight || 0);
+      const weightRatio = paperTypeWeight / totalWeight;
+
+      // Insert paper type record
+      const paperTypeResult = await client.query(
+        `INSERT INTO production_paper_types (
           production_id,
-          raddi_type,
-          percentage_used,
-          quantity_used,
-          yield_percentage
-        ) VALUES ($1, $2, $3, $4, $5)`,
+          paper_type,
+          total_weight
+        ) VALUES ($1, $2, $3) RETURNING id`,
         [
-          productionId, 
-          item.raddiType || '', 
-          parseFloat(item.percentageUsed) || 0,
-          parseFloat(item.quantity_used) || 0,
-          parseFloat(item.yield_percentage) || 0
+          productionId,
+          paperType.paperType,
+          paperTypeWeight
         ]
       );
 
-      // Insert stock adjustment record
-      await client.query(
-        `INSERT INTO stock_adjustments (
-          item_type,
-          quantity,
-          adjustment_type,
-          reference_type,
-          reference_id,
-          date_time
-        ) VALUES ($1, $2, $3, $4, $5, $6)`,
-        [
-          item.raddiType,
-          -parseFloat(item.quantity_used), // Negative quantity for reduction
-          'PRODUCTION_USAGE',
-          'PRODUCTION',
-          productionId,
-          new Date(date)
-        ]
-      );
+      const paperTypeId = paperTypeResult.rows[0].id;
+
+      // Insert recipe items for this paper type
+      for (const item of paperType.recipe) {
+        const quantityUsed = parseFloat(item.quantityUsed || 0);
+        
+        await client.query(
+          `INSERT INTO production_recipe (
+            production_id,
+            raddi_type,
+            percentage_used,
+            quantity_used,
+            yield_percentage
+          ) VALUES ($1, $2, $3, $4, $5)`,
+          [
+            productionId,
+            item.raddiType,
+            parseFloat(item.percentageUsed) || 0,
+            quantityUsed,
+            parseFloat(item.yield) || 0
+          ]
+        );
+
+        // Insert stock adjustment record for raddi
+        if (quantityUsed > 0) {
+          await client.query(
+            `INSERT INTO stock_adjustments (
+              item_type,
+              quantity,
+              adjustment_type,
+              reference_type,
+              reference_id,
+              date_time
+            ) VALUES ($1, $2, $3, $4, $5, $6)`,
+            [
+              item.raddiType,
+              -quantityUsed, // Negative quantity for reduction
+              'PRODUCTION_USAGE',
+              'PRODUCTION',
+              productionId,
+              new Date(date)
+            ]
+          );
+        }
+      }
     }
 
     // Add stock adjustment for boiler fuel
-    if (boilerFuelType && validatedBoilerFuelQuantity > 0) {
+    if (boilerFuelType && boilerFuelQuantity > 0) {
       await client.query(
         `INSERT INTO stock_adjustments (
           item_type,
@@ -147,7 +136,7 @@ router.post('/add', async (req, res) => {
         ) VALUES ($1, $2, $3, $4, $5, $6)`,
         [
           boilerFuelType,
-          -validatedBoilerFuelQuantity, // Negative quantity for reduction
+          -boilerFuelQuantity, // Negative quantity for reduction
           'PRODUCTION_USAGE',
           'PRODUCTION',
           productionId,
@@ -287,18 +276,38 @@ router.get('/history', async (req, res) => {
           SUM(e.amount) as daily_expense
         FROM expenses e
         GROUP BY DATE(e.date)
+      ),
+      PaperTypes AS (
+        SELECT 
+          ppt.production_id,
+          json_agg(
+            json_build_object(
+              'id', ppt.id,
+              'paper_type', ppt.paper_type,
+              'total_weight', ppt.total_weight,
+              'recipe', (
+                SELECT json_agg(
+                  json_build_object(
+                    'id', pr.id,
+                    'raddi_type', pr.raddi_type,
+                    'percentage_used', pr.percentage_used,
+                    'quantity_used', pr.quantity_used,
+                    'yield_percentage', pr.yield_percentage,
+                    'unit_price', COALESCE(lp.latest_price, 0)
+                  )
+                )
+                FROM production_recipe pr
+                LEFT JOIN LatestPrices lp ON pr.raddi_type = lp.item_type
+                WHERE pr.production_id = ppt.production_id
+              )
+            )
+          ) as paper_types
+        FROM production_paper_types ppt
+        GROUP BY ppt.production_id
       )
       SELECT 
         p.*,
-        json_agg(
-          json_build_object(
-            'raddi_type', pr.raddi_type,
-            'percentage_used', pr.percentage_used,
-            'quantity_used', pr.quantity_used,
-            'yield_percentage', pr.yield_percentage,
-            'unit_price', COALESCE(lp.latest_price, 0)
-          )
-        ) as recipe,
+        pt.paper_types,
         COALESCE(mc.maintenance_cost, 0) as maintenance_cost,
         COALESCE(dl.daily_salary_cost, 0) as labor_cost,
         COALESCE(cc.daily_contractors_cost, 0) as contractors_cost,
@@ -309,8 +318,7 @@ router.get('/history', async (req, res) => {
           WHERE lp.item_type = p.boiler_fuel_type
         ) as boiler_fuel_price
       FROM production p
-      LEFT JOIN production_recipe pr ON p.id = pr.production_id
-      LEFT JOIN LatestPrices lp ON pr.raddi_type = lp.item_type
+      LEFT JOIN PaperTypes pt ON p.id = pt.production_id
       LEFT JOIN MaintenanceCosts mc ON DATE(p.date_time) = mc.cost_date
       LEFT JOIN DailyLabor dl ON DATE(p.date_time) = dl.attendance_date
       LEFT JOIN DailyExpenses de ON DATE(p.date_time) = de.expense_date
@@ -318,7 +326,11 @@ router.get('/history', async (req, res) => {
     `;
 
     if (paperType) {
-      conditions.push(`p.paper_type = $${paramCount}`);
+      conditions.push(`EXISTS (
+        SELECT 1 FROM production_paper_types ppt 
+        WHERE ppt.production_id = p.id 
+        AND ppt.paper_type = $${paramCount}
+      )`);
       params.push(paperType);
       paramCount++;
     }
@@ -353,11 +365,10 @@ router.get('/history', async (req, res) => {
       query += ` WHERE ${conditions.join(' AND ')}`;
     }
 
-    query += ` GROUP BY p.id, mc.maintenance_cost, dl.daily_salary_cost, cc.daily_contractors_cost, de.daily_expense ORDER BY p.date_time DESC`;
+    query += ` ORDER BY p.date_time DESC`;
 
     const result = await pool.query(query, params);
     res.json(result.rows);
-
   } catch (error) {
     console.error('Error fetching production history:', error);
     res.status(500).json({ error: error.message });
@@ -792,26 +803,48 @@ router.get('/paper-types', async (req, res) => {
 
 // Add new paper type
 router.post('/paper-types', async (req, res) => {
+  const client = await pool.connect();
+  
   try {
+    await client.query('BEGIN');
+    
     const { name, description } = req.body;
     
     if (!name) {
       return res.status(400).json({ error: 'Paper type name is required' });
     }
 
-    const result = await pool.query(
+    // First, drop the existing constraint
+    await client.query('ALTER TABLE production DROP CONSTRAINT IF EXISTS production_paper_type_check');
+    
+    // Insert the new paper type
+    const result = await client.query(
       'INSERT INTO paper_types (name, description) VALUES ($1, $2) RETURNING *',
       [name, description]
     );
 
+    // Get all paper types including the new one
+    const paperTypesResult = await client.query('SELECT name FROM paper_types');
+    const paperTypes = paperTypesResult.rows.map(row => row.name);
+
+    // Recreate the constraint with the updated list of paper types
+    await client.query(
+      `ALTER TABLE production ADD CONSTRAINT production_paper_type_check 
+       CHECK (((paper_type)::text = ANY ((ARRAY[${paperTypes.map(t => `'${t}'`).join(',')}])::text[])))`
+    );
+
+    await client.query('COMMIT');
     res.status(201).json(result.rows[0]);
   } catch (error) {
+    await client.query('ROLLBACK');
     if (error.code === '23505') { // Unique violation
       res.status(400).json({ error: 'Paper type with this name already exists' });
     } else {
       console.error('Error adding paper type:', error);
       res.status(500).json({ error: 'Internal server error' });
     }
+  } finally {
+    client.release();
   }
 });
 

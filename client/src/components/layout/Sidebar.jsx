@@ -254,14 +254,6 @@ const Sidebar = () => {
               },
               { text: 'Daily Attendance', icon: <AccessTime />, path: '/gate/attendance' }
             ]
-          },
-          {
-            text: 'Reports',
-            icon: <Assessment />,
-            submenu: [
-              { text: 'Purchase Summary', icon: <History />, path: '/reports/purchase-summary' },
-              { text: 'Sale Summary', icon: <History />, path: '/reports/sale-summary' },
-            ]
           }
         ];
       
@@ -302,8 +294,8 @@ const Sidebar = () => {
             text: 'Payments',
             icon: <Payments />,
             submenu: [
-              { text: 'Payment Received', icon: <Input />, path: '/accounts/payments/received' },
-              { text: 'Payment Issued', icon: <Output />, path: '/accounts/payments/issued' },
+              { text: 'Receipt', icon: <Input />, path: '/accounts/payments/received' },
+              { text: 'Payment', icon: <Output />, path: '/accounts/payments/issued' },
               { text: 'Payment History', icon: <History />, path: '/accounts/payments/history' }
             ]
           },

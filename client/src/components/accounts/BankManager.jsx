@@ -60,8 +60,21 @@ const BankManager = () => {
   const [editMode, setEditMode] = useState(false);
   const [selectedAccount, setSelectedAccount] = useState(null);
   const [withdrawModal, setWithdrawModal] = useState(false);
+  const [depositModal, setDepositModal] = useState(false);
+  const [transferModal, setTransferModal] = useState(false);
   const [withdrawData, setWithdrawData] = useState({
     account_id: '',
+    amount: '',
+    remarks: '',
+  });
+  const [depositData, setDepositData] = useState({
+    account_id: '',
+    amount: '',
+    remarks: '',
+  });
+  const [transferData, setTransferData] = useState({
+    from_account_id: '',
+    to_account_id: '',
     amount: '',
     remarks: '',
   });
@@ -277,6 +290,81 @@ const BankManager = () => {
     }
   };
 
+  const handleDeposit = async (e) => {
+    e.preventDefault();
+    try {
+      if (!depositData.account_id || !depositData.amount) {
+        showAlert('Please fill in all required fields');
+        return;
+      }
+
+      const amount = Number(depositData.amount);
+      if (amount <= 0) {
+        showAlert('Amount must be greater than 0');
+        return;
+      }
+
+      // Process deposit and update bank account in a single transaction
+      await axios.post(`${config.apiUrl}/accounts/bank-transactions`, {
+        account_id: depositData.account_id,
+        type: 'CREDIT',
+        amount: amount,
+        reference: depositData.remarks || 'Cash Deposit',
+        updateCash: true  // This flag tells the server to also update cash
+      });
+
+      // Trigger dashboard refresh
+      window.dispatchEvent(new CustomEvent('cashBalanceUpdated'));
+      window.dispatchEvent(new CustomEvent('bankBalanceUpdated'));
+
+      showAlert('Cash deposited successfully', 'success');
+      await fetchAccounts();
+      await fetchTransactions();
+      setDepositModal(false);
+      setDepositData({ account_id: '', amount: '', remarks: '' });
+    } catch (error) {
+      showAlert(error.response?.data?.error || 'Error processing deposit');
+      console.error('Error:', error);
+    }
+  };
+
+  const handleTransfer = async (e) => {
+    e.preventDefault();
+    try {
+      if (!transferData.from_account_id || !transferData.to_account_id || !transferData.amount) {
+        showAlert('Please fill in all required fields');
+        return;
+      }
+
+      if (transferData.from_account_id === transferData.to_account_id) {
+        showAlert('Cannot transfer to the same account');
+        return;
+      }
+
+      const amount = Number(transferData.amount);
+      if (amount <= 0) {
+        showAlert('Amount must be greater than 0');
+        return;
+      }
+
+      await axios.post(`${config.apiUrl}/accounts/bank-transactions/transfer`, {
+        from_account_id: transferData.from_account_id,
+        to_account_id: transferData.to_account_id,
+        amount: amount,
+        remarks: transferData.remarks || 'Fund Transfer'
+      });
+
+      showAlert('Funds transferred successfully', 'success');
+      await fetchAccounts();
+      await fetchTransactions();
+      setTransferModal(false);
+      setTransferData({ from_account_id: '', to_account_id: '', amount: '', remarks: '' });
+    } catch (error) {
+      showAlert(error.response?.data?.error || 'Error processing transfer');
+      console.error('Error:', error);
+    }
+  };
+
   const handlePrintTransactions = () => {
     const selectedAccount = accounts.find(acc => acc.id === filters.bankAccount);
     const dateRange = filters.startDate && filters.endDate 
@@ -314,13 +402,27 @@ const BankManager = () => {
                   ${transaction.bank_name} - ${transaction.account_number}
                 </td>
                 <td style="padding: 8px; border: 1px solid #ddd;">
-                  ${transaction.reference}
-                  ${transaction.receiver_name ? `
-                    <div style="font-size: 12px; color: #666;">
-                      ${transaction.payment_type === 'RECEIVED' ? 'From: ' : 'To: '}
-                      ${transaction.receiver_name}
-                    </div>
-                  ` : ''}
+                  ${transaction.reference === 'Fund Transfer' ? (
+                    transaction.type === 'DEBIT' ? (
+                      `Funds transferred to ${transaction.related_bank_name || 'bank account'}`
+                    ) : (
+                      `Funds received from ${transaction.related_bank_name || 'bank account'}`
+                    )
+                  ) : transaction.reference === 'Cash Withdrawal' || transaction.reference === 'Cash Deposit' ? (
+                    transaction.reference
+                  ) : (
+                    <>
+                      {transaction.type === 'CREDIT' ? (
+                        <>
+                          Payment received from Account: {transaction.related_account_name}
+                        </>
+                      ) : (
+                        <>
+                          Payment to {transaction.related_account_name}
+                        </>
+                      )}
+                    </>
+                  )}
                 </td>
                 <td style="padding: 8px; border: 1px solid #ddd; text-align: right; color: ${transaction.type === 'CREDIT' ? 'green' : 'red'}; font-weight: bold;">
                   ${transaction.type === 'CREDIT' ? '+' : '-'}${Number(transaction.amount).toLocaleString('en-IN', {
@@ -403,9 +505,9 @@ const BankManager = () => {
           <TableRow className="table-header">
             <TableCell>Date</TableCell>
             <TableCell>Bank Account</TableCell>
-            <TableCell>Reference</TableCell>
-            <TableCell>Related Account</TableCell>
-            <TableCell align="right">Amount</TableCell>
+            <TableCell>Transaction Details</TableCell>
+            <TableCell align="right">Credit</TableCell>
+            <TableCell align="right">Debit</TableCell>
             <TableCell align="right">Balance</TableCell>
             <TableCell align="center">Type</TableCell>
           </TableRow>
@@ -420,32 +522,49 @@ const BankManager = () => {
                 {transaction.bank_name} - {transaction.account_number}
               </TableCell>
               <TableCell>
-                {transaction.reference}
-                {transaction.receiver_name && (
-                  <Typography variant="caption" display="block" color="textSecondary">
-                    {transaction.payment_type === 'RECEIVED' ? 'From: ' : 'To: '}
-                    {transaction.receiver_name}
-                  </Typography>
-                )}
-              </TableCell>
-              <TableCell>
-                {transaction.related_account_name && (
-                  <Chip 
-                    label={transaction.related_account_name}
-                    size="small"
-                    variant="outlined"
-                  />
-                )}
+                <div>
+                  {transaction.reference === 'Fund Transfer' ? (
+                    transaction.type === 'DEBIT' ? (
+                      `Funds transferred to ${transaction.related_bank_name || 'bank account'}`
+                    ) : (
+                      `Funds received from ${transaction.related_bank_name || 'bank account'}`
+                    )
+                  ) : transaction.reference === 'Cash Withdrawal' || transaction.reference === 'Cash Deposit' ? (
+                    transaction.reference
+                  ) : (
+                    <>
+                      {transaction.type === 'CREDIT' ? (
+                        <>
+                          Payment received from Account: {transaction.related_account_name}
+                        </>
+                      ) : (
+                        <>
+                          Payment to {transaction.related_account_name}
+                        </>
+                      )}
+                    </>
+                  )}
+                </div>
               </TableCell>
               <TableCell align="right" sx={{ 
-                color: transaction.type === 'CREDIT' ? 'green' : 'red',
+                color: 'green',
                 fontWeight: 'bold'
               }}>
-                {transaction.type === 'CREDIT' ? '+' : '-'}
-                {Number(transaction.amount).toLocaleString('en-IN', {
-                  minimumFractionDigits: 2,
-                  maximumFractionDigits: 2
-                })}
+                {transaction.type === 'CREDIT' ? 
+                  Number(transaction.amount).toLocaleString('en-IN', {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2
+                  }) : '-'}
+              </TableCell>
+              <TableCell align="right" sx={{ 
+                color: 'red',
+                fontWeight: 'bold'
+              }}>
+                {transaction.type === 'DEBIT' ? 
+                  Number(transaction.amount).toLocaleString('en-IN', {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2
+                  }) : '-'}
               </TableCell>
               <TableCell align="right" sx={{
                 fontWeight: 'bold',
@@ -628,6 +747,30 @@ const BankManager = () => {
           </Button>
           <Button
             variant="contained"
+            startIcon={<AccountBalanceIcon />}
+            onClick={() => setDepositModal(true)}
+            sx={{ 
+              bgcolor: '#1a1a1a', 
+              '&:hover': { bgcolor: '#000' },
+              mr: 2 
+            }}
+          >
+            Deposit Cash
+          </Button>
+          <Button
+            variant="contained"
+            startIcon={<AccountBalanceIcon />}
+            onClick={() => setTransferModal(true)}
+            sx={{ 
+              bgcolor: '#1a1a1a', 
+              '&:hover': { bgcolor: '#000' },
+              mr: 2 
+            }}
+          >
+            Transfer Funds
+          </Button>
+          <Button
+            variant="contained"
             startIcon={<AddIcon />}
             onClick={() => setDialogOpen(true)}
             sx={{ bgcolor: '#1a1a1a', '&:hover': { bgcolor: '#000' } }}
@@ -723,6 +866,149 @@ const BankManager = () => {
                 sx={{ bgcolor: '#1a1a1a', '&:hover': { bgcolor: '#000' } }}
               >
                 Withdraw
+              </Button>
+            </div>
+          </form>
+        </Box>
+      </Modal>
+
+      {/* Deposit Modal */}
+      <Modal open={depositModal} onClose={() => setDepositModal(false)}>
+        <Box className="form-modal">
+          <div className="form-header">
+            <Typography variant="h6">
+              Deposit Cash
+            </Typography>
+            <IconButton onClick={() => setDepositModal(false)} size="small">
+              <CloseIcon />
+            </IconButton>
+          </div>
+          
+          <form onSubmit={handleDeposit} className="form-content">
+            <FormControl fullWidth>
+              <InputLabel>Select Account</InputLabel>
+              <Select
+                value={depositData.account_id}
+                onChange={(e) => setDepositData({ ...depositData, account_id: e.target.value })}
+                required
+              >
+                {accounts.map((account) => (
+                  <MenuItem key={account.id} value={account.id}>
+                    {account.bank_name} - {account.account_number}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+            
+            <TextField
+              fullWidth
+              type="number"
+              label="Amount"
+              value={depositData.amount}
+              onChange={(e) => setDepositData({ ...depositData, amount: e.target.value })}
+              required
+            />
+
+            <TextField
+              fullWidth
+              label="Remarks"
+              value={depositData.remarks}
+              onChange={(e) => setDepositData({ ...depositData, remarks: e.target.value })}
+              placeholder="Enter remarks (optional)"
+              multiline
+              rows={2}
+            />
+            
+            <div className="form-actions">
+              <Button onClick={() => setDepositModal(false)}>
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                variant="contained"
+                sx={{ bgcolor: '#1a1a1a', '&:hover': { bgcolor: '#000' } }}
+              >
+                Deposit
+              </Button>
+            </div>
+          </form>
+        </Box>
+      </Modal>
+
+      {/* Transfer Modal */}
+      <Modal open={transferModal} onClose={() => setTransferModal(false)}>
+        <Box className="form-modal">
+          <div className="form-header">
+            <Typography variant="h6">
+              Transfer Funds
+            </Typography>
+            <IconButton onClick={() => setTransferModal(false)} size="small">
+              <CloseIcon />
+            </IconButton>
+          </div>
+          
+          <form onSubmit={handleTransfer} className="form-content">
+            <FormControl fullWidth sx={{ mb: 2 }}>
+              <InputLabel>From Account</InputLabel>
+              <Select
+                value={transferData.from_account_id}
+                onChange={(e) => setTransferData({ ...transferData, from_account_id: e.target.value })}
+                required
+              >
+                {accounts.map((account) => (
+                  <MenuItem key={account.id} value={account.id}>
+                    {account.bank_name} - {account.account_number}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+
+            <FormControl fullWidth sx={{ mb: 2 }}>
+              <InputLabel>To Account</InputLabel>
+              <Select
+                value={transferData.to_account_id}
+                onChange={(e) => setTransferData({ ...transferData, to_account_id: e.target.value })}
+                required
+              >
+                {accounts.map((account) => (
+                  <MenuItem key={account.id} value={account.id}>
+                    {account.bank_name} - {account.account_number}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+            
+            <TextField
+              fullWidth
+              type="number"
+              label="Amount"
+              value={transferData.amount}
+              onChange={(e) => setTransferData({ ...transferData, amount: e.target.value })}
+              required
+              sx={{ mb: 2 }}
+            />
+
+            <TextField
+              fullWidth
+              label="Remarks"
+              value={transferData.remarks}
+              onChange={(e) => setTransferData({ ...transferData, remarks: e.target.value })}
+              placeholder="Enter remarks (optional)"
+              multiline
+              rows={2}
+              sx={{ mb: 2 }}
+            />
+            
+            <div className="form-actions">
+              <Button onClick={() => setTransferModal(false)}>
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                variant="contained"
+                sx={{ bgcolor: '#1a1a1a', '&:hover': { bgcolor: '#000' } }}
+              >
+                Transfer
               </Button>
             </div>
           </form>

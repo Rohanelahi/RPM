@@ -1,18 +1,20 @@
 .production-history-container {
-  padding: 20px;
+  padding: 24px;
   max-width: 1400px;
-  margin: 20px 10px 10px 300px;
+  margin-left: 300px;
 }
 
 .production-history-paper {
   padding: 24px;
-  margin-bottom: 24px;
+  background-color: #ffffff;
+  border-radius: 8px;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
 .production-history-title {
-  color: #000000;
-  margin-bottom: 24px;
+  color: #1976d2;
+  font-weight: 600;
+  margin-bottom: 16px;
 }
 
 .production-history-filters {
@@ -20,37 +22,32 @@
 }
 
 .production-history-table {
-  width: 100%;
-  border-collapse: separate;
-  border-spacing: 0;
+  min-width: 1000px;
 }
 
 .production-history-table-header {
-  background-color: #f5f5f5 !important;
+  background-color: #f5f5f5;
 }
 
 .production-history-table-header th {
-  color: #000000 !important;
-  font-weight: bold !important;
+  font-weight: 600;
+  color: #333;
   padding: 16px;
+  border-bottom: 2px solid #e0e0e0;
 }
 
-.production-history-row {
-  transition: background-color 0.2s;
+.production-history-row td {
+  padding: 12px 16px;
+  border-bottom: 1px solid #e0e0e0;
 }
 
 .production-history-row:hover {
-  background-color: rgba(0, 0, 0, 0.04);
-}
-
-.production-history-cell {
-  padding: 16px;
-  border-bottom: 1px solid rgba(224, 224, 224, 1);
+  background-color: #f8f9fa;
 }
 
 .production-history-collapse {
-  background-color: #fafafa;
-  padding: 16px 24px;
+  padding: 0 !important;
+  background-color: #f8f9fa;
 }
 
 .production-history-detail-title {
@@ -70,32 +67,83 @@
 }
 
 .highlight-new {
-  animation: highlightFade 2s ease-out;
+  animation: highlight 2s ease-out;
 }
 
-@keyframes highlightFade {
+@keyframes highlight {
   0% {
-    background-color: rgba(76, 175, 80, 0.2);
+    background-color: #e3f2fd;
   }
   100% {
     background-color: transparent;
   }
 }
 
+/* Card styles */
+.MuiCard-root {
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  margin-bottom: 16px;
+}
+
+.MuiCardContent-root {
+  padding: 24px !important;
+}
+
+/* Table styles */
+.MuiTable-root {
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.MuiTableCell-root {
+  border: 1px solid #e0e0e0;
+}
+
+.MuiTableHead-root .MuiTableCell-root {
+  background-color: #f5f5f5;
+  font-weight: 600;
+}
+
+/* Filter section */
+.filter-section {
+  background-color: #f8f9fa;
+  padding: 16px;
+  border-radius: 8px;
+  margin-bottom: 24px;
+}
+
+/* Print button */
+.print-button {
+  color: #1976d2;
+}
+
+.print-button:hover {
+  background-color: rgba(25, 118, 210, 0.04);
+}
+
 /* Responsive adjustments */
-@media (max-width: 960px) {
+@media (max-width: 1200px) {
   .production-history-container {
-    margin-left: 10px;
+    padding: 16px;
+  }
+  
+  .production-history-paper {
+    padding: 16px;
   }
 }
 
 @media (max-width: 600px) {
   .production-history-container {
-    padding: 10px;
+    padding: 8px;
   }
   
   .production-history-paper {
-    padding: 16px;
+    padding: 8px;
+  }
+  
+  .MuiCardContent-root {
+    padding: 16px !important;
   }
 }
 

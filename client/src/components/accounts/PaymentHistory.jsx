@@ -41,8 +41,8 @@ const PaymentHistory = () => {
 
   const paymentTypes = [
     { value: '', label: 'All Payments' },
-    { value: 'RECEIVED', label: 'Received' },
-    { value: 'ISSUED', label: 'Issued' }
+    { value: 'RECEIVED', label: 'Receipt' },
+    { value: 'ISSUED', label: 'Payment' }
   ];
 
   useEffect(() => {
@@ -182,7 +182,7 @@ const PaymentHistory = () => {
               {payments.map((payment) => (
                 <TableRow key={payment.id} hover>
                   <TableCell>{format(new Date(payment.payment_date), 'dd/MM/yyyy')}</TableCell>
-                  <TableCell>{payment.payment_type}</TableCell>
+                  <TableCell>{payment.payment_type === 'RECEIVED' ? 'Receipt' : 'Payment'}</TableCell>
                   <TableCell>{payment.account_name}</TableCell>
                   <TableCell>
                     {payment.payment_mode === 'ONLINE' && payment.bank_name 

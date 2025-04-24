@@ -273,7 +273,7 @@ const PaymentIssued = () => {
       <Box className="payment-container">
         <Paper elevation={3} className="payment-paper">
           <Typography variant="h6" className="payment-title">
-            Payment Issued
+            Payment
           </Typography>
           <form onSubmit={handleSubmit} className="payment-form">
             <Grid container spacing={3}>

@@ -19,16 +19,6 @@ router.get('/overview', async (req, res) => {
           FROM gate_entries ge
           JOIN gate_entries_pricing gep ON ge.grn_number = gep.grn_number
           WHERE ge.entry_type = 'PURCHASE_IN'
-          
-          UNION ALL
-          
-          SELECT 
-            t.item_name as item_type,
-            t.price_per_unit,
-            t.transaction_date as date_time
-          FROM transactions t
-          WHERE t.item_name IS NOT NULL 
-          AND t.price_per_unit IS NOT NULL
         ) all_prices
         ORDER BY item_type, date_time DESC
       ),
@@ -49,26 +39,36 @@ router.get('/overview', async (req, res) => {
           AND ge.date_time < DATE_TRUNC('month', CURRENT_DATE) + INTERVAL '1 month'
         ) current_month
         GROUP BY item_type, DATE_TRUNC('month', date_time)
+      ),
+      AllItems AS (
+        SELECT DISTINCT item_type, unit
+        FROM (
+          SELECT item_type, unit FROM gate_entries
+          UNION
+          SELECT item_type, 'KG' as unit FROM stock_adjustments
+        ) all_items
+        WHERE item_type != 'TOORI'
       )
       SELECT 
-        combined_stock.item_type,
-        SUM(
+        ai.item_type,
+        COALESCE(SUM(
           CASE 
-            WHEN combined_stock.source_type = 'GATE_ENTRY' THEN
+            WHEN cs.source_type = 'GATE_ENTRY' THEN
               CASE 
-                WHEN combined_stock.entry_type = 'PURCHASE_IN' THEN COALESCE(combined_stock.final_quantity, combined_stock.quantity)
-                WHEN combined_stock.entry_type = 'PURCHASE_RETURN' THEN -COALESCE(combined_stock.final_quantity, combined_stock.quantity)
-                WHEN combined_stock.entry_type = 'SALE_OUT' THEN -combined_stock.quantity
-                WHEN combined_stock.entry_type = 'SALE_RETURN' THEN combined_stock.quantity
+                WHEN cs.entry_type = 'PURCHASE_IN' THEN COALESCE(cs.final_quantity, cs.quantity)
+                WHEN cs.entry_type = 'PURCHASE_RETURN' THEN -COALESCE(cs.final_quantity, cs.quantity)
+                WHEN cs.entry_type = 'SALE_OUT' THEN -cs.quantity
+                WHEN cs.entry_type = 'SALE_RETURN' THEN cs.quantity
               END
-            WHEN combined_stock.source_type = 'STOCK_ADJUSTMENT' THEN combined_stock.quantity
+            WHEN cs.source_type = 'STOCK_ADJUSTMENT' THEN cs.quantity
           END
-        ) as current_quantity,
-        combined_stock.unit,
-        MAX(combined_stock.date_time) as last_updated,
+        ), 0) as current_quantity,
+        ai.unit,
+        MAX(cs.date_time) as last_updated,
         lp.latest_price,
         ma.avg_price as monthly_avg_price
-      FROM (
+      FROM AllItems ai
+      LEFT JOIN (
         SELECT 
           ge.item_type,
           ge.quantity,
@@ -85,37 +85,22 @@ router.get('/overview', async (req, res) => {
         
         SELECT 
           sa.item_type,
-          CASE 
-            WHEN sa.adjustment_type = 'DECREASE' THEN -sa.quantity
-            ELSE sa.quantity
-          END as quantity,
+          sa.quantity,
           NULL as final_quantity,
-          sa.adjustment_type as entry_type,
+          sa.adjustment_type,
           'KG' as unit,
           sa.date_time,
           'STOCK_ADJUSTMENT' as source_type
         FROM stock_adjustments sa
-      ) combined_stock
-      LEFT JOIN LatestPrices lp ON combined_stock.item_type = lp.item_type
-      LEFT JOIN MonthlyAverages ma ON combined_stock.item_type = ma.item_type
+      ) cs ON ai.item_type = cs.item_type
+      LEFT JOIN LatestPrices lp ON ai.item_type = lp.item_type
+      LEFT JOIN MonthlyAverages ma ON ai.item_type = ma.item_type
       GROUP BY 
-        combined_stock.item_type, 
-        combined_stock.unit, 
+        ai.item_type, 
+        ai.unit, 
         lp.latest_price,
         ma.avg_price
-      HAVING SUM(
-        CASE 
-          WHEN combined_stock.source_type = 'GATE_ENTRY' THEN
-            CASE 
-              WHEN combined_stock.entry_type = 'PURCHASE_IN' THEN COALESCE(combined_stock.final_quantity, combined_stock.quantity)
-              WHEN combined_stock.entry_type = 'PURCHASE_RETURN' THEN -COALESCE(combined_stock.final_quantity, combined_stock.quantity)
-              WHEN combined_stock.entry_type = 'SALE_OUT' THEN -combined_stock.quantity
-              WHEN combined_stock.entry_type = 'SALE_RETURN' THEN combined_stock.quantity
-            END
-          WHEN combined_stock.source_type = 'STOCK_ADJUSTMENT' THEN combined_stock.quantity
-        END
-      ) > 0
-      ORDER BY combined_stock.item_type`
+      ORDER BY ai.item_type`
     );
 
     res.json(result.rows);

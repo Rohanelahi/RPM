@@ -181,6 +181,7 @@ const PurchaseForm = () => {
   const handlePrint = () => {
     const printWindow = window.open('', '_blank');
     const currentDate = format(new Date(), 'dd/MM/yyyy');
+    const currentTime = format(new Date(), 'HH:mm:ss');
     const selectedSupplier = accounts.find(s => s.id === formData.supplierId);
 
     printWindow.document.write(`
@@ -281,6 +282,10 @@ const PurchaseForm = () => {
             <div class="detail-item">
               <div class="label">Date:</div>
               <div class="value">${currentDate}</div>
+            </div>
+            <div class="detail-item">
+              <div class="label">Time:</div>
+              <div class="value">${currentTime}</div>
             </div>
             <div class="detail-item">
               <div class="label">Supplier:</div>

@@ -110,20 +110,27 @@ router.get('/ledger', async (req, res) => {
       )
       SELECT 
         t.*,
-        COALESCE(ge.quantity, gr.return_quantity) as weight,
+        COALESCE(ge.quantity, gr.return_quantity, se.quantity) as weight,
         COALESCE(ge.item_type, ge2.item_type) as item_type,
         COALESCE(ge.paper_type, ge2.paper_type) as paper_type,
-        COALESCE(ge.unit, ge2.unit) as gate_unit,
-        gep.total_amount as final_total_amount,
-        gep.price_per_unit as final_price_per_unit
+        COALESCE(ge.unit, ge2.unit, se.unit) as gate_unit,
+        COALESCE(gep.total_amount, pe.total_amount) as final_total_amount,
+        COALESCE(gep.price_per_unit, pe.price_per_unit) as final_price_per_unit,
+        si.item_name as store_item_name,
+        se.unit as store_unit,
+        se.quantity as store_quantity,
+        pe.price_per_unit as store_price_per_unit,
+        pe.total_amount as store_total_amount
       FROM all_transactions t
       LEFT JOIN gate_entries ge ON t.reference_no = ge.grn_number
       LEFT JOIN gate_returns gr ON t.reference_no = gr.return_number
       LEFT JOIN gate_entries ge2 ON gr.original_grn_number = ge2.grn_number
       LEFT JOIN gate_entries_pricing gep ON t.reference_no = gep.grn_number
+      LEFT JOIN store_entries se ON t.reference_no = se.grn_number
+      LEFT JOIN store_items si ON se.item_id = si.id
+      LEFT JOIN pricing_entries pe ON pe.reference_id = se.id AND pe.entry_type = 'STORE_PURCHASE'
       WHERE t.transaction_date >= $2::timestamp
       AND t.transaction_date <= $3::timestamp
-      ${userRole === 'TAX' ? 'AND EXISTS (SELECT 1 FROM payments p WHERE p.voucher_no = t.reference_no AND p.processed_by_role = \'TAX\')' : ''}
       ORDER BY t.transaction_date ASC, t.id ASC
     `;
 
@@ -148,12 +155,12 @@ router.get('/ledger', async (req, res) => {
         date: t.transaction_date,
         reference: t.reference_no,
         type: t.type,
-        amount: t.final_total_amount || t.amount,
+        amount: t.final_total_amount || t.store_total_amount || t.amount,
         description: t.description,
-        item_name: t.item_name,
-        quantity: t.quantity,
-        unit: t.unit,
-        price_per_unit: t.final_price_per_unit || t.price_per_unit,
+        item_name: t.store_item_name || t.item_name,
+        quantity: t.store_quantity || t.quantity,
+        unit: t.store_unit || t.unit,
+        price_per_unit: t.store_price_per_unit || t.final_price_per_unit || t.price_per_unit,
         weight: t.weight,
         item_type: t.item_type,
         paper_type: t.paper_type,

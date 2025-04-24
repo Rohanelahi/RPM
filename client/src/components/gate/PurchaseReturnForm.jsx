@@ -267,6 +267,7 @@ const PurchaseReturnForm = () => {
   const handlePrint = () => {
     const printWindow = window.open('', '_blank');
     const currentDate = format(new Date(), 'dd/MM/yyyy');
+    const currentTime = format(new Date(), 'HH:mm:ss');
     const selectedSupplier = suppliers.find(s => s.id === formData.supplierId);
 
     printWindow.document.write(`
@@ -329,7 +330,7 @@ const PurchaseReturnForm = () => {
         </head>
         <body>
           <div class="header">
-            <div class="company-name">ACME PAPER PRODUCTS</div>
+            <div class="company-name">Rose Paper Mill</div>
             <div class="document-title">Purchase Return Gate Pass</div>
           </div>
 
@@ -344,6 +345,10 @@ const PurchaseReturnForm = () => {
             <tr>
               <td><strong>Date:</strong></td>
               <td>${currentDate}</td>
+            </tr>
+            <tr>
+              <td><strong>Time:</strong></td>
+              <td>${currentTime}</td>
             </tr>
             <tr>
               <td><strong>Supplier:</strong></td>

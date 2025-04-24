@@ -34,16 +34,17 @@ import config from '../../config';
 const ProductionForm = ({ onProductionAdded }) => {
   const [formData, setFormData] = useState({
     date: new Date(),
+    paperTypes: [{
     paperType: '',
     totalWeight: '0',
+      recipe: [{ raddiType: '', percentageUsed: '', yield: '' }]
+    }],
     boilerFuelType: '',
     boilerFuelQuantity: '',
     boilerFuelCost: '',
     electricityUnits: '',
     electricityUnitPrice: '',
-    electricityCost: '0',
-    recipe: [{ raddiType: '', percentageUsed: '', yield: '' }],
-    totalYield: ''
+    electricityCost: '0'
   });
 
   const [isPrinted, setIsPrinted] = useState(false);
@@ -130,45 +131,80 @@ const ProductionForm = ({ onProductionAdded }) => {
     }));
   };
 
-  const handleRecipeChange = (index, field, value) => {
-    const newRecipe = [...formData.recipe];
-    newRecipe[index][field] = value;
+  const handlePaperTypeChange = (index, field, value) => {
+    const newPaperTypes = [...formData.paperTypes];
+    newPaperTypes[index][field] = value;
     setFormData(prev => ({
       ...prev,
-      recipe: newRecipe
+      paperTypes: newPaperTypes
     }));
   };
 
-  const addRecipe = () => {
+  const handleRecipeChange = (paperTypeIndex, recipeIndex, field, value) => {
+    const newPaperTypes = [...formData.paperTypes];
+    newPaperTypes[paperTypeIndex].recipe[recipeIndex][field] = value;
     setFormData(prev => ({
       ...prev,
-      recipe: [...prev.recipe, { raddiType: '', percentageUsed: '', yield: '' }]
+      paperTypes: newPaperTypes
     }));
   };
 
-  const removeRecipe = (index) => {
+  const addPaperType = () => {
     setFormData(prev => ({
       ...prev,
-      recipe: prev.recipe.filter((_, i) => i !== index)
+      paperTypes: [...prev.paperTypes, {
+        paperType: '',
+        totalWeight: '0',
+        recipe: [{ raddiType: '', percentageUsed: '', yield: '' }]
+      }]
+    }));
+  };
+
+  const removePaperType = (index) => {
+    setFormData(prev => ({
+      ...prev,
+      paperTypes: prev.paperTypes.filter((_, i) => i !== index)
+    }));
+  };
+
+  const addRecipe = (paperTypeIndex) => {
+    const newPaperTypes = [...formData.paperTypes];
+    newPaperTypes[paperTypeIndex].recipe.push({ raddiType: '', percentageUsed: '', yield: '' });
+    setFormData(prev => ({
+      ...prev,
+      paperTypes: newPaperTypes
+    }));
+  };
+
+  const removeRecipe = (paperTypeIndex, recipeIndex) => {
+    const newPaperTypes = [...formData.paperTypes];
+    newPaperTypes[paperTypeIndex].recipe = newPaperTypes[paperTypeIndex].recipe.filter((_, i) => i !== recipeIndex);
+    setFormData(prev => ({
+      ...prev,
+      paperTypes: newPaperTypes
     }));
   };
 
   const calculateRaddiQuantities = () => {
-    return formData.recipe.map(item => {
-      if (!item.percentageUsed || !item.yield) return { ...item, quantityUsed: '0' };
-      
-      const totalWeight = parseFloat(formData.totalWeight) || 0;
-      const percentageUsed = parseFloat(item.percentageUsed) || 0;
-      const yieldPercentage = parseFloat(item.yield) || 0;
-      
-      // New formula: (totalWeight + (totalWeight - totalWeight * (yield/100))) * (percentage/100)
-      const wastage = totalWeight - (totalWeight * (yieldPercentage / 100));
-      const totalRequired = totalWeight + wastage;
-      const quantityUsed = totalRequired * (percentageUsed / 100);
-      
+    return formData.paperTypes.map(paperType => {
+      const recipeWithQuantities = paperType.recipe.map(item => {
+        if (!item.percentageUsed || !item.yield) return { ...item, quantityUsed: '0' };
+        
+        const totalWeight = parseFloat(paperType.totalWeight) || 0;
+        const percentageUsed = parseFloat(item.percentageUsed) || 0;
+        const yieldPercentage = parseFloat(item.yield) || 0;
+        
+        // Calculate quantity used based on percentage and yield
+        const quantityUsed = (totalWeight * (percentageUsed / 100)) / (yieldPercentage / 100);
+        
+        return {
+          ...item,
+          quantityUsed: quantityUsed.toFixed(2)
+        };
+      });
       return {
-        ...item,
-        quantityUsed: quantityUsed.toFixed(2)
+        ...paperType,
+        recipe: recipeWithQuantities
       };
     });
   };
@@ -180,40 +216,41 @@ const ProductionForm = ({ onProductionAdded }) => {
 
   const checkStockAvailability = async (recipe) => {
     const response = await fetch(`${config.apiUrl}/production/check-stock`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ recipe })
-    });
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ recipe })
+      });
 
-    if (!response.ok) throw new Error('Failed to check stock');
-    const stockChecks = await response.json();
+      if (!response.ok) throw new Error('Failed to check stock');
+      const stockChecks = await response.json();
 
-    const insufficientStock = stockChecks.filter(check => !check.sufficient);
-    if (insufficientStock.length > 0) {
-      const message = insufficientStock.map(item => 
-        `${item.raddiType}: Need ${item.required}kg, Available ${item.available}kg`
-      ).join('\n');
-      throw new Error(`Insufficient stock:\n${message}`);
-    }
+      const insufficientStock = stockChecks.filter(check => !check.sufficient);
+      if (insufficientStock.length > 0) {
+        const message = insufficientStock.map(item => 
+          `${item.raddiType}: Need ${item.required}kg, Available ${item.available}kg`
+        ).join('\n');
+        throw new Error(`Insufficient stock:\n${message}`);
+      }
 
-    return true;
+      return true;
   };
 
   const resetForm = () => {
     setFormData({
       date: new Date(),
+      paperTypes: [{
       paperType: '',
       totalWeight: '0',
+        recipe: [{ raddiType: '', percentageUsed: '', yield: '' }]
+      }],
       boilerFuelType: '',
       boilerFuelQuantity: '',
       boilerFuelCost: '',
       electricityUnits: '',
       electricityUnitPrice: '',
-      electricityCost: '0',
-      recipe: [{ raddiType: '', percentageUsed: '', yield: '' }],
-      totalYield: ''
+      electricityCost: '0'
     });
   };
 
@@ -289,11 +326,11 @@ const ProductionForm = ({ onProductionAdded }) => {
             </tr>
             <tr>
               <td><strong>Paper Type:</strong></td>
-              <td>${formData.paperType}</td>
+              <td>${formData.paperTypes[0].paperType}</td>
             </tr>
             <tr>
               <td><strong>Total Weight:</strong></td>
-              <td>${formData.totalWeight} kg</td>
+              <td>${formData.paperTypes[0].totalWeight} kg</td>
             </tr>
           </table>
 
@@ -307,8 +344,8 @@ const ProductionForm = ({ onProductionAdded }) => {
               <th>Yield (%)</th>
               <th>Quantity (kg)</th>
             </tr>
-            ${formData.recipe.map(item => {
-              const totalWeight = parseFloat(formData.totalWeight);
+            ${formData.paperTypes[0].recipe.map(item => {
+              const totalWeight = parseFloat(formData.paperTypes[0].totalWeight);
               const wastage = totalWeight - (totalWeight * (parseFloat(item.yield) / 100));
               const totalRequired = totalWeight + wastage;
               const quantity = totalRequired * (parseFloat(item.percentageUsed) / 100);
@@ -371,13 +408,42 @@ const ProductionForm = ({ onProductionAdded }) => {
     e.preventDefault();
     try {
       setLoading(true);
+
+      // Validate paper type
+      if (!formData.paperTypes[0]?.paperType) {
+        throw new Error('Paper type is required');
+      }
+
       const recipeWithQuantities = calculateRaddiQuantities();
       
-      await checkStockAvailability(recipeWithQuantities);
+      // Extract all recipe items into a flat array
+      const allRecipeItems = recipeWithQuantities.flatMap(paperType => 
+        paperType.recipe.map(item => ({
+          raddiType: item.raddiType,
+          quantityUsed: parseFloat(item.quantityUsed) // Ensure quantity is a number
+        }))
+      );
+      
+      await checkStockAvailability(allRecipeItems);
 
       const submissionData = {
-        ...formData,
-        recipe: recipeWithQuantities
+        date: formData.date,
+        paperTypes: recipeWithQuantities.map(paperType => ({
+          paperType: paperType.paperType,
+          totalWeight: paperType.totalWeight,
+          recipe: paperType.recipe.map(item => ({
+            raddiType: item.raddiType,
+            percentageUsed: item.percentageUsed,
+            yield: item.yield,
+            quantityUsed: parseFloat(item.quantityUsed) // Ensure quantity is a number
+          }))
+        })),
+        boilerFuelType: formData.boilerFuelType,
+        boilerFuelQuantity: formData.boilerFuelQuantity,
+        boilerFuelCost: formData.boilerFuelCost,
+        electricityUnits: formData.electricityUnits,
+        electricityUnitPrice: formData.electricityUnitPrice,
+        electricityCost: formData.electricityCost
       };
 
       const response = await fetch(`${config.apiUrl}/production/add`, {
@@ -389,7 +455,8 @@ const ProductionForm = ({ onProductionAdded }) => {
       });
 
       if (!response.ok) {
-        throw new Error('Failed to add production');
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to add production');
       }
 
       const result = await response.json();
@@ -403,7 +470,7 @@ const ProductionForm = ({ onProductionAdded }) => {
       }
     } catch (error) {
       console.error('Error:', error);
-      alert('Failed to add production');
+      alert('Failed to add production: ' + error.message);
     } finally {
       setLoading(false);
     }
@@ -418,7 +485,7 @@ const ProductionForm = ({ onProductionAdded }) => {
 
         <form onSubmit={handleSubmit}>
           <Grid container spacing={3}>
-            {/* Date and Paper Type */}
+            {/* Date */}
             <Grid item xs={12} md={6}>
               <LocalizationProvider dateAdapter={AdapterDateFns}>
                 <DatePicker
@@ -429,41 +496,164 @@ const ProductionForm = ({ onProductionAdded }) => {
                 />
               </LocalizationProvider>
             </Grid>
-            <Grid item xs={12} sm={6}>
+
+            {/* Paper Types Section */}
+            {formData.paperTypes.map((paperTypeData, paperTypeIndex) => (
+              <React.Fragment key={paperTypeIndex}>
+                <Grid item xs={12}>
+                  <Paper sx={{ p: 2, mb: 2 }}>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2 }}>
+                      <Typography variant="h6">
+                        Paper Type {paperTypeIndex + 1}
+                      </Typography>
+                      {formData.paperTypes.length > 1 && (
+                        <IconButton
+                          color="error"
+                          onClick={() => removePaperType(paperTypeIndex)}
+                        >
+                          <DeleteIcon />
+                        </IconButton>
+                      )}
+                    </Box>
+
+                    <Grid container spacing={2}>
+                      <Grid item xs={12} sm={6}>
               <FormControl fullWidth>
                 <InputLabel>Paper Type</InputLabel>
                 <Select
-                  value={formData.paperType}
-                  onChange={handleChange}
-                  name="paperType"
-                  required
+                            value={paperTypeData.paperType}
+                            onChange={(e) => handlePaperTypeChange(paperTypeIndex, 'paperType', e.target.value)}
+                            required
                 >
                   {paperTypes.map(type => (
-                    <MenuItem key={type.name} value={type.name}>{type.name}</MenuItem>
+                              <MenuItem key={type.name} value={type.name}>{type.name}</MenuItem>
                   ))}
                 </Select>
               </FormControl>
-              <Button
-                variant="outlined"
-                onClick={() => setOpenNewPaperType(true)}
-                sx={{ mt: 1 }}
-              >
-                Add New Paper Type
-              </Button>
+                        <Button
+                          variant="outlined"
+                          onClick={() => setOpenNewPaperType(true)}
+                          sx={{ mt: 1 }}
+                          startIcon={<AddIcon />}
+                        >
+                          Add New Paper Type
+                        </Button>
             </Grid>
 
-            {/* Total Weight Section */}
-            <Grid item xs={12}>
+                      <Grid item xs={12} sm={6}>
               <TextField
                 fullWidth
                 label="Total Weight Produced (kg)"
                 type="number"
-                name="totalWeight"
-                value={formData.totalWeight}
-                onChange={handleChange}
-              />
+                          value={paperTypeData.totalWeight}
+                          onChange={(e) => handlePaperTypeChange(paperTypeIndex, 'totalWeight', e.target.value)}
+                          required
+                        />
+                      </Grid>
+
+                      {/* Recipe Section */}
+                      <Grid item xs={12}>
+                        <Typography variant="subtitle1" gutterBottom>
+                          Recipe
+                          <IconButton 
+                            color="primary" 
+                            onClick={() => addRecipe(paperTypeIndex)}
+                            size="small"
+                            sx={{ ml: 1 }}
+                          >
+                            <AddIcon />
+                          </IconButton>
+                        </Typography>
+                        <TableContainer>
+                          <Table size="small">
+                            <TableHead>
+                              <TableRow>
+                                <TableCell>Raddi Type</TableCell>
+                                <TableCell>Percentage Used</TableCell>
+                                <TableCell>Yield (%)</TableCell>
+                                <TableCell>Calculated Quantity (kg)</TableCell>
+                                <TableCell>Action</TableCell>
+                              </TableRow>
+                            </TableHead>
+                            <TableBody>
+                              {paperTypeData.recipe.map((item, recipeIndex) => (
+                                <TableRow key={recipeIndex}>
+                                  <TableCell>
+                                    <FormControl fullWidth>
+                                      <Select
+                                        value={item.raddiType}
+                                        onChange={(e) => handleRecipeChange(paperTypeIndex, recipeIndex, 'raddiType', e.target.value)}
+                                      >
+                                        {raddiTypes.map(type => (
+                                          <MenuItem key={type} value={type}>{type}</MenuItem>
+                                        ))}
+                                      </Select>
+                                    </FormControl>
+                                  </TableCell>
+                                  <TableCell>
+                                    <TextField
+                                      type="number"
+                                      value={item.percentageUsed}
+                                      onChange={(e) => handleRecipeChange(paperTypeIndex, recipeIndex, 'percentageUsed', e.target.value)}
+                                      fullWidth
+                                    />
+                                  </TableCell>
+                                  <TableCell>
+                                    <TextField
+                                      type="number"
+                                      value={item.yield}
+                                      onChange={(e) => handleRecipeChange(paperTypeIndex, recipeIndex, 'yield', e.target.value)}
+                                      fullWidth
+                                    />
+                                  </TableCell>
+                                  <TableCell>
+                                    {item.percentageUsed && item.yield ? 
+                                      (() => {
+                                        const totalWeight = parseFloat(paperTypeData.totalWeight);
+                                        const wastage = totalWeight - (totalWeight * (parseFloat(item.yield) / 100));
+                                        const totalRequired = totalWeight + wastage;
+                                        return (totalRequired * (parseFloat(item.percentageUsed) / 100)).toFixed(2);
+                                      })()
+                                      : '0'
+                                    }
+                                  </TableCell>
+                                  <TableCell>
+                                    <IconButton
+                                      color="error"
+                                      onClick={() => removeRecipe(paperTypeIndex, recipeIndex)}
+                                      disabled={paperTypeData.recipe.length === 1}
+                                    >
+                                      <DeleteIcon />
+                                    </IconButton>
+                                  </TableCell>
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                          </Table>
+                        </TableContainer>
+                      </Grid>
+                    </Grid>
+                  </Paper>
+                </Grid>
+              </React.Fragment>
+            ))}
+
+            <Grid item xs={12}>
+              <Button
+                variant="outlined"
+                onClick={addPaperType}
+                startIcon={<AddIcon />}
+              >
+                Add Another Paper Type
+              </Button>
             </Grid>
 
+            {/* Common Costs Section */}
+            <Grid item xs={12}>
+              <Typography variant="h6" gutterBottom>
+                Common Costs
+              </Typography>
+              <Grid container spacing={2}>
             {/* Boiler Fuel Section */}
             <Grid item xs={12} md={4}>
               <FormControl fullWidth>
@@ -503,10 +693,10 @@ const ProductionForm = ({ onProductionAdded }) => {
 
             {/* Electricity Cost Section */}
             <Grid item xs={12}>
-              <Typography variant="h6" gutterBottom>
+                  <Typography variant="subtitle1" gutterBottom>
                 Electricity Cost
               </Typography>
-              <Grid container spacing={3}>
+                  <Grid container spacing={2}>
                 <Grid item xs={12} md={4}>
                   <TextField
                     fullWidth
@@ -538,82 +728,7 @@ const ProductionForm = ({ onProductionAdded }) => {
                 </Grid>
               </Grid>
             </Grid>
-
-            {/* Recipe Section */}
-            <Grid item xs={12}>
-              <Typography variant="h6" gutterBottom>
-                Recipe
-                <IconButton color="primary" onClick={addRecipe}>
-                  <AddIcon />
-                </IconButton>
-              </Typography>
-              <TableContainer>
-                <Table>
-                  <TableHead>
-                    <TableRow>
-                      <TableCell>Raddi Type</TableCell>
-                      <TableCell>Percentage Used</TableCell>
-                      <TableCell>Yield (%)</TableCell>
-                      <TableCell>Calculated Quantity (kg)</TableCell>
-                      <TableCell>Action</TableCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {formData.recipe.map((item, index) => (
-                      <TableRow key={index}>
-                        <TableCell>
-                          <FormControl fullWidth>
-                            <Select
-                              value={item.raddiType}
-                              onChange={(e) => handleRecipeChange(index, 'raddiType', e.target.value)}
-                            >
-                              {raddiTypes.map(type => (
-                                <MenuItem key={type} value={type}>{type}</MenuItem>
-                              ))}
-                            </Select>
-                          </FormControl>
-                        </TableCell>
-                        <TableCell>
-                          <TextField
-                            type="number"
-                            value={item.percentageUsed}
-                            onChange={(e) => handleRecipeChange(index, 'percentageUsed', e.target.value)}
-                            fullWidth
-                          />
-                        </TableCell>
-                        <TableCell>
-                          <TextField
-                            type="number"
-                            value={item.yield}
-                            onChange={(e) => handleRecipeChange(index, 'yield', e.target.value)}
-                            fullWidth
-                          />
-                        </TableCell>
-                        <TableCell>
-                          {item.percentageUsed && item.yield ? 
-                            (() => {
-                              const totalWeight = parseFloat(formData.totalWeight);
-                              const wastage = totalWeight - (totalWeight * (parseFloat(item.yield) / 100));
-                              const totalRequired = totalWeight + wastage;
-                              return (totalRequired * (parseFloat(item.percentageUsed) / 100)).toFixed(2);
-                            })()
-                            : '0'
-                          }
-                        </TableCell>
-                        <TableCell>
-                          <IconButton
-                            color="error"
-                            onClick={() => removeRecipe(index)}
-                            disabled={formData.recipe.length === 1}
-                          >
-                            <DeleteIcon />
-                          </IconButton>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </TableContainer>
+              </Grid>
             </Grid>
 
             {/* Submit Button */}
