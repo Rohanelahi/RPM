@@ -14,6 +14,7 @@ import {
   MenuItem,
   Grid,
   CircularProgress,
+  Chip
 } from '@mui/material';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
@@ -28,7 +29,7 @@ const PaymentHistory = () => {
     startDate: new Date(new Date().getFullYear(), new Date().getMonth(), 1),
     endDate: new Date(),
     accountType: '',
-    paymentType: ''
+    recordType: ''
   });
 
   const accountTypes = [
@@ -36,13 +37,13 @@ const PaymentHistory = () => {
     { value: 'CUSTOMER', label: 'Customer' },
     { value: 'SUPPLIER', label: 'Supplier' },
     { value: 'VENDOR', label: 'Vendor' },
-    { value: 'EXPENSES', label: 'Expenses' }
+    { value: 'EXPENSE', label: 'Expense' }
   ];
 
-  const paymentTypes = [
-    { value: '', label: 'All Payments' },
-    { value: 'RECEIVED', label: 'Receipt' },
-    { value: 'ISSUED', label: 'Payment' }
+  const recordTypes = [
+    { value: '', label: 'All Records' },
+    { value: 'PAYMENT', label: 'Payments' },
+    { value: 'EXPENSE', label: 'Expenses' }
   ];
 
   useEffect(() => {
@@ -54,56 +55,104 @@ const PaymentHistory = () => {
       setLoading(true);
       const queryParams = new URLSearchParams();
       
-      // Format dates and add only if they exist
       if (filters.startDate) {
         const startDate = format(filters.startDate, 'yyyy-MM-dd');
         queryParams.append('startDate', startDate);
-        console.log('Start Date:', startDate);
       }
       if (filters.endDate) {
         const endDate = format(filters.endDate, 'yyyy-MM-dd');
         queryParams.append('endDate', endDate);
-        console.log('End Date:', endDate);
       }
-      
-      // Add other filters only if they have values
       if (filters.accountType) {
         queryParams.append('accountType', filters.accountType);
-        console.log('Account Type:', filters.accountType);
       }
-      if (filters.paymentType) {
-        queryParams.append('paymentType', filters.paymentType);
-        console.log('Payment Type:', filters.paymentType);
+      if (filters.recordType) {
+        queryParams.append('paymentType', filters.recordType);
       }
 
-      const url = `${config.apiUrl}/payments/history?${queryParams}`;
-      console.log('Requesting URL:', url);
-
+      const url = `${config.apiUrl}/accounts/payments/history?${queryParams}`;
       const response = await fetch(url);
-      console.log('Response status:', response.status);
       
       if (!response.ok) {
-        const errorText = await response.text();
-        console.error('Error response:', errorText);
-        throw new Error(`Failed to fetch payments: ${response.status} ${errorText}`);
+        throw new Error('Failed to fetch records');
       }
 
       const data = await response.json();
-      console.log('Received data:', data);
-      setPayments(Array.isArray(data) ? data : []);
+      // Map OTHER account type to EXPENSE in the display
+      const processedData = data.map(record => ({
+        ...record,
+        record_type: record.account_type === 'OTHER' ? 'EXPENSE' : record.record_type
+      }));
+      setPayments(processedData);
     } catch (error) {
-      console.error('Error fetching payments:', error);
+      console.error('Error fetching records:', error);
       setPayments([]);
     } finally {
       setLoading(false);
     }
   };
 
+  const getRecordTypeColor = (type) => {
+    switch (type) {
+      case 'PAYMENT':
+        return 'primary';
+      case 'EXPENSE':
+        return 'error';
+      default:
+        return 'default';
+    }
+  };
+
+  const columns = [
+    { field: 'voucher_no', headerName: 'Voucher No', width: 130 },
+    { field: 'date', headerName: 'Date', width: 130, 
+      valueFormatter: (params) => {
+        return params.value ? new Date(params.value).toLocaleDateString() : '';
+      }
+    },
+    { 
+      field: 'display_name', 
+      headerName: 'Account/Expense Type', 
+      width: 200,
+      valueGetter: (params) => {
+        if (params.row.account_type === 'OTHER') {
+          const account = params.row;
+          if (account.level3_name) {
+            return `${account.level1_name} > ${account.level2_name} > ${account.level3_name}`;
+          } else if (account.level2_name) {
+            return `${account.level1_name} > ${account.level2_name}`;
+          } else {
+            return account.level1_name;
+          }
+        }
+        return params.row.expense_type_name;
+      }
+    },
+    { field: 'receiver_name', headerName: 'Receiver Name', width: 150 },
+    { field: 'amount', headerName: 'Amount', width: 130,
+      valueFormatter: (params) => {
+        return params.value ? `Rs.${parseFloat(params.value).toLocaleString()}` : '';
+      }
+    },
+    { field: 'remarks', headerName: 'Remarks', width: 200 },
+    { 
+      field: 'record_type', 
+      headerName: 'Type', 
+      width: 120,
+      valueGetter: (params) => {
+        if (params.row.account_type === 'OTHER') {
+          return 'EXPENSE';
+        }
+        return params.row.record_type;
+      }
+    }
+  ];
+
   return (
     <Box className="stock-container">
       <Paper className="stock-header">
         <Typography variant="h4">
-          Payment History
+          Payment & Expense History
         </Typography>
       </Paper>
 
@@ -146,11 +195,11 @@ const PaymentHistory = () => {
             <TextField
               select
               fullWidth
-              label="Payment Type"
-              value={filters.paymentType}
-              onChange={(e) => setFilters(prev => ({ ...prev, paymentType: e.target.value }))}
+              label="Record Type"
+              value={filters.recordType}
+              onChange={(e) => setFilters(prev => ({ ...prev, recordType: e.target.value }))}
             >
-              {paymentTypes.map((type) => (
+              {recordTypes.map((type) => (
                 <MenuItem key={type.value} value={type.value}>
                   {type.label}
                 </MenuItem>
@@ -170,6 +219,8 @@ const PaymentHistory = () => {
             <TableHead>
               <TableRow className="stock-table-header">
                 <TableCell>Date</TableCell>
+                <TableCell>Time</TableCell>
+                <TableCell>Number</TableCell>
                 <TableCell>Type</TableCell>
                 <TableCell>Account</TableCell>
                 <TableCell>Mode</TableCell>
@@ -179,27 +230,37 @@ const PaymentHistory = () => {
               </TableRow>
             </TableHead>
             <TableBody>
-              {payments.map((payment) => (
-                <TableRow key={payment.id} hover>
-                  <TableCell>{format(new Date(payment.payment_date), 'dd/MM/yyyy')}</TableCell>
-                  <TableCell>{payment.payment_type === 'RECEIVED' ? 'Receipt' : 'Payment'}</TableCell>
-                  <TableCell>{payment.account_name}</TableCell>
+              {payments.map((record) => (
+                <TableRow key={record.id} hover>
+                  <TableCell>{format(new Date(record.payment_date), 'dd/MM/yyyy')}</TableCell>
+                  <TableCell>{record.payment_time}</TableCell>
                   <TableCell>
-                    {payment.payment_mode === 'ONLINE' && payment.bank_name 
-                      ? `${payment.payment_mode} (${payment.bank_name})` 
-                      : payment.payment_mode}
+                    {record.record_type === 'PAYMENT' ? record.receipt_no : record.voucher_no}
                   </TableCell>
-                  <TableCell>{payment.receiver_name}</TableCell>
+                  <TableCell>
+                    <Chip 
+                      label={record.record_type === 'PAYMENT' ? 'Payment' : 'Expense'}
+                      color={getRecordTypeColor(record.record_type)}
+                      size="small"
+                    />
+                  </TableCell>
+                  <TableCell>{record.account_name}</TableCell>
+                  <TableCell>
+                    {record.payment_mode === 'ONLINE' && record.bank_name 
+                      ? `${record.payment_mode} (${record.bank_name})` 
+                      : record.payment_mode}
+                  </TableCell>
+                  <TableCell>{record.receiver_name}</TableCell>
                   <TableCell 
                     align="right"
                     sx={{
-                      color: payment.payment_type === 'RECEIVED' ? 'success.main' : 'error.main',
+                      color: record.record_type === 'PAYMENT' ? 'success.main' : 'error.main',
                       fontFamily: 'monospace'
                     }}
                   >
-                    ₨ {Number(payment.amount).toLocaleString()}
+                    ₨ {Number(record.amount).toLocaleString()}
                   </TableCell>
-                  <TableCell>{payment.remarks}</TableCell>
+                  <TableCell>{record.remarks}</TableCell>
                 </TableRow>
               ))}
             </TableBody>

@@ -10,21 +10,22 @@ import {
   Stack,
   MenuItem,
   CircularProgress,
-  Divider
+  Divider,
+  Autocomplete
 } from '@mui/material';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { DateTimePicker } from '@mui/x-date-pickers/DateTimePicker';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import { Print } from '@mui/icons-material';
 import '../../styles/forms/GateForm.css';
-import useAccounts from '../../hooks/useAccounts';
 import { format } from 'date-fns';
 
 const SaleReturnForm = () => {
   const [loading, setLoading] = useState(false);
-  const { accounts: customers, loading: customersLoading } = useAccounts('CUSTOMER');
+  const [customers, setCustomers] = useState([]);
+  const [customersLoading, setCustomersLoading] = useState(true);
   const [saleGRNs, setSaleGRNs] = useState([]);
-  const [selectedSale, setSelectedSale] = useState(null);
+  const [selectedCustomer, setSelectedCustomer] = useState(null);
   const [isPrinted, setIsPrinted] = useState(false);
   const [paperTypes, setPaperTypes] = useState([]);
   
@@ -64,6 +65,95 @@ const SaleReturnForm = () => {
     'Payment Issue',
     'Other'
   ];
+
+  // Update the fetchCustomers function to match SaleOutForm
+  const fetchCustomers = async () => {
+    try {
+      setCustomersLoading(true);
+      // Fetch customers from all levels
+      const [level1Res, level2Res, level3Res] = await Promise.all([
+        fetch(`${config.apiUrl}/accounts/chart/level1?account_type=CUSTOMER`),
+        fetch(`${config.apiUrl}/accounts/chart/level2?account_type=CUSTOMER`),
+        fetch(`${config.apiUrl}/accounts/chart/level3?account_type=CUSTOMER`)
+      ]);
+
+      if (!level1Res.ok || !level2Res.ok || !level3Res.ok) {
+        throw new Error('Failed to fetch customers');
+      }
+
+      const [level1Data, level2Data, level3Data] = await Promise.all([
+        level1Res.json(),
+        level2Res.json(),
+        level3Res.json()
+      ]);
+
+      // Extract all Level 3 accounts from the nested structure
+      const allLevel3Accounts = [];
+      level3Data.forEach(level1 => {
+        if (level1.level2_accounts) {
+          level1.level2_accounts.forEach(level2 => {
+            if (level2.level3_accounts) {
+              level2.level3_accounts.forEach(level3 => {
+                if (level3.account_type === 'CUSTOMER') {
+                  allLevel3Accounts.push({
+                    ...level3,
+                    level: 3,
+                    level1_id: level1.id,
+                    level2_id: level2.id,
+                    level1_name: level1.name,
+                    level2_name: level2.name,
+                    displayName: `${level1.name} > ${level2.name} > ${level3.name}`
+                  });
+                }
+              });
+            }
+          });
+        }
+      });
+
+      // Filter and combine all customers from different levels
+      const allCustomers = [
+        ...level1Data
+          .filter(customer => customer.account_type === 'CUSTOMER')
+          .map(customer => ({
+            ...customer,
+            level: 1,
+            displayName: customer.name
+          })),
+        ...level2Data
+          .filter(customer => customer.account_type === 'CUSTOMER')
+          .map(customer => ({
+            ...customer,
+            level: 2,
+            displayName: `${customer.level1_name} > ${customer.name}`
+          })),
+        ...allLevel3Accounts
+      ];
+
+      setCustomers(allCustomers);
+    } catch (error) {
+      console.error('Error fetching customers:', error);
+      alert('Failed to fetch customers: ' + error.message);
+    } finally {
+      setCustomersLoading(false);
+    }
+  };
+
+  // Update useEffect to call fetchCustomers
+  useEffect(() => {
+    fetchCustomers();
+    fetchPaperTypes();
+  }, []);
+
+  // Update the customer selection handler
+  const handleCustomerSelect = (event, newValue) => {
+    setSelectedCustomer(newValue);
+    setFormData(prev => ({
+      ...prev,
+      purchaserId: newValue?.id || '',
+      saleGRN: ''
+    }));
+  };
 
   // Generate return number
   useEffect(() => {
@@ -113,19 +203,60 @@ const SaleReturnForm = () => {
   const handleGRNSelect = async (grnNumber) => {
     const selectedGRN = saleGRNs.find(grn => grn.grn_number === grnNumber);
     if (selectedGRN) {
-      setFormData(prev => ({
-        ...prev,
-        saleGRN: grnNumber,
-        originalQuantity: selectedGRN.quantity,
-        paperType: selectedGRN.paper_type || selectedGRN.item_type, // handle both paper_type and item_type
-        unit: selectedGRN.unit,
-        vehicleType: selectedGRN.vehicle_type,
-        vehicleNumber: selectedGRN.vehicle_number,
-        driverName: selectedGRN.driver_name,
-        dateTime: new Date(), // Keep current date/time for the return
-        remarks: `Return against Sale GRN: ${grnNumber}` // Pre-fill remarks with reference
-      }));
-      setSelectedSale(selectedGRN);
+      try {
+        // Get the pricing details for this GRN
+        const response = await fetch(`${config.apiUrl}/gate/sale-return/pricing/${grnNumber}`);
+        if (!response.ok) {
+          if (response.status === 404) {
+            console.warn('No pricing details found for GRN:', grnNumber);
+            // Continue with default values
+            setFormData(prev => ({
+              ...prev,
+              saleGRN: grnNumber,
+              originalQuantity: selectedGRN.quantity,
+              paperType: selectedGRN.paper_type || selectedGRN.item_type,
+              unit: selectedGRN.unit,
+              vehicleType: selectedGRN.vehicle_type,
+              vehicleNumber: selectedGRN.vehicle_number,
+              driverName: selectedGRN.driver_name,
+              dateTime: new Date(),
+              remarks: `Return against Sale GRN: ${grnNumber}`
+            }));
+            return;
+          }
+          throw new Error('Failed to fetch pricing details');
+        }
+        
+        const pricingData = await response.json();
+        
+        setFormData(prev => ({
+          ...prev,
+          saleGRN: grnNumber,
+          originalQuantity: selectedGRN.quantity,
+          paperType: selectedGRN.paper_type || selectedGRN.item_type,
+          unit: selectedGRN.unit,
+          vehicleType: selectedGRN.vehicle_type,
+          vehicleNumber: selectedGRN.vehicle_number,
+          driverName: selectedGRN.driver_name,
+          dateTime: new Date(),
+          remarks: `Return against Sale GRN: ${grnNumber}`
+        }));
+      } catch (error) {
+        console.error('Error fetching pricing details:', error);
+        // Continue with default values even if pricing fetch fails
+        setFormData(prev => ({
+          ...prev,
+          saleGRN: grnNumber,
+          originalQuantity: selectedGRN.quantity,
+          paperType: selectedGRN.paper_type || selectedGRN.item_type,
+          unit: selectedGRN.unit,
+          vehicleType: selectedGRN.vehicle_type,
+          vehicleNumber: selectedGRN.vehicle_number,
+          driverName: selectedGRN.driver_name,
+          dateTime: new Date(),
+          remarks: `Return against Sale GRN: ${grnNumber}`
+        }));
+      }
     }
   };
 
@@ -156,9 +287,13 @@ const SaleReturnForm = () => {
       });
 
       if (!response.ok) {
-        throw new Error('Failed to record sale return');
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to record sale return');
       }
 
+      const result = await response.json();
+      console.log('Sale return recorded:', result);
+      
       alert('Sale return recorded successfully');
       
       // Reset form
@@ -177,7 +312,7 @@ const SaleReturnForm = () => {
         dateTime: new Date(),
         remarks: ''
       });
-      setSelectedSale(null);
+      setSelectedCustomer(null);
 
       // Refresh GRNs list to remove the one just returned
       if (formData.purchaserId) {
@@ -206,7 +341,7 @@ const SaleReturnForm = () => {
 
     } catch (error) {
       console.error('Error:', error);
-      alert('Error recording sale return');
+      alert('Error recording sale return: ' + error.message);
     } finally {
       setLoading(false);
     }
@@ -300,7 +435,7 @@ const SaleReturnForm = () => {
             </tr>
             <tr>
               <td><strong>Customer:</strong></td>
-              <td>${selectedCustomer?.account_name || 'N/A'}</td>
+              <td>${selectedCustomer?.name || 'N/A'}</td>
             </tr>
             <tr>
               <td><strong>Sale GRN:</strong></td>
@@ -432,26 +567,30 @@ const SaleReturnForm = () => {
               </Grid>
 
               <Grid item xs={12} md={6}>
-                <TextField
-                  fullWidth
-                  select
-                  label="Customer"
-                  required
-                  value={formData.purchaserId}
-                  onChange={(e) => setFormData(prev => ({
-                    ...prev,
-                    purchaserId: e.target.value,
-                    saleGRN: ''
-                  }))}
+                <Autocomplete
+                  options={customers}
+                  getOptionLabel={(option) => option.displayName}
+                  value={selectedCustomer}
+                  onChange={handleCustomerSelect}
+                  renderInput={(params) => (
+                    <TextField
+                      {...params}
+                      label="Customer"
+                      required
+                    />
+                  )}
+                  renderOption={(props, option) => (
+                    <li {...props}>
+                      <div>
+                        <div>{option.displayName}</div>
+                        <div style={{ fontSize: '0.8em', color: 'gray' }}>
+                          {option.level === 1 ? 'Level 1' : option.level === 2 ? 'Level 2' : 'Level 3'} - {option.account_type}
+                        </div>
+                      </div>
+                    </li>
+                  )}
                   disabled={customersLoading}
-                  onKeyPress={(e) => handleKeyPress(e, 'saleGRN')}
-                >
-                  {customers.map((customer) => (
-                    <MenuItem key={customer.id} value={customer.id}>
-                      {customer.account_name}
-                    </MenuItem>
-                  ))}
-                </TextField>
+                />
               </Grid>
 
               <Grid item xs={12} md={6}>

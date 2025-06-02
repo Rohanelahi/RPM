@@ -20,7 +20,6 @@ import { DateTimePicker } from '@mui/x-date-pickers/DateTimePicker';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import { Print, Add } from '@mui/icons-material';
 import '../../styles/forms/GateForm.css';
-import useAccounts from '../../hooks/useAccounts';
 import useAuth from '../../hooks/useAuth';
 import useItems from '../../hooks/useItems';
 import { format } from 'date-fns';
@@ -28,7 +27,6 @@ import config from '../../config';
 
 const PurchaseForm = () => {
   const { user } = useAuth();
-  const { accounts, loading: accountsLoading } = useAccounts('SUPPLIER');
   const { items, loading: itemsLoading } = useItems();
   const [loading, setLoading] = useState(false);
   const [openNewSupplier, setOpenNewSupplier] = useState(false);
@@ -60,6 +58,10 @@ const PurchaseForm = () => {
     description: ''
   });
 
+  // Add state for chart of accounts
+  const [suppliers, setSuppliers] = useState([]);
+  const [loadingSuppliers, setLoadingSuppliers] = useState(false);
+
   const units = [
     'KG',
     'Piece',
@@ -67,6 +69,80 @@ const PurchaseForm = () => {
     'Vehicle',
     'Feet'
   ];
+
+  // Fetch suppliers from chart of accounts
+  useEffect(() => {
+    const fetchSuppliers = async () => {
+      try {
+        setLoadingSuppliers(true);
+        // Fetch suppliers from all levels
+        const [level1Res, level2Res, level3Res] = await Promise.all([
+          fetch(`${config.apiUrl}/accounts/chart/level1?account_type=SUPPLIER`),
+          fetch(`${config.apiUrl}/accounts/chart/level2?account_type=SUPPLIER`),
+          fetch(`${config.apiUrl}/accounts/chart/level3?account_type=SUPPLIER`)
+        ]);
+
+        if (!level1Res.ok || !level2Res.ok || !level3Res.ok) {
+          throw new Error('Failed to fetch suppliers');
+        }
+
+        const [level1Data, level2Data, level3Data] = await Promise.all([
+          level1Res.json(),
+          level2Res.json(),
+          level3Res.json()
+        ]);
+
+        // Extract all Level 3 accounts from the nested structure
+        const allLevel3Accounts = [];
+        level3Data.forEach(level1 => {
+          if (level1.level2_accounts) {
+            level1.level2_accounts.forEach(level2 => {
+              if (level2.level3_accounts) {
+                level2.level3_accounts.forEach(level3 => {
+                  if (level3.account_type === 'SUPPLIER') {
+                    allLevel3Accounts.push({
+                      ...level3,
+                      level: 3,
+                      level1_id: level1.id,
+                      level2_id: level2.id,
+                      level1_name: level1.name,
+                      level2_name: level2.name
+                    });
+                  }
+                });
+              }
+            });
+          }
+        });
+
+        // Filter and combine all suppliers from different levels
+        const allSuppliers = [
+          ...level1Data
+            .filter(supplier => supplier.account_type === 'SUPPLIER')
+            .map(supplier => ({
+              ...supplier,
+              level: 1
+            })),
+          ...level2Data
+            .filter(supplier => supplier.account_type === 'SUPPLIER')
+            .map(supplier => ({
+              ...supplier,
+              level: 2
+            })),
+          ...allLevel3Accounts
+        ];
+
+        setSuppliers(allSuppliers);
+      } catch (error) {
+        console.error('Error fetching suppliers:', error);
+        alert('Failed to fetch suppliers: ' + error.message);
+      } finally {
+        setLoadingSuppliers(false);
+      }
+    };
+
+    fetchSuppliers();
+  }, []);
 
   // Modified generateGRN function
   const generateGRN = (supplierName = '', itemType = '') => {
@@ -104,15 +180,15 @@ const PurchaseForm = () => {
   // Update useEffect to generate GRN when supplier and item type change
   useEffect(() => {
     if (formData.supplierId && formData.itemType) {
-      const selectedSupplier = accounts.find(s => s.id === formData.supplierId);
-      const supplierName = selectedSupplier ? selectedSupplier.account_name : '';
+      const selectedSupplier = suppliers.find(s => s.id === formData.supplierId);
+      const supplierName = selectedSupplier ? selectedSupplier.name : '';
       const grnNumber = generateGRN(supplierName, formData.itemType);
       setFormData(prev => ({
         ...prev,
         grnNumber
       }));
     }
-  }, [formData.supplierId, formData.itemType, accounts]);
+  }, [formData.supplierId, formData.itemType, suppliers]);
 
   useEffect(() => {
     // Auto calculate final quantity
@@ -182,7 +258,7 @@ const PurchaseForm = () => {
     const printWindow = window.open('', '_blank');
     const currentDate = format(new Date(), 'dd/MM/yyyy');
     const currentTime = format(new Date(), 'HH:mm:ss');
-    const selectedSupplier = accounts.find(s => s.id === formData.supplierId);
+    const selectedSupplier = suppliers.find(s => s.id === formData.supplierId);
 
     printWindow.document.write(`
       <!DOCTYPE html>
@@ -289,7 +365,7 @@ const PurchaseForm = () => {
             </div>
             <div class="detail-item">
               <div class="label">Supplier:</div>
-              <div class="value">${selectedSupplier?.account_name || ''}</div>
+              <div class="value">${selectedSupplier?.name || ''}</div>
             </div>
             <div class="detail-item">
               <div class="label">Vehicle Number:</div>
@@ -520,12 +596,12 @@ const PurchaseForm = () => {
                       ...prev,
                       supplierId: e.target.value
                     }))}
-                    disabled={accountsLoading}
+                    disabled={loadingSuppliers}
                     onKeyPress={(e) => handleKeyPress(e, 'itemType')}
                   >
-                    {accounts.map((supplier) => (
+                    {suppliers.map((supplier) => (
                       <MenuItem key={supplier.id} value={supplier.id}>
-                        {supplier.account_name}
+                        {supplier.name} {supplier.level > 1 ? `(${supplier.level})` : ''}
                       </MenuItem>
                     ))}
                   </TextField>

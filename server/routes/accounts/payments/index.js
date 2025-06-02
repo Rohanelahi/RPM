@@ -167,6 +167,18 @@ router.post('/received', async (req, res) => {
     // Generate voucher number if not provided
     const finalVoucherNo = voucher_no || await generateVoucherNo('RECEIVED', client);
 
+    // Get bank account details if payment is online
+    let bankAccountName = null;
+    if (payment_mode === 'ONLINE' && bank_account_id) {
+      const bankAccountResult = await client.query(
+        'SELECT bank_name FROM bank_accounts WHERE id = $1',
+        [bank_account_id]
+      );
+      if (bankAccountResult.rows.length > 0) {
+        bankAccountName = bankAccountResult.rows[0].bank_name;
+      }
+    }
+
     // Create payment record
     const paymentResult = await client.query(
       `INSERT INTO payments (
@@ -193,6 +205,26 @@ router.post('/received', async (req, res) => {
       ]
     );
 
+    // Create transaction record for the ledger
+    await client.query(
+      `INSERT INTO transactions (
+        transaction_date,
+        account_id,
+        reference_no,
+        entry_type,
+        amount,
+        description
+      ) VALUES ($1, $2, $3, $4, $5, $6)`,
+      [
+        new Date(payment_date),
+        account_id,
+        finalVoucherNo, // Use the full voucher number as reference
+        'CREDIT',
+        amount,
+        `Payment received${payment_mode === 'CASH' ? ' in cash' : payment_mode === 'ONLINE' && bankAccountName ? ` via bank transfer (${bankAccountName})` : ''}${remarks ? ` - ${remarks}` : ''}`
+      ]
+    );
+
     // If payment mode is CASH, update cash balance
     if (payment_mode === 'CASH') {
       // Get current cash balance
@@ -210,27 +242,21 @@ router.post('/received', async (req, res) => {
       // Create cash transaction
       await client.query(
         `INSERT INTO cash_transactions (
-          type, amount, reference, remarks, balance, balance_after, transaction_date
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+          type, amount, reference, remarks, balance, balance_after
+        ) VALUES ($1, $2, $3, $4, $5, $6)`,
         [
           'CREDIT',
           amount,
-          'Payment Received',
+          finalVoucherNo,
           remarks || `Payment from ${receiver_name}`,
           currentBalance,
-          newBalance,
-          new Date(payment_date)
+          newBalance
         ]
       );
+    }
 
-      // Update cash_tracking table
-      await client.query(
-        `UPDATE cash_tracking 
-         SET cash_in_hand = $1,
-             last_updated = CURRENT_TIMESTAMP`,
-        [newBalance]
-      );
-    } else if (payment_mode === 'ONLINE' && bank_account_id) {
+    // If payment mode is ONLINE, update bank balance
+    if (payment_mode === 'ONLINE' && bank_account_id) {
       // Get current bank balance
       const bankBalanceResult = await client.query(`
         SELECT COALESCE(
@@ -247,13 +273,14 @@ router.post('/received', async (req, res) => {
       // Create bank transaction
       await client.query(
         `INSERT INTO bank_transactions (
-          account_id, type, amount, reference, balance, balance_after, transaction_date
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+          account_id, type, amount, reference, remarks, balance, balance_after, transaction_date
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
         [
           bank_account_id,
           'CREDIT',
           amount,
-          `Payment from ${receiver_name}`,
+          finalVoucherNo,
+          remarks || `Payment from ${receiver_name}`,
           currentBalance,
           newBalance,
           new Date(payment_date)
@@ -263,12 +290,10 @@ router.post('/received', async (req, res) => {
 
     await client.query('COMMIT');
     res.json(paymentResult.rows[0]);
-  } catch (err) {
+  } catch (error) {
     await client.query('ROLLBACK');
-    console.error('Error processing payment:', err);
-    res.status(500).json({ 
-      error: err.message || 'Failed to process payment'
-    });
+    console.error('Error processing payment:', error);
+    res.status(500).json({ error: error.message || 'Failed to process payment' });
   } finally {
     client.release();
   }
@@ -304,6 +329,18 @@ router.post('/issued', async (req, res) => {
     // Generate voucher number if not provided
     const finalVoucherNo = voucher_no || await generateVoucherNo('ISSUED', client);
 
+    // Get bank account details if payment is online
+    let bankAccountName = null;
+    if (payment_mode === 'ONLINE' && bank_account_id) {
+      const bankAccountResult = await client.query(
+        'SELECT bank_name FROM bank_accounts WHERE id = $1',
+        [bank_account_id]
+      );
+      if (bankAccountResult.rows.length > 0) {
+        bankAccountName = bankAccountResult.rows[0].bank_name;
+      }
+    }
+
     // Create payment record
     const paymentResult = await client.query(
       `INSERT INTO payments (
@@ -318,7 +355,7 @@ router.post('/issued', async (req, res) => {
         amount,
         new Date(payment_date),
         payment_mode,
-        'ISSUED',
+        account_type === 'OTHER' ? 'EXPENSE' : 'ISSUED', // Set payment_type as EXPENSE for OTHER account type
         receiver_name,
         remarks,
         finalVoucherNo,
@@ -327,6 +364,26 @@ router.post('/issued', async (req, res) => {
         processed_by_role,
         account_type,
         bank_account_id
+      ]
+    );
+
+    // Create transaction record for the ledger
+    await client.query(
+      `INSERT INTO transactions (
+        transaction_date,
+        account_id,
+        reference_no,
+        entry_type,
+        amount,
+        description
+      ) VALUES ($1, $2, $3, $4, $5, $6)`,
+      [
+        new Date(payment_date),
+        account_id,
+        finalVoucherNo, // Use the full voucher number as reference
+        'DEBIT',
+        amount,
+        `Payment issued${payment_mode === 'CASH' ? ' in cash' : payment_mode === 'ONLINE' && bankAccountName ? ` via bank transfer (${bankAccountName})` : ''}${remarks ? ` - ${remarks}` : ''}`
       ]
     );
 
@@ -356,33 +413,24 @@ router.post('/issued', async (req, res) => {
         [
           'DEBIT',
           amount,
-          'Payment Issued',
+          finalVoucherNo,
           remarks || `Payment to ${receiver_name}`,
           currentBalance,
           newBalance,
           new Date(payment_date)
         ]
       );
-
-      // Update cash_tracking table
-      await client.query(
-        `UPDATE cash_tracking 
-         SET cash_in_hand = $1,
-             last_updated = CURRENT_TIMESTAMP`,
-        [newBalance]
-      );
     } else if (payment_mode === 'ONLINE' && bank_account_id) {
       // Get current bank balance
       const bankBalanceResult = await client.query(`
-        SELECT current_balance
-        FROM bank_accounts
-        WHERE id = $1
+        SELECT COALESCE(
+          SUM(CASE WHEN type = 'CREDIT' THEN amount ELSE -amount END),
+          0
+        ) as current_balance
+        FROM bank_transactions
+        WHERE account_id = $1
       `, [bank_account_id]);
       
-      if (bankBalanceResult.rows.length === 0) {
-        throw new Error('Bank account not found');
-      }
-
       const currentBalance = Number(bankBalanceResult.rows[0].current_balance);
       const newBalance = currentBalance - Number(amount);
 
@@ -393,25 +441,18 @@ router.post('/issued', async (req, res) => {
       // Create bank transaction
       await client.query(
         `INSERT INTO bank_transactions (
-          account_id, type, amount, reference, balance, balance_after, transaction_date
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+          account_id, type, amount, reference, remarks, balance, balance_after, transaction_date
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
         [
           bank_account_id,
           'DEBIT',
           amount,
-          `Payment to ${receiver_name}`,
+          finalVoucherNo,
+          remarks || `Payment to ${receiver_name}`,
           currentBalance,
           newBalance,
           new Date(payment_date)
         ]
-      );
-
-      // Update bank account balance
-      await client.query(
-        `UPDATE bank_accounts 
-         SET current_balance = $1
-         WHERE id = $2`,
-        [newBalance, bank_account_id]
       );
     }
 
@@ -435,17 +476,97 @@ router.get('/history', async (req, res) => {
     console.log('Query parameters:', { startDate, endDate, accountType, paymentType });
 
     let query = `
-      SELECT 
-        p.*,
-        a.account_name,
-        a.account_type,
-        CASE 
-          WHEN p.bank_account_id IS NOT NULL THEN b.bank_name
-          ELSE NULL
-        END as bank_name
-      FROM payments p
-      JOIN accounts a ON p.account_id = a.id
-      LEFT JOIN bank_accounts b ON p.bank_account_id = b.id
+      WITH payment_data AS (
+        SELECT 
+          p.id::text as id,
+          p.payment_date,
+          TO_CHAR(p.payment_date, 'HH24:MI:SS') as payment_time,
+          p.amount,
+          p.payment_mode,
+          p.receiver_name,
+          p.remarks,
+          p.voucher_no,
+          CASE 
+            WHEN p.payment_type = 'RECEIVED' THEN 'RV' || SUBSTRING(p.voucher_no, 3)
+            WHEN p.payment_type = 'ISSUED' THEN 'PV' || SUBSTRING(p.voucher_no, 3)
+            ELSE p.voucher_no
+          END as receipt_no,
+          p.created_by::text as created_by,
+          p.processed_by_role,
+          a.account_name,
+          a.account_type,
+          CASE 
+            WHEN p.bank_account_id IS NOT NULL THEN b.bank_name
+            ELSE NULL
+          END as bank_name,
+          'PAYMENT' as record_type
+        FROM payments p
+        JOIN accounts a ON p.account_id = a.id
+        LEFT JOIN bank_accounts b ON p.bank_account_id = b.id
+        WHERE p.payment_type != 'EXPENSE'
+      ),
+      expense_data AS (
+        SELECT 
+          e.id::text as id,
+          e.date as payment_date,
+          TO_CHAR(e.date, 'HH24:MI:SS') as payment_time,
+          e.amount,
+          'CASH' as payment_mode,
+          e.receiver_name,
+          e.remarks,
+          e.voucher_no,
+          e.voucher_no as receipt_no,
+          e.created_by::text as created_by,
+          e.processed_by_role,
+          CASE 
+            WHEN e.account_type = 'OTHER' THEN
+              CASE 
+                WHEN a.level = 'LEVEL3' THEN CONCAT(l1.name, ' > ', l2.name, ' > ', a.name)
+                WHEN a.level = 'LEVEL2' THEN CONCAT(l1.name, ' > ', a.name)
+                WHEN a.level = 'LEVEL1' THEN a.name
+                ELSE e.expense_type
+              END
+            ELSE e.expense_type
+          END as account_name,
+          e.account_type,
+          NULL as bank_name,
+          'EXPENSE' as record_type
+        FROM expenses e
+        LEFT JOIN (
+          SELECT 
+            id,
+            name,
+            account_type,
+            NULL as level1_id,
+            'LEVEL1' as level
+          FROM chart_of_accounts_level1
+          UNION ALL
+          SELECT 
+            id,
+            name,
+            account_type,
+            level1_id,
+            'LEVEL2' as level
+          FROM chart_of_accounts_level2
+          UNION ALL
+          SELECT 
+            id,
+            name,
+            account_type,
+            level1_id,
+            'LEVEL3' as level
+          FROM chart_of_accounts_level3
+        ) a ON e.account_id = a.id
+        LEFT JOIN chart_of_accounts_level1 l1 ON a.level1_id = l1.id
+        LEFT JOIN chart_of_accounts_level2 l2 ON a.id = l2.id AND a.level = 'LEVEL3'
+      ),
+      combined_data AS (
+        SELECT * FROM payment_data
+        UNION ALL
+        SELECT * FROM expense_data
+      )
+      SELECT DISTINCT ON (id) *
+      FROM combined_data
       WHERE 1=1
     `;
 
@@ -453,30 +574,30 @@ router.get('/history', async (req, res) => {
     let paramCount = 1;
 
     if (startDate) {
-      query += ` AND DATE(p.payment_date) >= $${paramCount}`;
+      query += ` AND DATE(payment_date) >= $${paramCount}`;
       queryParams.push(startDate);
       paramCount++;
     }
 
     if (endDate) {
-      query += ` AND DATE(p.payment_date) <= $${paramCount}`;
+      query += ` AND DATE(payment_date) <= $${paramCount}`;
       queryParams.push(endDate);
       paramCount++;
     }
 
     if (accountType) {
-      query += ` AND a.account_type = $${paramCount}`;
+      query += ` AND account_type = $${paramCount}`;
       queryParams.push(accountType);
       paramCount++;
     }
 
     if (paymentType) {
-      query += ` AND p.payment_type = $${paramCount}`;
+      query += ` AND record_type = $${paramCount}`;
       queryParams.push(paymentType);
       paramCount++;
     }
 
-    query += ` ORDER BY p.payment_date DESC, p.id DESC`;
+    query += ` ORDER BY id, payment_date DESC`;
 
     console.log('Executing query:', query);
     console.log('Query parameters:', queryParams);

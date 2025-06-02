@@ -10,21 +10,23 @@ import {
   Stack,
   MenuItem,
   CircularProgress,
-  Divider
+  Divider,
+  Autocomplete
 } from '@mui/material';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { DateTimePicker } from '@mui/x-date-pickers/DateTimePicker';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import { Print } from '@mui/icons-material';
 import '../../styles/forms/GateForm.css';
-import useAccounts from '../../hooks/useAccounts';
 import { format } from 'date-fns';
 
 const SaleOutForm = () => {
   const [loading, setLoading] = useState(false);
-  const { accounts: customers, loading: customersLoading } = useAccounts('CUSTOMER');
+  const [customers, setCustomers] = useState([]);
   const [isPrinted, setIsPrinted] = useState(false);
   const [paperTypes, setPaperTypes] = useState([]);
+  const [selectedCustomer, setSelectedCustomer] = useState(null);
+  const [loadingCustomers, setLoadingCustomers] = useState(false);
 
   const [formData, setFormData] = useState({
     grnNumber: '',
@@ -53,8 +55,81 @@ const SaleOutForm = () => {
   ];
 
   useEffect(() => {
+    fetchCustomers();
     fetchPaperTypes();
   }, []);
+
+  const fetchCustomers = async () => {
+    try {
+      setLoadingCustomers(true);
+      // Fetch customers from all levels
+      const [level1Res, level2Res, level3Res] = await Promise.all([
+        fetch(`${config.apiUrl}/accounts/chart/level1?account_type=CUSTOMER`),
+        fetch(`${config.apiUrl}/accounts/chart/level2?account_type=CUSTOMER`),
+        fetch(`${config.apiUrl}/accounts/chart/level3?account_type=CUSTOMER`)
+      ]);
+
+      if (!level1Res.ok || !level2Res.ok || !level3Res.ok) {
+        throw new Error('Failed to fetch customers');
+      }
+
+      const [level1Data, level2Data, level3Data] = await Promise.all([
+        level1Res.json(),
+        level2Res.json(),
+        level3Res.json()
+      ]);
+
+      // Extract all Level 3 accounts from the nested structure
+      const allLevel3Accounts = [];
+      level3Data.forEach(level1 => {
+        if (level1.level2_accounts) {
+          level1.level2_accounts.forEach(level2 => {
+            if (level2.level3_accounts) {
+              level2.level3_accounts.forEach(level3 => {
+                if (level3.account_type === 'CUSTOMER') {
+                  allLevel3Accounts.push({
+                    ...level3,
+                    level: 3,
+                    level1_id: level1.id,
+                    level2_id: level2.id,
+                    level1_name: level1.name,
+                    level2_name: level2.name,
+                    displayName: `${level1.name} > ${level2.name} > ${level3.name}`
+                  });
+                }
+              });
+            }
+          });
+        }
+      });
+
+      // Filter and combine all customers from different levels
+      const allCustomers = [
+        ...level1Data
+          .filter(customer => customer.account_type === 'CUSTOMER')
+          .map(customer => ({
+            ...customer,
+            level: 1,
+            displayName: customer.name
+          })),
+        ...level2Data
+          .filter(customer => customer.account_type === 'CUSTOMER')
+          .map(customer => ({
+            ...customer,
+            level: 2,
+            displayName: `${customer.level1_name} > ${customer.name}`
+          })),
+        ...allLevel3Accounts
+      ];
+
+      setCustomers(allCustomers);
+    } catch (error) {
+      console.error('Error fetching customers:', error);
+      alert('Failed to fetch customers: ' + error.message);
+    } finally {
+      setLoadingCustomers(false);
+    }
+  };
 
   const fetchPaperTypes = async () => {
     try {
@@ -67,26 +142,23 @@ const SaleOutForm = () => {
     }
   };
 
-  // Generate GRN number when purchaser and paper type are selected
+  // Generate GRN number when customer and paper type are selected
   useEffect(() => {
     const generateGRN = () => {
-      if (!formData.customerId || !formData.paperType) return;
+      if (!selectedCustomer || !formData.paperType) return;
 
       const date = new Date();
       const year = date.getFullYear().toString().slice(-2);
       const month = (date.getMonth() + 1).toString().padStart(2, '0');
       const day = date.getDate().toString().padStart(2, '0');
 
-      // Get customer name
-      const customer = customers.find(c => c.id === formData.customerId);
-      const customerCode = customer
-        ? customer.account_name
-            .split(' ')
-            .map(word => word[0])
-            .join('')
-            .toUpperCase()
-            .slice(0, 3)
-        : 'XXX';
+      // Get customer code from name
+      const customerCode = selectedCustomer.name
+        .split(' ')
+        .map(word => word[0])
+        .join('')
+        .toUpperCase()
+        .slice(0, 3);
 
       // Get paper type code
       const paperCode = formData.paperType
@@ -107,12 +179,12 @@ const SaleOutForm = () => {
     };
 
     generateGRN();
-  }, [formData.customerId, formData.paperType, customers]);
+  }, [selectedCustomer, formData.paperType]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     
-    if (!formData.customerId || !formData.quantity || !formData.vehicleType || !formData.vehicleNumber) {
+    if (!selectedCustomer || !formData.quantity || !formData.vehicleType || !formData.vehicleNumber) {
       alert('Please fill all required fields');
       return;
     }
@@ -125,13 +197,14 @@ const SaleOutForm = () => {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          customerId: formData.customerId,
+          grnNumber: formData.grnNumber,
+          customerId: selectedCustomer.id,
+          paperType: formData.paperType,
           quantity: formData.quantity,
           vehicleType: formData.vehicleType,
           vehicleNumber: formData.vehicleNumber,
           driverName: formData.driverName,
           dateTime: formData.dateTime,
-          itemType: formData.itemType,
           unit: formData.unit,
           remarks: formData.remarks
         })
@@ -155,6 +228,7 @@ const SaleOutForm = () => {
         dateTime: new Date(),
         remarks: ''
       });
+      setSelectedCustomer(null);
     } catch (error) {
       console.error('Error recording sale out:', error);
       alert('Error recording sale out');
@@ -167,7 +241,6 @@ const SaleOutForm = () => {
     const printWindow = window.open('', '_blank');
     const currentDate = format(new Date(), 'dd/MM/yyyy');
     const currentTime = format(new Date(), 'HH:mm:ss');
-    const selectedCustomer = customers.find(c => c.id === formData.customerId);
 
     printWindow.document.write(`
       <!DOCTYPE html>
@@ -251,7 +324,7 @@ const SaleOutForm = () => {
             </tr>
             <tr>
               <td><strong>Customer:</strong></td>
-              <td>${selectedCustomer?.account_name || 'N/A'}</td>
+              <td>${selectedCustomer?.name || 'N/A'}</td>
             </tr>
           </table>
 
@@ -319,16 +392,6 @@ const SaleOutForm = () => {
     }, 250);
   };
 
-  const handleKeyPress = (event, nextFieldId) => {
-    if (event.key === 'Enter') {
-      event.preventDefault();
-      const nextField = document.getElementById(nextFieldId);
-      if (nextField) {
-        nextField.focus();
-      }
-    }
-  };
-
   return (
     <div className="gate-form">
       <Paper className="content-paper">
@@ -356,25 +419,32 @@ const SaleOutForm = () => {
               </Grid>
 
               <Grid item xs={12} md={6}>
-                <TextField
-                  fullWidth
-                  select
-                  label="Customer"
-                  required
-                  value={formData.customerId}
-                  onChange={(e) => setFormData(prev => ({
-                    ...prev,
-                    customerId: e.target.value
-                  }))}
-                  disabled={customersLoading}
-                  onKeyPress={(e) => handleKeyPress(e, 'paperType')}
-                >
-                  {customers.map((customer) => (
-                    <MenuItem key={customer.id} value={customer.id}>
-                      {customer.account_name}
-                    </MenuItem>
-                  ))}
-                </TextField>
+                <Autocomplete
+                  options={customers}
+                  getOptionLabel={(option) => option.displayName}
+                  value={selectedCustomer}
+                  onChange={(event, newValue) => {
+                    setSelectedCustomer(newValue);
+                  }}
+                  renderInput={(params) => (
+                    <TextField
+                      {...params}
+                      label="Customer"
+                      required
+                    />
+                  )}
+                  renderOption={(props, option) => (
+                    <li {...props}>
+                      <div>
+                        <div>{option.displayName}</div>
+                        <div style={{ fontSize: '0.8em', color: 'gray' }}>
+                          {option.level === 1 ? 'Level 1' : option.level === 2 ? 'Level 2' : 'Level 3'} - {option.account_type}
+                        </div>
+                      </div>
+                    </li>
+                  )}
+                  disabled={loadingCustomers}
+                />
               </Grid>
 
               <Grid item xs={12} md={6}>
@@ -388,7 +458,6 @@ const SaleOutForm = () => {
                     ...prev,
                     paperType: e.target.value
                   }))}
-                  onKeyPress={(e) => handleKeyPress(e, 'vehicleType')}
                 >
                   {paperTypes.map((type) => (
                     <MenuItem key={type.id} value={type.name}>

@@ -17,7 +17,19 @@ router.get('/inventory', async (req, res) => {
           0 as qty_out,
           COALESCE(pe.price_per_unit, 0) as price_per_unit,
           se.created_at as transaction_date,
-          a.account_name as vendor_name
+          COALESCE(
+            (SELECT l1.name FROM chart_of_accounts_level1 l1 
+             JOIN chart_of_accounts_level3 l3 ON l3.level1_id = l1.id 
+             JOIN accounts a2 ON a2.chart_account_id = l3.id 
+             WHERE a2.id = se.vendor_id),
+            (SELECT l1.name FROM chart_of_accounts_level1 l1 
+             JOIN chart_of_accounts_level2 l2 ON l2.level1_id = l1.id 
+             JOIN accounts a2 ON a2.chart_account_id = l2.id 
+             WHERE a2.id = se.vendor_id),
+            (SELECT l1.name FROM chart_of_accounts_level1 l1 
+             JOIN accounts a2 ON a2.chart_account_id = l1.id 
+             WHERE a2.id = se.vendor_id)
+          ) as vendor_name
         FROM store_entries se
         JOIN store_items si ON se.item_id = si.id
         LEFT JOIN pricing_entries pe ON pe.reference_id = se.id

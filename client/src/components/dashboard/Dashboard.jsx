@@ -351,7 +351,7 @@ const Dashboard = () => {
                 <CardContent>
                   <Typography variant="h6" gutterBottom>
                     Recent Production
-                  </Typography>
+                    </Typography>
                   <TableContainer>
                     <Table size="small">
                       <TableHead>
@@ -419,7 +419,7 @@ const Dashboard = () => {
                                   {formatNumber(totalWeight)}
                                 </TableCell>
                                 <TableCell>kg</TableCell>
-                                <TableCell align="right">
+                            <TableCell align="right">
                                   Rs. {avgCostPerKg.toFixed(2)}
                                 </TableCell>
                               </TableRow>
@@ -437,9 +437,9 @@ const Dashboard = () => {
                   </TableContainer>
                 </CardContent>
               </Card>
-            </Paper>
+              </Paper>
+            </Grid>
           </Grid>
-        </Grid>
         )}
       </Box>
   );

@@ -139,12 +139,33 @@ router.get('/:month/:year', async (req, res) => {
 
     // Add query for monthly expenses
     const expensesQuery = `
+      WITH expense_payments AS (
+        SELECT 
+          account_type as expense_type,
+          SUM(amount) as total_amount
+        FROM payments
+        WHERE EXTRACT(MONTH FROM payment_date) = $1 
+        AND EXTRACT(YEAR FROM payment_date) = $2
+        AND (account_type = 'EXPENSE' OR account_type = 'OTHER')
+        GROUP BY account_type
+      ),
+      regular_expenses AS (
+        SELECT 
+          expense_type,
+          SUM(amount) as total_amount
+        FROM expenses
+        WHERE EXTRACT(MONTH FROM date) = $1 
+        AND EXTRACT(YEAR FROM date) = $2
+        GROUP BY expense_type
+      )
       SELECT 
         expense_type,
-        SUM(amount) as total_amount
-      FROM expenses
-      WHERE EXTRACT(MONTH FROM date) = $1 
-      AND EXTRACT(YEAR FROM date) = $2
+        SUM(total_amount) as total_amount
+      FROM (
+        SELECT * FROM expense_payments
+        UNION ALL
+        SELECT * FROM regular_expenses
+      ) combined_expenses
       GROUP BY expense_type
     `;
 

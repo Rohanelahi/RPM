@@ -16,15 +16,37 @@ import {
   DialogContent,
   DialogActions,
   MenuItem,
-  CircularProgress
+  CircularProgress,
+  FormControl,
+  InputLabel,
+  Select,
+  Typography,
+  Collapse,
+  IconButton,
+  Alert,
+  InputAdornment
 } from '@mui/material';
-import { Add as AddIcon, Edit as EditIcon } from '@mui/icons-material';
+import { Add as AddIcon, Edit as EditIcon, ExpandMore as ExpandMoreIcon, ExpandLess as ExpandLessIcon, Search as SearchIcon } from '@mui/icons-material';
+import axios from 'axios';
 
 const AccountsList = () => {
   const [accounts, setAccounts] = useState([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingAccount, setEditingAccount] = useState(null);
+  const [chartAccounts, setChartAccounts] = useState([]);
+  const [expandedAccounts, setExpandedAccounts] = useState({});
+  const [selectedLevels, setSelectedLevels] = useState({
+    level1: '',
+    level2: '',
+    level3: '',
+    level4: ''
+  });
+  const [levelOptions, setLevelOptions] = useState({
+    level2: [],
+    level3: [],
+    level4: []
+  });
   
   const [formData, setFormData] = useState({
     accountName: '',
@@ -33,10 +55,18 @@ const AccountsList = () => {
     phone: '',
     email: '',
     address: '',
-    openingBalance: ''
+    openingBalance: '',
+    chartAccountId: '',
+    chartAccountLevel: 1
   });
 
   const accountTypes = ['SUPPLIER', 'CUSTOMER', 'VENDOR'];
+
+  const [level1Accounts, setLevel1Accounts] = useState([]);
+  const [level2Accounts, setLevel2Accounts] = useState([]);
+  const [level3Accounts, setLevel3Accounts] = useState([]);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [filteredAccounts, setFilteredAccounts] = useState([]);
 
   const fetchAccounts = async () => {
     try {
@@ -56,9 +86,190 @@ const AccountsList = () => {
     }
   };
 
-  useEffect(() => {
-    fetchAccounts();
-  }, []);
+  const fetchChartAccounts = async () => {
+    try {
+      const response = await fetch(`${config.apiUrl}/accounts/chart/level1`);
+      if (!response.ok) {
+        throw new Error('Failed to fetch chart accounts');
+      }
+      const data = await response.json();
+      setChartAccounts(data);
+    } catch (error) {
+      console.error('Error fetching chart accounts:', error);
+    }
+  };
+
+  const fetchLevelAccounts = async (level, parentId) => {
+    try {
+      let endpoint = '';
+      if (level === 2) {
+        endpoint = `${config.apiUrl}/accounts/chart/level2?level1_id=${parentId}`;
+      } else if (level === 3) {
+        endpoint = `${config.apiUrl}/accounts/chart/level3?level2_id=${parentId}`;
+      } else if (level === 4) {
+        endpoint = `${config.apiUrl}/accounts/chart/level4?level3_id=${parentId}`;
+      }
+
+      const response = await fetch(endpoint);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch level ${level} accounts`);
+      }
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      console.error(`Error fetching level ${level} accounts:`, error);
+      return [];
+    }
+  };
+
+  const fetchAllData = async () => {
+    try {
+      setLoading(true);
+      const [level1Res, level2Res, level3Res] = await Promise.all([
+        axios.get(`${config.apiUrl}/accounts/chart/level1`),
+        axios.get(`${config.apiUrl}/accounts/chart/level2`),
+        axios.get(`${config.apiUrl}/accounts/chart/level3`)
+      ]);
+
+      console.log('Level 1 Response:', JSON.stringify(level1Res.data, null, 2));
+      console.log('Level 2 Response:', JSON.stringify(level2Res.data, null, 2));
+      console.log('Level 3 Response:', JSON.stringify(level3Res.data, null, 2));
+
+      // Process Level 1 accounts
+      const level1Data = level1Res.data.map(acc => ({
+        ...acc,
+        level2_accounts: []
+      }));
+
+      // Process Level 2 accounts
+      const level2Data = level2Res.data.map(acc => ({
+        ...acc,
+        level3_accounts: []
+      }));
+
+      // Extract all Level 3 accounts from the nested structure
+      const allLevel3Accounts = [];
+      level3Res.data.forEach(level1 => {
+        if (level1.level2_accounts) {
+          level1.level2_accounts.forEach(level2 => {
+            if (level2.level3_accounts) {
+              level2.level3_accounts.forEach(level3 => {
+                allLevel3Accounts.push({
+                  ...level3,
+                  level1_id: level1.id,
+                  level2_id: level2.id,
+                  level1_name: level1.name,
+                  level2_name: level2.name
+                });
+              });
+            }
+          });
+        }
+      });
+
+      console.log('Extracted Level 3 Accounts:', allLevel3Accounts);
+
+      // Update Level 1 accounts with their Level 2 accounts
+      const updatedLevel1Accounts = level1Data.map(level1 => {
+        // Find Level 2 accounts that belong to this Level 1
+        const level2Accounts = level2Data.filter(level2 => level2.level1_id === level1.id);
+        
+        // For each Level 2 account, find its Level 3 accounts
+        const level2WithLevel3 = level2Accounts.map(level2 => {
+          // Find Level 3 accounts that belong to this Level 2
+          const level3Accounts = allLevel3Accounts.filter(level3 => 
+            level3.level1_id === level1.id && level3.level2_id === level2.id
+          );
+          
+          console.log(`Level 2 ${level2.id} has Level 3 accounts:`, level3Accounts);
+          return {
+            ...level2,
+            level3_accounts: level3Accounts
+          };
+        });
+
+        return {
+          ...level1,
+          level2_accounts: level2WithLevel3
+        };
+      });
+
+      console.log('Final Level 1 Accounts with hierarchy:', JSON.stringify(updatedLevel1Accounts, null, 2));
+
+      setLevel1Accounts(updatedLevel1Accounts);
+      setLevel2Accounts(level2Data);
+      setLevel3Accounts(allLevel3Accounts);
+
+    } catch (error) {
+      console.error('Error fetching accounts:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleLevel1Change = async (level1Id) => {
+    setSelectedLevels({
+      level1: level1Id,
+      level2: '',
+      level3: '',
+      level4: ''
+    });
+    setLevelOptions({
+      level2: [],
+      level3: [],
+      level4: []
+    });
+
+    if (level1Id) {
+      const level2Accounts = await fetchLevelAccounts(2, level1Id);
+      setLevelOptions(prev => ({
+        ...prev,
+        level2: level2Accounts
+      }));
+    }
+  };
+
+  const handleLevel2Change = async (level2Id) => {
+    setSelectedLevels(prev => ({
+      ...prev,
+      level2: level2Id,
+      level3: '',
+      level4: ''
+    }));
+    setLevelOptions(prev => ({
+      ...prev,
+      level3: [],
+      level4: []
+    }));
+
+    if (level2Id) {
+      const level3Accounts = await fetchLevelAccounts(3, level2Id);
+      setLevelOptions(prev => ({
+        ...prev,
+        level3: level3Accounts
+      }));
+    }
+  };
+
+  const handleLevel3Change = async (level3Id) => {
+    setSelectedLevels(prev => ({
+      ...prev,
+      level3: level3Id,
+      level4: ''
+    }));
+    setLevelOptions(prev => ({
+      ...prev,
+      level4: []
+    }));
+
+    if (level3Id) {
+      const level4Accounts = await fetchLevelAccounts(4, level3Id);
+      setLevelOptions(prev => ({
+        ...prev,
+        level4: level4Accounts
+      }));
+    }
+  };
 
   const handleAdd = () => {
     setEditingAccount(null);
@@ -69,7 +280,20 @@ const AccountsList = () => {
       phone: '',
       email: '',
       address: '',
-      openingBalance: ''
+      openingBalance: '',
+      chartAccountId: '',
+      chartAccountLevel: 1
+    });
+    setSelectedLevels({
+      level1: '',
+      level2: '',
+      level3: '',
+      level4: ''
+    });
+    setLevelOptions({
+      level2: [],
+      level3: [],
+      level4: []
     });
     setDialogOpen(true);
   };
@@ -83,7 +307,9 @@ const AccountsList = () => {
       phone: account.phone,
       email: account.email,
       address: account.address,
-      openingBalance: account.opening_balance
+      openingBalance: account.opening_balance,
+      chartAccountId: account.chart_account_id || '',
+      chartAccountLevel: account.chart_account_level || 1
     });
     setDialogOpen(true);
   };
@@ -97,6 +323,21 @@ const AccountsList = () => {
 
       setLoading(true);
       
+      // Determine the highest selected level
+      let selectedLevel = 1;
+      let selectedId = selectedLevels.level1;
+      
+      if (selectedLevels.level4) {
+        selectedLevel = 4;
+        selectedId = selectedLevels.level4;
+      } else if (selectedLevels.level3) {
+        selectedLevel = 3;
+        selectedId = selectedLevels.level3;
+      } else if (selectedLevels.level2) {
+        selectedLevel = 2;
+        selectedId = selectedLevels.level2;
+      }
+      
       const accountData = {
         account_name: formData.accountName.trim(),
         account_type: formData.accountType,
@@ -105,7 +346,9 @@ const AccountsList = () => {
         email: formData.email?.trim() || null,
         address: formData.address?.trim() || null,
         opening_balance: formData.openingBalance ? parseFloat(formData.openingBalance) : 0,
-        current_balance: formData.openingBalance ? parseFloat(formData.openingBalance) : 0
+        current_balance: formData.openingBalance ? parseFloat(formData.openingBalance) : 0,
+        chart_account_id: selectedId || null,
+        chart_account_level: selectedLevel
       };
 
       if (editingAccount) {
@@ -135,7 +378,9 @@ const AccountsList = () => {
         phone: '',
         email: '',
         address: '',
-        openingBalance: ''
+        openingBalance: '',
+        chartAccountId: '',
+        chartAccountLevel: 1
       });
       setEditingAccount(null);
       
@@ -147,50 +392,142 @@ const AccountsList = () => {
     }
   };
 
+  const toggleExpand = (accountId) => {
+    setExpandedAccounts(prev => ({
+      ...prev,
+      [accountId]: !prev[accountId]
+    }));
+  };
+
+  const getLevel2Accounts = (level1Id) => {
+    return level2Accounts.filter(account => account.level1_id === level1Id);
+  };
+
+  const getLevel3Accounts = (level2Id) => {
+    return level3Accounts.filter(account => account.level2_id === level2Id);
+  };
+
+  const formatBalance = (balance, type) => {
+    if (balance === null || balance === undefined) return 0;
+    const amount = parseFloat(balance);
+    return type === 'DEBIT' ? amount : -amount;
+  };
+
+  useEffect(() => {
+    fetchAllData();
+  }, []);
+
+  useEffect(() => {
+    if (searchTerm.trim() === '') {
+      setFilteredAccounts([]);
+      return;
+    }
+
+    const searchLower = searchTerm.toLowerCase();
+    const allAccounts = [
+      ...level1Accounts.map(acc => ({ ...acc, level: 'Level 1' })),
+      ...level2Accounts.map(acc => ({ ...acc, level: 'Level 2' })),
+      ...level3Accounts.map(acc => ({ ...acc, level: 'Level 3' }))
+    ];
+
+    const filtered = allAccounts.filter(account => 
+      (account.name && account.name.toLowerCase().includes(searchLower)) ||
+      (account.account_type && account.account_type.toLowerCase().includes(searchLower))
+    );
+
+    setFilteredAccounts(filtered);
+  }, [searchTerm, level1Accounts, level2Accounts, level3Accounts]);
+
+  if (loading) {
+    return <div>Loading...</div>;
+  }
+
   return (
-    <Box>
-      <Box sx={{ mb: 2 }}>
-        <Button
-          variant="contained"
-          startIcon={<AddIcon />}
-          onClick={handleAdd}
-        >
-          Add Account
-        </Button>
+    <Box sx={{ p: 3, ml: '300px' }}>
+      <Typography variant="h4" component="h1" sx={{ mb: 3 }}>
+        Chart of Accounts
+      </Typography>
+
+      <Box sx={{ mb: 4 }}>
+        <TextField
+          fullWidth
+          variant="outlined"
+          placeholder="Search accounts by name or type..."
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          InputProps={{
+            startAdornment: (
+              <InputAdornment position="start">
+                <SearchIcon />
+              </InputAdornment>
+            ),
+          }}
+        />
       </Box>
 
-      <TableContainer component={Paper} sx={{ width: '100%', overflow: 'auto' }}>
-        <Table sx={{ minWidth: 1200 }}>
+      <TableContainer component={Paper}>
+        <Table>
           <TableHead>
             <TableRow>
-              <TableCell width="20%">Account Name</TableCell>
-              <TableCell width="15%">Type</TableCell>
-              <TableCell width="20%">Contact Person</TableCell>
-              <TableCell width="15%">Phone</TableCell>
-              <TableCell width="20%">Current Balance</TableCell>
-              <TableCell width="10%">Action</TableCell>
+              <TableCell>Account Name</TableCell>
+              <TableCell align="right">Opening Balance</TableCell>
+              <TableCell align="right">Balance Type</TableCell>
+              <TableCell align="right">Account Type</TableCell>
+              <TableCell align="right">Current Balance</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
-            {accounts.map((account) => (
-              <TableRow key={account.id}>
-                <TableCell>{account.account_name}</TableCell>
-                <TableCell>{account.account_type}</TableCell>
-                <TableCell>{account.contact_person}</TableCell>
-                <TableCell>{account.phone}</TableCell>
-                <TableCell>{account.current_balance}</TableCell>
-                <TableCell>
-                  <Button
-                    variant="outlined"
-                    size="small"
-                    startIcon={<EditIcon />}
-                    onClick={() => handleEdit(account)}
-                  >
-                    Edit
-                  </Button>
+            {searchTerm ? (
+              filteredAccounts.map((account) => (
+                <TableRow key={`${account.level}-${account.id}`}>
+                  <TableCell>{account.name}</TableCell>
+                  <TableCell align="right">{parseFloat(account.opening_balance || 0).toFixed(2)}</TableCell>
+                  <TableCell align="right">{account.balance_type || 'DEBIT'}</TableCell>
+                  <TableCell align="right">{account.account_type || 'ACCOUNT'}</TableCell>
+                  <TableCell align="right">
+                    {formatBalance(account.current_balance, account.balance_type || 'DEBIT').toFixed(2)}
+                  </TableCell>
+                </TableRow>
+              ))
+            ) : (
+              level1Accounts.map((level1Account) => (
+                <React.Fragment key={`level1-${level1Account.id}`}>
+                  <TableRow>
+                    <TableCell sx={{ fontWeight: 'bold' }}>{level1Account.name}</TableCell>
+                    <TableCell align="right">{parseFloat(level1Account.opening_balance || 0).toFixed(2)}</TableCell>
+                    <TableCell align="right">{level1Account.balance_type || 'DEBIT'}</TableCell>
+                    <TableCell align="right">{level1Account.account_type || 'ACCOUNT'}</TableCell>
+                    <TableCell align="right">
+                      {formatBalance(level1Account.current_balance, level1Account.balance_type || 'DEBIT').toFixed(2)}
+                    </TableCell>
+                  </TableRow>
+                  {level1Account.level2_accounts?.map((level2Account) => (
+                    <React.Fragment key={`level2-${level2Account.id}`}>
+                      <TableRow>
+                        <TableCell sx={{ pl: 4 }}>{level2Account.name}</TableCell>
+                        <TableCell align="right">{parseFloat(level2Account.opening_balance || 0).toFixed(2)}</TableCell>
+                        <TableCell align="right">{level2Account.balance_type || 'DEBIT'}</TableCell>
+                        <TableCell align="right">{level2Account.account_type || 'ACCOUNT'}</TableCell>
+                        <TableCell align="right">
+                          {formatBalance(level2Account.current_balance, level2Account.balance_type || 'DEBIT').toFixed(2)}
+                        </TableCell>
+                      </TableRow>
+                      {level2Account.level3_accounts?.map((level3Account) => (
+                        <TableRow key={`level3-${level3Account.id}`}>
+                          <TableCell sx={{ pl: 8 }}>{level3Account.name}</TableCell>
+                          <TableCell align="right">{parseFloat(level3Account.opening_balance || 0).toFixed(2)}</TableCell>
+                          <TableCell align="right">{level3Account.balance_type || 'DEBIT'}</TableCell>
+                          <TableCell align="right">{level3Account.account_type || 'ACCOUNT'}</TableCell>
+                          <TableCell align="right">
+                            {formatBalance(level3Account.current_balance, level3Account.balance_type || 'DEBIT').toFixed(2)}
                 </TableCell>
               </TableRow>
             ))}
+                    </React.Fragment>
+                  ))}
+                </React.Fragment>
+              ))
+            )}
           </TableBody>
         </Table>
       </TableContainer>
@@ -240,6 +577,83 @@ const AccountsList = () => {
                 </MenuItem>
               ))}
             </TextField>
+
+            <Typography variant="subtitle1" sx={{ mb: 2 }}>
+              Chart of Accounts
+            </Typography>
+
+            <FormControl fullWidth sx={{ mb: 2 }}>
+              <InputLabel>Level 1 Account</InputLabel>
+              <Select
+                value={selectedLevels.level1}
+                onChange={(e) => handleLevel1Change(e.target.value)}
+                label="Level 1 Account"
+              >
+                <MenuItem value="">None</MenuItem>
+                {chartAccounts.map((account) => (
+                  <MenuItem key={account.id} value={account.id}>
+                    {account.name}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+
+            {selectedLevels.level1 && (
+              <FormControl fullWidth sx={{ mb: 2 }}>
+                <InputLabel>Level 2 Account</InputLabel>
+                <Select
+                  value={selectedLevels.level2}
+                  onChange={(e) => handleLevel2Change(e.target.value)}
+                  label="Level 2 Account"
+                >
+                  <MenuItem value="">Create New Level 2 Account</MenuItem>
+                  {levelOptions.level2.map((account) => (
+                    <MenuItem key={account.id} value={account.id}>
+                      {account.name}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            )}
+
+            {selectedLevels.level2 && (
+              <FormControl fullWidth sx={{ mb: 2 }}>
+                <InputLabel>Level 3 Account</InputLabel>
+                <Select
+                  value={selectedLevels.level3}
+                  onChange={(e) => handleLevel3Change(e.target.value)}
+                  label="Level 3 Account"
+                >
+                  <MenuItem value="">Create New Level 3 Account</MenuItem>
+                  {levelOptions.level3.map((account) => (
+                    <MenuItem key={account.id} value={account.id}>
+                      {account.name}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            )}
+
+            {selectedLevels.level3 && (
+              <FormControl fullWidth sx={{ mb: 2 }}>
+                <InputLabel>Level 4 Account</InputLabel>
+                <Select
+                  value={selectedLevels.level4}
+                  onChange={(e) => setSelectedLevels(prev => ({
+                    ...prev,
+                    level4: e.target.value
+                  }))}
+                  label="Level 4 Account"
+                >
+                  <MenuItem value="">Create New Level 4 Account</MenuItem>
+                  {levelOptions.level4.map((account) => (
+                    <MenuItem key={account.id} value={account.id}>
+                      {account.name}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            )}
 
             <TextField
               fullWidth

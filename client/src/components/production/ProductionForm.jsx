@@ -188,18 +188,18 @@ const ProductionForm = ({ onProductionAdded }) => {
   const calculateRaddiQuantities = () => {
     return formData.paperTypes.map(paperType => {
       const recipeWithQuantities = paperType.recipe.map(item => {
-        if (!item.percentageUsed || !item.yield) return { ...item, quantityUsed: '0' };
-        
+      if (!item.percentageUsed || !item.yield) return { ...item, quantityUsed: '0' };
+      
         const totalWeight = parseFloat(paperType.totalWeight) || 0;
-        const percentageUsed = parseFloat(item.percentageUsed) || 0;
-        const yieldPercentage = parseFloat(item.yield) || 0;
-        
+      const percentageUsed = parseFloat(item.percentageUsed) || 0;
+      const yieldPercentage = parseFloat(item.yield) || 0;
+      
         // Calculate quantity used based on percentage and yield
         const quantityUsed = (totalWeight * (percentageUsed / 100)) / (yieldPercentage / 100);
-        
-        return {
-          ...item,
-          quantityUsed: quantityUsed.toFixed(2)
+      
+      return {
+        ...item,
+        quantityUsed: quantityUsed.toFixed(2)
         };
       });
       return {

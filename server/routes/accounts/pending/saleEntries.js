@@ -15,11 +15,22 @@ router.get('/sale', async (req, res) => {
         gep.status,
         ge.unit,
         ge.paper_type,
-        p.account_name as purchaser_name,
+        c.name as customer_name,
+        c.level1_name,
+        c.level2_name,
         TO_CHAR(ge.date_time, 'DD/MM/YYYY HH24:MI') as date_time
        FROM gate_entries_pricing gep
        JOIN gate_entries ge ON gep.grn_number = ge.grn_number
-       JOIN accounts p ON ge.purchaser_id = p.id
+       JOIN (
+         SELECT 
+           l3.id,
+           l3.name,
+           l1.name as level1_name,
+           l2.name as level2_name
+         FROM chart_of_accounts_level3 l3
+         JOIN chart_of_accounts_level1 l1 ON l3.level1_id = l1.id
+         JOIN chart_of_accounts_level2 l2 ON l3.level2_id = l2.id
+       ) c ON ge.purchaser_id = c.id
        WHERE gep.status = 'PENDING'
        AND gep.entry_type = 'SALE'
        ORDER BY ge.date_time DESC`

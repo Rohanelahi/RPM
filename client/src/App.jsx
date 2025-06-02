@@ -37,6 +37,10 @@ import SaleSummary from './components/reports/SaleSummary';
 import DailyActivityReport from './components/reports/DailyActivityReport';
 import ReturnsSummary from './components/reports/ReturnsSummary';
 import CashFlowSummary from './components/reports/CashFlowSummary';
+import ChartOfAccountsLevel1 from './components/accounts/ChartOfAccountsLevel1';
+import ChartOfAccountsLevel2 from './components/accounts/ChartOfAccountsLevel2';
+import ChartOfAccountsLevel3 from './components/accounts/ChartOfAccountsLevel3';
+import LongVoucher from './components/accounts/LongVoucher';
 
 // Protected Route component
 const ProtectedRoute = ({ children, allowedRoles }) => {
@@ -123,9 +127,13 @@ function App() {
                 <Route path="payments/received" element={<PaymentReceived />} />
                 <Route path="payments/issued" element={<PaymentIssued />} />
                 <Route path="payments/history" element={<PaymentHistory />} />
+                <Route path="payments/long-voucher" element={<LongVoucher />} />
                 <Route path="expenses/add" element={<ExpenseForm />} />
                 <Route path="expenses/history" element={<ExpenseHistory />} />
                 <Route path="bank-manager" element={<BankManager />} />
+                <Route path="chart/level1" element={<Layout><ChartOfAccountsLevel1 /></Layout>} />
+                <Route path="chart/level2" element={<Layout><ChartOfAccountsLevel2 /></Layout>} />
+                <Route path="chart/level3" element={<Layout><ChartOfAccountsLevel3 /></Layout>} />
               </Routes>
             </ProtectedRoute>
           } />

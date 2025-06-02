@@ -15,11 +15,14 @@ router.get('/purchase', async (req, res) => {
         gep.status,
         ge.unit,
         ge.item_type,
-        s.account_name as supplier_name,
+        COALESCE(
+          (SELECT name FROM chart_of_accounts_level3 WHERE id = ge.supplier_id),
+          (SELECT name FROM chart_of_accounts_level2 WHERE id = ge.supplier_id),
+          (SELECT name FROM chart_of_accounts_level1 WHERE id = ge.supplier_id)
+        ) as supplier_name,
         TO_CHAR(ge.date_time, 'DD/MM/YYYY HH24:MI') as date_time
        FROM gate_entries_pricing gep
        JOIN gate_entries ge ON gep.grn_number = ge.grn_number
-       JOIN accounts s ON ge.supplier_id = s.id
        WHERE gep.status = 'PENDING'
        AND gep.entry_type = 'PURCHASE'
        ORDER BY ge.date_time DESC`

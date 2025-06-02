@@ -72,17 +72,32 @@ const calculateMonthlyAverages = async () => {
   }
 };
 
-// Schedule the first run
-const now = new Date();
-const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1, 0, 1, 0);
-const timeUntilNextMonth = nextMonth - now;
+// Check if it's the first day of the month
+const isFirstDayOfMonth = () => {
+  const now = new Date();
+  return now.getDate() === 1;
+};
 
-console.log('Scheduling first run in', timeUntilNextMonth / (1000 * 60 * 60), 'hours');
+// Schedule daily check for first day of month
+const scheduleDailyCheck = () => {
+  // Run the check every day at midnight
+  const now = new Date();
+  const tomorrow = new Date(now);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  tomorrow.setHours(0, 0, 1, 0);
+  
+  const timeUntilTomorrow = tomorrow - now;
+  
+  setTimeout(() => {
+    if (isFirstDayOfMonth()) {
+      calculateMonthlyAverages();
+    }
+    // Schedule next check
+    scheduleDailyCheck();
+  }, timeUntilTomorrow);
+};
 
-setTimeout(() => {
-  calculateMonthlyAverages();
-  // Schedule next run for the following month
-  setInterval(calculateMonthlyAverages, 30 * 24 * 60 * 60 * 1000); // Run every 30 days
-}, timeUntilNextMonth);
+// Start the scheduling process
+scheduleDailyCheck();
 
 module.exports = calculateMonthlyAverages;

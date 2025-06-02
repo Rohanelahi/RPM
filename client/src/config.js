@@ -1,5 +1,5 @@
 const config = {
-  apiUrl: "/api"  // Local development server
+  apiUrl: "http://localhost:5000/api"  // Local development server
 };
 
 export default config;

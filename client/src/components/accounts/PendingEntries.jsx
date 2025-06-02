@@ -41,7 +41,6 @@ const PendingEntries = () => {
   // Fetch pending entries
   useEffect(() => {
     fetchPendingEntries();
-    fetchAccounts();
   }, []);
 
   const fetchPendingEntries = async () => {
@@ -91,17 +90,6 @@ const PendingEntries = () => {
     }
   };
 
-  const fetchAccounts = async () => {
-    try {
-      const response = await fetch(`${config.apiUrl}/accounts/list`);
-      if (!response.ok) throw new Error('Failed to fetch accounts');
-      const data = await response.json();
-      setAccounts(data);
-    } catch (error) {
-      console.error('Error:', error);
-    }
-  };
-
   // Handle refresh button click
   const handleRefresh = async () => {
     setRefreshing(true);
@@ -143,9 +131,7 @@ const PendingEntries = () => {
           ? '/accounts/process-store-return'
           : selectedEntry.entry_type === 'SALE_RETURN'
             ? '/accounts/process-return'
-            : selectedEntry.entry_type === 'PURCHASE_RETURN'
-              ? '/accounts/process-return'
-              : '/accounts/process-entry';
+            : '/accounts/process-entry';
 
       const finalQuantity = selectedEntry.quantity - (selectedEntry?.entry_type === 'PURCHASE' ? parseFloat(formData.cutWeight) || 0 : 0);
       const totalAmount = parseFloat(formData.pricePerUnit) * finalQuantity;
@@ -222,7 +208,7 @@ const PendingEntries = () => {
   const getEntryTypeColor = (entryType) => {
     switch (entryType) {
       case 'STORE_PURCHASE':
-        return 'info.main';  // Blue variant
+        return 'info.main';
       case 'STORE_RETURN':
         return 'error.main';  // Red like other returns
       case 'PURCHASE':

@@ -8,12 +8,15 @@ const updateAccount = require('./updateAccount');
 const pendingEntries = require('./pending');
 const processEntry = require('./processEntry');
 const processReturn = require('./processReturn');
-const ledger = require('./ledger');
+const ledgerRouter = require('./ledger');
 const storeInRoute = require('./storeInRoute');
 const processStoreReturn = require('./processStoreReturn');
 const incomeStatement = require('./incomeStatement');
-const payments = require('./payments');
-const expenses = require('./expenses');
+const paymentsRouter = require('./payments');
+const expensesRouter = require('./expenses');
+const chartLevel1Router = require('./chart/level1');
+const chartLevel2Router = require('./chart/level2');
+const chartLevel3Router = require('./chart/level3');
 
 router.use('/', listAccounts);
 router.use('/', createAccount);
@@ -21,12 +24,15 @@ router.use('/', updateAccount);
 router.use('/', pendingEntries);
 router.use('/', processEntry);
 router.use('/', processReturn);
-router.use('/', ledger);
+router.use('/ledger', ledgerRouter);
 router.use('/', storeInRoute);
 router.use('/', processStoreReturn);
 router.use('/income-statement', incomeStatement);
-router.use('/payments', payments);
-router.use('/expenses', expenses);
+router.use('/payments', paymentsRouter);
+router.use('/expenses', expensesRouter);
+router.use('/chart/level1', chartLevel1Router);
+router.use('/chart/level2', chartLevel2Router);
+router.use('/chart/level3', chartLevel3Router);
 
 // Add this route to handle GRN lookups
 router.get('/grn/:grnNumber', async (req, res) => {
@@ -194,14 +200,17 @@ router.get('/store-entry/:grnNumber', async (req, res) => {
         se.*,
         si.item_name,
         si.unit,
-        a.account_name as vendor_name,
+        COALESCE(
+          (SELECT name FROM chart_of_accounts_level3 WHERE id = se.vendor_id),
+          (SELECT name FROM chart_of_accounts_level2 WHERE id = se.vendor_id),
+          (SELECT name FROM chart_of_accounts_level1 WHERE id = se.vendor_id)
+        ) as vendor_name,
         COALESCE(sr.returned_quantity, 0) as returned_quantity,
         TO_CHAR(se.date_time, 'DD/MM/YYYY HH24:MI:SS') as date_time,
         pe.price_per_unit,
         pe.total_amount
       FROM store_entries se
       JOIN store_items si ON se.item_id = si.id
-      LEFT JOIN accounts a ON se.vendor_id = a.id
       LEFT JOIN (
         SELECT grn_number, SUM(quantity) as returned_quantity
         FROM store_returns
@@ -409,6 +418,84 @@ router.put('/store-entry/:grnNumber', async (req, res) => {
     await client.query('ROLLBACK');
     console.error('Error updating store entry details:', error);
     res.status(500).json({ error: error.message });
+  } finally {
+    client.release();
+  }
+});
+
+router.post('/payments/long-voucher', async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const { fromAccount, toAccount, amount, date, description } = req.body;
+    if (!fromAccount || !toAccount || !amount) {
+      return res.status(400).json({ error: 'Missing required fields' });
+    }
+    // Generate short voucher number
+    const dateObj = date ? new Date(date) : new Date();
+    const yy = String(dateObj.getFullYear()).slice(-2);
+    const mm = String(dateObj.getMonth() + 1).padStart(2, '0');
+    const dd = String(dateObj.getDate()).padStart(2, '0');
+    const random = Math.floor(100 + Math.random() * 900);
+    const voucherNo = `LV-${yy}${mm}${dd}-${random}`;
+
+    // Get account names
+    const { rows: fromRows } = await client.query('SELECT name FROM chart_of_accounts_level1 WHERE id = $1 UNION ALL SELECT name FROM chart_of_accounts_level2 WHERE id = $1 UNION ALL SELECT name FROM chart_of_accounts_level3 WHERE id = $1', [fromAccount]);
+    const { rows: toRows } = await client.query('SELECT name FROM chart_of_accounts_level1 WHERE id = $1 UNION ALL SELECT name FROM chart_of_accounts_level2 WHERE id = $1 UNION ALL SELECT name FROM chart_of_accounts_level3 WHERE id = $1', [toAccount]);
+    const fromName = fromRows[0]?.name || 'Account';
+    const toName = toRows[0]?.name || 'Account';
+
+    const detail = description && description.trim().length > 0
+      ? description
+      : `Long Voucher: Paid from ${fromName} to ${toName} (Voucher: ${voucherNo})`;
+
+    await client.query('BEGIN');
+    // CREDIT from account
+    await client.query(
+      `INSERT INTO transactions (transaction_date, account_id, reference_no, entry_type, amount, description, created_at)
+       VALUES ($1, $2, $3, 'CREDIT', $4, $5, NOW())`,
+      [dateObj, fromAccount, voucherNo, amount, detail]
+    );
+    // DEBIT to account
+    await client.query(
+      `INSERT INTO transactions (transaction_date, account_id, reference_no, entry_type, amount, description, created_at)
+       VALUES ($1, $2, $3, 'DEBIT', $4, $5, NOW())`,
+      [dateObj, toAccount, voucherNo, amount, detail]
+    );
+    await client.query('COMMIT');
+    res.json({ message: 'Long voucher created', voucherNo });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    res.status(500).json({ error: err.message });
+  } finally {
+    client.release();
+  }
+});
+
+router.get('/chart/all', async (req, res) => {
+  const client = await pool.connect();
+  try {
+    // Level 1
+    const { rows: l1 } = await client.query('SELECT id, name, 1 as level FROM chart_of_accounts_level1');
+    // Level 2 with parent
+    const { rows: l2 } = await client.query(`
+      SELECT l2.id, l2.name, 2 as level, l1.name as level1_name
+      FROM chart_of_accounts_level2 l2
+      JOIN chart_of_accounts_level1 l1 ON l2.level1_id = l1.id
+    `);
+    // Level 3 with parents
+    const { rows: l3 } = await client.query(`
+      SELECT l3.id, l3.name, 3 as level, l1.name as level1_name, l2.name as level2_name
+      FROM chart_of_accounts_level3 l3
+      JOIN chart_of_accounts_level2 l2 ON l3.level2_id = l2.id
+      JOIN chart_of_accounts_level1 l1 ON l2.level1_id = l1.id
+    `);
+    // Add level1_name to level 1 for consistency
+    const l1WithNames = l1.map(acc => ({ ...acc, level1_name: acc.name }));
+    // Add level2_name to level 2 for consistency
+    const l2WithNames = l2.map(acc => ({ ...acc, level2_name: acc.name }));
+    res.json([...l1WithNames, ...l2WithNames, ...l3]);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   } finally {
     client.release();
   }

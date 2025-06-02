@@ -31,6 +31,22 @@ router.post('/in', async (req, res) => {
       items  // Array of items from the frontend
     } = req.body;
 
+    // Verify vendor exists in chart of accounts
+    const vendorCheck = await client.query(
+      `SELECT id FROM (
+        SELECT id FROM chart_of_accounts_level1 WHERE id = $1
+        UNION ALL
+        SELECT id FROM chart_of_accounts_level2 WHERE id = $1
+        UNION ALL
+        SELECT id FROM chart_of_accounts_level3 WHERE id = $1
+      ) as vendor WHERE id = $1`,
+      [vendorId]
+    );
+
+    if (vendorCheck.rows.length === 0) {
+      throw new Error('Invalid vendor ID');
+    }
+
     // Generate a unique GRN number
     let uniqueGRN = grnNumber;
     let increment = 0;
@@ -312,12 +328,23 @@ router.post('/return', async (req, res) => {
     
     const { originalGRN, quantity, dateTime, remarks, vendorId, itemId, returnGRN } = req.body;
 
+    console.log('Processing store return with data:', {
+      originalGRN,
+      quantity,
+      dateTime,
+      remarks,
+      vendorId,
+      itemId,
+      returnGRN
+    });
+
     // Get original entry details with item information
-    const { rows: [original] } = await client.query(
+    const originalResult = await client.query(
       `SELECT 
         se.*,
         si.item_name,
         si.unit,
+        pe.price_per_unit,
         COALESCE(
           (SELECT SUM(quantity) 
            FROM store_returns 
@@ -326,12 +353,16 @@ router.post('/return', async (req, res) => {
         ) as returned_quantity
        FROM store_entries se
        JOIN store_items si ON se.item_id = si.id
+       JOIN pricing_entries pe ON pe.reference_id = se.id
        LEFT JOIN store_returns sr ON sr.grn_number = se.grn_number
        WHERE se.grn_number = $1
        AND se.entry_type = 'STORE_IN'
-       GROUP BY se.id, si.id`,
+       GROUP BY se.id, si.id, pe.price_per_unit`,
       [originalGRN]
     );
+
+    const original = originalResult.rows[0];
+    console.log('Found original entry:', original);
 
     if (!original) {
       throw new Error('Original GRN not found');
@@ -341,7 +372,15 @@ router.post('/return', async (req, res) => {
       throw new Error('Return quantity exceeds available quantity');
     }
 
-    // Create store return entry with item details
+    // Generate short return GRN
+    const dateObj = new Date(dateTime);
+    const dd = String(dateObj.getDate()).padStart(2, '0');
+    const mm = String(dateObj.getMonth() + 1).padStart(2, '0');
+    const yy = String(dateObj.getFullYear()).slice(-2);
+    const random = Math.floor(100 + Math.random() * 900); // 3-digit random number
+    const shortReturnGRN = `SRET-${dd}${mm}${yy}-${random}`;
+
+    // Create store return entry
     const returnResult = await client.query(
       `INSERT INTO store_returns (
         return_grn,
@@ -353,43 +392,59 @@ router.post('/return', async (req, res) => {
         unit
       ) VALUES ($1, $2, $3, $4, $5, $6, $7)
       RETURNING id, return_grn`,
-      [returnGRN, originalGRN, quantity, dateTime, remarks, original.item_name, original.unit]
+      [shortReturnGRN, originalGRN, quantity, dateTime, remarks, original.item_name, original.unit]
     );
 
-    // Create pending pricing entry with item details
-    await client.query(
+    console.log('Store return entry created:', returnResult.rows[0]);
+
+    if (!returnResult.rows || !returnResult.rows[0] || !returnResult.rows[0].id) {
+      throw new Error('Failed to create store return entry - no ID returned');
+    }
+
+    const returnId = returnResult.rows[0].id;
+
+    // Create pending pricing entry with STORE_RETURN type
+    const pricingResult = await client.query(
       `INSERT INTO pricing_entries (
         entry_type, 
         reference_id, 
         status, 
         quantity, 
         unit,
-        price_per_unit, 
-        return_grn,
-        item_name
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-      ['STORE_RETURN', returnResult.rows[0].id, 'PENDING', quantity, original.unit,
-       original.price_per_unit, returnGRN, original.item_name]
+        price_per_unit,
+        total_amount
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7)
+      RETURNING id`,
+      ['STORE_RETURN', returnId, 'PENDING', quantity, original.unit,
+       original.price_per_unit, (quantity * original.price_per_unit)]
     );
 
+    console.log('Pricing entry created:', pricingResult.rows[0]);
+
     // Update store item stock
-    await client.query(
+    const stockResult = await client.query(
       `UPDATE store_items 
        SET current_stock = current_stock - $1
-       WHERE id = $2`,
+       WHERE id = $2
+       RETURNING id, current_stock`,
       [quantity, original.item_id]
     );
+
+    console.log('Stock updated:', stockResult.rows[0]);
 
     await client.query('COMMIT');
     res.json({ 
       message: 'Store return processed successfully',
-      returnId: returnResult.rows[0].id,
+      returnId: returnId,
       returnGRN: returnGRN
     });
   } catch (error) {
     await client.query('ROLLBACK');
     console.error('Error processing store return:', error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ 
+      error: error.message,
+      details: error.stack
+    });
   } finally {
     client.release();
   }

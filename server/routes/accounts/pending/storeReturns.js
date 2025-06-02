@@ -14,10 +14,10 @@ router.get('/store-returns', async (req, res) => {
         sr.return_grn as return_number,
         sr.grn_number as original_grn,
         se.vendor_id as account_id,
-        sr.quantity,
+        ABS(pe.quantity) as quantity,
         pe.status,
         sr.unit,
-        sr.item_name,
+        si.item_name,
         v.account_name as vendor_name,
         sr.date_time as return_date,
         sr.remarks as return_reason,
@@ -30,7 +30,9 @@ router.get('/store-returns', async (req, res) => {
        JOIN accounts v ON se.vendor_id = v.id
        LEFT JOIN transactions t ON t.reference_no = sr.return_grn
        WHERE pe.status = 'PENDING'
-       AND pe.entry_type = 'STORE_RETURN'
+       AND pe.entry_type = 'STORE_PURCHASE'
+       AND pe.quantity < 0
+       AND sr.return_grn IS NOT NULL
        ORDER BY sr.date_time DESC`
     );
 
@@ -38,8 +40,8 @@ router.get('/store-returns', async (req, res) => {
 
     // Add additional check to ensure return_grn is present
     const processedRows = result.rows.map(row => {
-      if (!row.return_grn) {
-        console.warn('Missing return_grn for entry:', row);
+      if (!row.return_number) {
+        console.warn('Missing return number for entry:', row);
       }
       console.log('Processing row:', row); // Add this debug log
       return row;

@@ -59,7 +59,7 @@ router.post('/out/purchase-return', async (req, res) => {
     console.log('Return entry created:', returnEntry.rows[0]);
 
     // 2. Create pricing entry
-    await client.query(
+    const pricingEntry = await client.query(
       `INSERT INTO gate_entries_pricing (
         entry_type,
         grn_number,
@@ -67,9 +67,8 @@ router.post('/out/purchase-return', async (req, res) => {
         quantity,
         price_per_unit,
         total_amount,
-        status,
-        original_grn_number
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        status
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
       [
         'PURCHASE_RETURN',
         returnNumber,
@@ -77,12 +76,33 @@ router.post('/out/purchase-return', async (req, res) => {
         returnQuantity,
         0,
         0,
-        'PENDING',
-        purchaseGRN
+        'PENDING'
       ]
     );
 
-    console.log('Pricing entry created:', returnEntry.rows[0]);
+    console.log('Pricing entry created:', pricingEntry.rows[0]);
+
+    // 3. Create transaction entry
+    const { rows: [transaction] } = await client.query(
+      `INSERT INTO transactions (
+        account_id,
+        transaction_date,
+        reference_no,
+        description,
+        amount,
+        entry_type,
+        created_by
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+      [
+        supplierId,
+        new Date(),
+        returnNumber,
+        `Purchase Return against GRN: ${purchaseGRN}`,
+        0, // Amount will be updated when pricing is processed
+        'DEBIT', // Set entry type as DEBIT for purchase returns
+        req.user.id
+      ]
+    );
 
     await client.query('COMMIT');
     res.json(returnEntry.rows[0]);

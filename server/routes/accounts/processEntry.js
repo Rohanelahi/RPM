@@ -2,6 +2,28 @@ const express = require('express');
 const router = express.Router();
 const pool = require('../../db');
 
+// Helper function to clean up duplicate transactions
+async function cleanupDuplicateTransactions(client, grnNumber, accountId) {
+  // Get all transactions for this GRN and account
+  const { rows: transactions } = await client.query(
+    `SELECT id, description, transaction_date 
+     FROM transactions 
+     WHERE reference_no = $1 AND account_id = $2
+     ORDER BY transaction_date DESC`,
+    [grnNumber, accountId]
+  );
+
+  if (transactions.length > 1) {
+    // Keep the most recent transaction, delete others
+    const [keepTransaction, ...deleteTransactions] = transactions;
+    console.log(`Found ${transactions.length} transactions for GRN ${grnNumber}, keeping most recent one`);
+    
+    for (const transaction of deleteTransactions) {
+      await client.query('DELETE FROM transactions WHERE id = $1', [transaction.id]);
+    }
+  }
+}
+
 // Process entry
 router.post('/process-entry', async (req, res) => {
   const client = await pool.connect();
@@ -17,7 +39,11 @@ router.post('/process-entry', async (req, res) => {
           WHEN gep.entry_type = 'SALE' THEN ge.purchaser_id
           ELSE ge.supplier_id
         END as account_id,
-        gep.entry_type
+        gep.entry_type,
+        ge.item_type,
+        ge.paper_type,
+        ge.quantity,
+        ge.unit
        FROM gate_entries_pricing gep
        JOIN gate_entries ge ON gep.grn_number = ge.grn_number
        WHERE gep.id = $1`,
@@ -49,25 +75,47 @@ router.post('/process-entry', async (req, res) => {
       [totalAmount * balanceModifier, pricing.account_id]
     );
 
-    // 4. Create transaction record
-    await client.query(
-      `INSERT INTO transactions (
-        transaction_date,
-        account_id,
-        reference_no,
-        entry_type,
-        amount,
-        description
-      ) VALUES ($1, $2, $3, $4, $5, $6)`,
-      [
-        new Date(),
-        pricing.account_id,
-        pricing.grn_number,
-        pricing.entry_type === 'SALE' ? 'CREDIT' : 'DEBIT',
-        totalAmount,
-        `${pricing.entry_type === 'SALE' ? 'Sale' : 'Purchase'} against GRN: ${pricing.grn_number}`
-      ]
+    // 4. Clean up any existing duplicate transactions
+    await cleanupDuplicateTransactions(client, pricing.grn_number, pricing.account_id);
+
+    // 5. Create new transaction record
+    const { rows: [existingTransaction] } = await client.query(
+      `SELECT id FROM transactions 
+       WHERE reference_no = $1 AND account_id = $2
+       ORDER BY transaction_date DESC
+       LIMIT 1`,
+      [pricing.grn_number, pricing.account_id]
     );
+
+    if (!existingTransaction) {
+      await client.query(
+        `INSERT INTO transactions (
+          transaction_date,
+          account_id,
+          reference_no,
+          entry_type,
+          amount,
+          description,
+          item_name,
+          quantity,
+          unit,
+          price_per_unit
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+        [
+          new Date(),
+          pricing.account_id,
+          pricing.grn_number,
+          // Explicitly set entry_type
+          (pricing.entry_type === 'PURCHASE' ? 'CREDIT' : (pricing.entry_type === 'SALE' ? 'DEBIT' : 'CREDIT')),
+          totalAmount,
+          `${pricing.entry_type === 'SALE' ? 'Sale' : 'Purchase'} against GRN: ${pricing.grn_number}`,
+          pricing.item_type || pricing.paper_type,
+          finalQuantity || pricing.quantity,
+          pricing.unit,
+          pricePerUnit
+        ]
+      );
+    }
 
     await client.query('COMMIT');
     res.json({ message: 'Entry processed successfully' });

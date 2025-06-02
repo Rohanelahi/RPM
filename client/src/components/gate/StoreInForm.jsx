@@ -23,11 +23,12 @@ import { Print, Add as AddIcon, Delete as DeleteIcon } from '@mui/icons-material
 import '../../styles/forms/GateForm.css';
 import { format } from 'date-fns';
 import config from '../../config';
+import useAccounts from '../../hooks/useAccounts';
 
 const StoreInForm = () => {
   const [loading, setLoading] = useState(false);
+  const { accounts: vendors, loading: vendorsLoading } = useAccounts('VENDOR');
   const [storeItems, setStoreItems] = useState([]);
-  const [vendors, setVendors] = useState([]);
   const [newItemDialogOpen, setNewItemDialogOpen] = useState(false);
   const [isPrinted, setIsPrinted] = useState(false);
   
@@ -99,25 +100,6 @@ const StoreInForm = () => {
   };
 
   useEffect(() => {
-    fetchStoreItems();
-  }, []);
-
-  // Update the fetchVendors function with the correct endpoint
-  const fetchVendors = async () => {
-    try {
-      const response = await fetch(`${config.apiUrl}/accounts/vendors`);
-      if (!response.ok) throw new Error('Failed to fetch vendors');
-      const data = await response.json();
-      setVendors(data);
-    } catch (error) {
-      console.error('Error:', error);
-      alert('Failed to fetch vendors');
-    }
-  };
-
-  // Make sure both fetch calls are in useEffect
-  useEffect(() => {
-    fetchVendors();
     fetchStoreItems();
   }, []);
 
@@ -493,7 +475,7 @@ const StoreInForm = () => {
                       ...prev,
                       vendorId: e.target.value
                     }))}
-                    disabled={loading}
+                    disabled={loading || vendorsLoading}
                     onKeyPress={(e) => handleKeyPress(e, 'vehicleNumber')}
                   >
                     {vendors.map((vendor) => (

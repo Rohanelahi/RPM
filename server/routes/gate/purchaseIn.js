@@ -56,6 +56,29 @@ router.post('/in/purchase', async (req, res) => {
       remarks
     } = req.body;
 
+    // Verify supplier exists in any level of chart of accounts and is of type SUPPLIER
+    const supplierResult = await client.query(
+      `SELECT * FROM (
+        SELECT id, name, account_type, 1 as level 
+        FROM chart_of_accounts_level1 
+        WHERE account_type = 'SUPPLIER'
+        UNION ALL
+        SELECT id, name, account_type, 2 as level 
+        FROM chart_of_accounts_level2 
+        WHERE account_type = 'SUPPLIER'
+        UNION ALL
+        SELECT id, name, account_type, 3 as level 
+        FROM chart_of_accounts_level3 
+        WHERE account_type = 'SUPPLIER'
+      ) all_accounts
+      WHERE id = $1`,
+      [supplierId]
+    );
+
+    if (supplierResult.rows.length === 0) {
+      throw new Error('Invalid supplier selected');
+    }
+
     // 1. Create gate entry
     const gateEntry = await client.query(
       `INSERT INTO gate_entries (
@@ -93,7 +116,7 @@ router.post('/in/purchase', async (req, res) => {
   } catch (error) {
     await client.query('ROLLBACK');
     console.error('Error in purchase entry:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: error.message || 'Internal server error' });
   } finally {
     client.release();
   }

@@ -102,6 +102,32 @@ const menuItems = [
     text: 'Income Statement',
     icon: <Assessment />,
     path: '/income-statement'
+  },
+  {
+    text: 'Trial Balance',
+    icon: <Assessment />,
+    submenu: [
+      { 
+        text: 'Chart of Accounts Level 1', 
+        icon: <ListIcon />, 
+        path: '/accounts/chart/level1' 
+      },
+      { 
+        text: 'Chart of Accounts Level 2', 
+        icon: <ListIcon />, 
+        path: '/accounts/chart/level2' 
+      },
+      { 
+        text: 'Chart of Accounts Level 3', 
+        icon: <ListIcon />, 
+        path: '/accounts/chart/level3' 
+      },
+      { 
+        text: 'Chart of Accounts Level 4', 
+        icon: <ListIcon />, 
+        path: '/accounts/chart/level4' 
+      }
+    ]
   }
 ];
 
@@ -178,6 +204,16 @@ const Sidebar = () => {
             path: '/accounts'
           },
           {
+            text: 'Trial Balance',
+            icon: <Assessment />,
+            submenu: [
+              { text: 'Chart of Accounts Level 1', icon: <ListIcon />, path: '/accounts/chart/level1' },
+              { text: 'Chart of Accounts Level 2', icon: <ListIcon />, path: '/accounts/chart/level2' },
+              { text: 'Chart of Accounts Level 3', icon: <ListIcon />, path: '/accounts/chart/level3' },
+              { text: 'Chart of Accounts Level 4', icon: <ListIcon />, path: '/accounts/chart/level4' }
+            ]
+          },
+          {
             text: 'Store',
             icon: <Inventory />,
             submenu: [
@@ -202,13 +238,6 @@ const Sidebar = () => {
             text: 'Income Statement',
             icon: <Assessment />,
             path: '/income-statement'
-          },
-          {
-            text: 'Expenses',
-            icon: <Calculate />,
-            submenu: [
-              { text: 'Expense History', icon: <History />, path: '/accounts/expenses/history' }
-            ]
           },
           {
             text: 'Bank Manager',
@@ -291,12 +320,23 @@ const Sidebar = () => {
             path: '/accounts'
           },
           {
+            text: 'Trial Balance',
+            icon: <Assessment />,
+            submenu: [
+              { text: 'Chart of Accounts Level 1', icon: <ListIcon />, path: '/accounts/chart/level1' },
+              { text: 'Chart of Accounts Level 2', icon: <ListIcon />, path: '/accounts/chart/level2' },
+              { text: 'Chart of Accounts Level 3', icon: <ListIcon />, path: '/accounts/chart/level3' },
+              { text: 'Chart of Accounts Level 4', icon: <ListIcon />, path: '/accounts/chart/level4' }
+            ]
+          },
+          {
             text: 'Payments',
             icon: <Payments />,
             submenu: [
               { text: 'Receipt', icon: <Input />, path: '/accounts/payments/received' },
               { text: 'Payment', icon: <Output />, path: '/accounts/payments/issued' },
-              { text: 'Payment History', icon: <History />, path: '/accounts/payments/history' }
+              { text: 'Payment History', icon: <History />, path: '/accounts/payments/history' },
+              { text: 'Long Voucher', icon: <ListIcon />, path: '/accounts/payments/long-voucher' }
             ]
           },
           {
@@ -313,14 +353,6 @@ const Sidebar = () => {
                 icon: <ListIcon />, 
                 path: '/production/history' 
               }
-            ]
-          },
-          {
-            text: 'Expenses',
-            icon: <Calculate />,
-            submenu: [
-              { text: 'Add Expense', icon: <AddIcon />, path: '/accounts/expenses/add' },
-              { text: 'Expense History', icon: <History />, path: '/accounts/expenses/history' }
             ]
           },
           {

@@ -9,24 +9,22 @@ router.get('/sale-returns', async (req, res) => {
       `SELECT 
         gep.id as pricing_id,
         gep.entry_type,
-        gr.return_number as grn_number,
+        gep.grn_number,
         gep.account_id,
-        gr.return_quantity as quantity,
+        gep.quantity,
         gep.status,
-        ge.unit,
-        ge.paper_type,
-        ge.has_return,
-        p.account_name as purchaser_name,
-        gep.original_grn_number,
         gr.return_reason,
-        gr.date_time,
+        gr.date_time as return_date,
         gr.vehicle_type,
         gr.vehicle_number,
-        gr.driver_name
+        gr.driver_name,
+        p.account_name as purchaser_name,
+        ge.paper_type as item_type,
+        ge.unit
        FROM gate_entries_pricing gep
        JOIN gate_returns gr ON gr.return_number = gep.grn_number
-       JOIN gate_entries ge ON gep.original_grn_number = ge.grn_number
-       JOIN accounts p ON ge.purchaser_id = p.id
+       JOIN gate_entries ge ON gr.original_grn_number = ge.grn_number
+       JOIN accounts p ON gep.account_id = p.id
        WHERE gep.status = 'PENDING'
        AND gep.entry_type = 'SALE_RETURN'
        ORDER BY gr.date_time DESC`

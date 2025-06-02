@@ -14,7 +14,8 @@ import {
   Dialog,
   DialogTitle,
   DialogContent,
-  DialogActions
+  DialogActions,
+  Autocomplete
 } from '@mui/material';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { DateTimePicker } from '@mui/x-date-pickers/DateTimePicker';
@@ -26,7 +27,9 @@ import { format } from 'date-fns';
 
 const PurchaseReturnForm = () => {
   const [loading, setLoading] = useState(false);
-  const { accounts: suppliers, loading: suppliersLoading } = useAccounts('SUPPLIER');
+  const [suppliers, setSuppliers] = useState([]);
+  const [loadingSuppliers, setLoadingSuppliers] = useState(false);
+  const [selectedSupplier, setSelectedSupplier] = useState(null);
   const [purchaseGRNs, setPurchaseGRNs] = useState([]);
   const [selectedPurchase, setSelectedPurchase] = useState(null);
   const [isPrinted, setIsPrinted] = useState(false);
@@ -186,8 +189,6 @@ const PurchaseReturnForm = () => {
       return;
     }
 
-    console.log('Submitting form with GRN:', formData.purchaseGRN); // Debug log
-
     if (parseFloat(formData.returnQuantity) > parseFloat(formData.originalQuantity)) {
       alert('Return quantity cannot be greater than original quantity');
       return;
@@ -217,17 +218,18 @@ const PurchaseReturnForm = () => {
       });
 
       if (!response.ok) {
-        throw new Error('Failed to submit return');
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to submit return');
       }
 
       const data = await response.json();
-      console.log('Response:', data); // Debug log
+      console.log('Response:', data);
       alert('Purchase return recorded successfully');
       
       // Reset form
       setFormData({
         returnNumber: '',
-        purchaseGRN: '', // Clear the original GRN
+        purchaseGRN: '',
         supplierId: '',
         vehicleNumber: '',
         driverName: '',
@@ -258,7 +260,7 @@ const PurchaseReturnForm = () => {
 
     } catch (error) {
       console.error('Error recording purchase return:', error);
-      alert('Error recording purchase return');
+      alert('Error recording purchase return: ' + error.message);
     } finally {
       setLoading(false);
     }
@@ -438,6 +440,95 @@ const PurchaseReturnForm = () => {
     }
   };
 
+  // Update the fetchSuppliers function to match PurchaseForm
+  const fetchSuppliers = async () => {
+    try {
+      setLoadingSuppliers(true);
+      // Fetch suppliers from all levels
+      const [level1Res, level2Res, level3Res] = await Promise.all([
+        fetch(`${config.apiUrl}/accounts/chart/level1?account_type=SUPPLIER`),
+        fetch(`${config.apiUrl}/accounts/chart/level2?account_type=SUPPLIER`),
+        fetch(`${config.apiUrl}/accounts/chart/level3?account_type=SUPPLIER`)
+      ]);
+
+      if (!level1Res.ok || !level2Res.ok || !level3Res.ok) {
+        throw new Error('Failed to fetch suppliers');
+      }
+
+      const [level1Data, level2Data, level3Data] = await Promise.all([
+        level1Res.json(),
+        level2Res.json(),
+        level3Res.json()
+      ]);
+
+      // Extract all Level 3 accounts from the nested structure
+      const allLevel3Accounts = [];
+      level3Data.forEach(level1 => {
+        if (level1.level2_accounts) {
+          level1.level2_accounts.forEach(level2 => {
+            if (level2.level3_accounts) {
+              level2.level3_accounts.forEach(level3 => {
+                if (level3.account_type === 'SUPPLIER') {
+                  allLevel3Accounts.push({
+                    ...level3,
+                    level: 3,
+                    level1_id: level1.id,
+                    level2_id: level2.id,
+                    level1_name: level1.name,
+                    level2_name: level2.name,
+                    displayName: `${level1.name} > ${level2.name} > ${level3.name}`
+                  });
+                }
+              });
+            }
+          });
+        }
+      });
+
+      // Filter and combine all suppliers from different levels
+      const allSuppliers = [
+        ...level1Data
+          .filter(supplier => supplier.account_type === 'SUPPLIER')
+          .map(supplier => ({
+            ...supplier,
+            level: 1,
+            displayName: supplier.name
+          })),
+        ...level2Data
+          .filter(supplier => supplier.account_type === 'SUPPLIER')
+          .map(supplier => ({
+            ...supplier,
+            level: 2,
+            displayName: `${supplier.level1_name} > ${supplier.name}`
+          })),
+        ...allLevel3Accounts
+      ];
+
+      setSuppliers(allSuppliers);
+    } catch (error) {
+      console.error('Error fetching suppliers:', error);
+      alert('Failed to fetch suppliers: ' + error.message);
+    } finally {
+      setLoadingSuppliers(false);
+    }
+  };
+
+  // Update useEffect to call fetchSuppliers
+  useEffect(() => {
+    fetchSuppliers();
+    fetchItemTypes();
+  }, []);
+
+  // Update the supplier selection handler
+  const handleSupplierSelect = (event, newValue) => {
+    setSelectedSupplier(newValue);
+    setFormData(prev => ({
+      ...prev,
+      supplierId: newValue?.id || '',
+      purchaseGRN: ''
+    }));
+  };
+
   return (
     <div className="gate-form">
       <Paper className="content-paper">
@@ -470,26 +561,30 @@ const PurchaseReturnForm = () => {
               </Grid>
 
               <Grid item xs={12} md={6}>
-                <TextField
-                  fullWidth
-                  select
-                  label="Supplier"
-                  required
-                  value={formData.supplierId}
-                  onChange={(e) => setFormData(prev => ({
-                    ...prev,
-                    supplierId: e.target.value,
-                    purchaseGRN: ''
-                  }))}
-                  disabled={suppliersLoading}
-                  onKeyPress={(e) => handleKeyPress(e, 'purchaseGRN')}
-                >
-                  {suppliers.map((supplier) => (
-                    <MenuItem key={supplier.id} value={supplier.id}>
-                      {supplier.account_name}
-                    </MenuItem>
-                  ))}
-                </TextField>
+                <Autocomplete
+                  options={suppliers}
+                  getOptionLabel={(option) => option.displayName}
+                  value={selectedSupplier}
+                  onChange={handleSupplierSelect}
+                  renderInput={(params) => (
+                    <TextField
+                      {...params}
+                      label="Supplier"
+                      required
+                    />
+                  )}
+                  renderOption={(props, option) => (
+                    <li {...props}>
+                      <div>
+                        <div>{option.displayName}</div>
+                        <div style={{ fontSize: '0.8em', color: 'gray' }}>
+                          {option.level === 1 ? 'Level 1' : option.level === 2 ? 'Level 2' : 'Level 3'} - {option.account_type}
+                        </div>
+                      </div>
+                    </li>
+                  )}
+                  disabled={loadingSuppliers}
+                />
               </Grid>
 
               <Grid item xs={12} md={6}>

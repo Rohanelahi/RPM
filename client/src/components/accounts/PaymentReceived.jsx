@@ -78,11 +78,73 @@ const PaymentReceived = () => {
 
   const fetchAccounts = async () => {
     try {
-      const response = await fetch(`${config.apiUrl}/accounts/list?type=${formData.accountType}`);
-      const data = await response.json();
-      setAccounts(data);
+      setLoading(true);
+      // Fetch accounts from all levels
+      const [level1Res, level2Res, level3Res] = await Promise.all([
+        fetch(`${config.apiUrl}/accounts/chart/level1?account_type=${formData.accountType}`),
+        fetch(`${config.apiUrl}/accounts/chart/level2?account_type=${formData.accountType}`),
+        fetch(`${config.apiUrl}/accounts/chart/level3?account_type=${formData.accountType}`)
+      ]);
+
+      if (!level1Res.ok || !level2Res.ok || !level3Res.ok) {
+        throw new Error('Failed to fetch accounts');
+      }
+
+      const [level1Data, level2Data, level3Data] = await Promise.all([
+        level1Res.json(),
+        level2Res.json(),
+        level3Res.json()
+      ]);
+
+      // Extract all Level 3 accounts from the nested structure
+      const allLevel3Accounts = [];
+      level3Data.forEach(level1 => {
+        if (level1.level2_accounts) {
+          level1.level2_accounts.forEach(level2 => {
+            if (level2.level3_accounts) {
+              level2.level3_accounts.forEach(level3 => {
+                if (level3.account_type === formData.accountType) {
+                  allLevel3Accounts.push({
+                    ...level3,
+                    level: 3,
+                    level1_id: level1.id,
+                    level2_id: level2.id,
+                    level1_name: level1.name,
+                    level2_name: level2.name,
+                    displayName: `${level1.name} > ${level2.name} > ${level3.name}`
+                  });
+                }
+              });
+            }
+          });
+        }
+      });
+
+      // Filter and combine all accounts from different levels
+      const allAccounts = [
+        ...level1Data
+          .filter(account => account.account_type === formData.accountType)
+          .map(account => ({
+            ...account,
+            level: 1,
+            displayName: account.name
+          })),
+        ...level2Data
+          .filter(account => account.account_type === formData.accountType)
+          .map(account => ({
+            ...account,
+            level: 2,
+            displayName: `${account.level1_name} > ${account.name}`
+          })),
+        ...allLevel3Accounts
+      ];
+
+      setAccounts(allAccounts);
     } catch (error) {
       console.error('Error fetching accounts:', error);
+      alert('Failed to fetch accounts: ' + error.message);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -150,7 +212,7 @@ const PaymentReceived = () => {
             </tr>
             <tr>
               <td style="padding: 8px; border: 1px solid #ddd;"><strong>Account Name:</strong></td>
-              <td style="padding: 8px; border: 1px solid #ddd;">${accounts.find(acc => acc.id === formData.accountId)?.account_name || ''}</td>
+              <td style="padding: 8px; border: 1px solid #ddd;">${accounts.find(acc => acc.id === formData.accountId)?.displayName || ''}</td>
             </tr>
             <tr>
               <td style="padding: 8px; border: 1px solid #ddd;"><strong>Amount:</strong></td>
@@ -347,11 +409,16 @@ const PaymentReceived = () => {
                   label="Account"
                   value={formData.accountId}
                   onChange={(e) => setFormData(prev => ({ ...prev, accountId: e.target.value }))}
-                  disabled={!formData.accountType}
+                  disabled={!formData.accountType || loading}
                 >
                   {accounts.map((account) => (
                     <MenuItem key={account.id} value={account.id}>
-                      {account.account_name}
+                      <div>
+                        <div>{account.displayName}</div>
+                        <div style={{ fontSize: '0.8em', color: 'gray' }}>
+                          {account.level === 1 ? 'Level 1' : account.level === 2 ? 'Level 2' : 'Level 3'} - {account.account_type}
+                        </div>
+                      </div>
                     </MenuItem>
                   ))}
                 </TextField>

@@ -18,10 +18,11 @@ import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import { Print } from '@mui/icons-material';
 import '../../styles/forms/GateForm.css';
 import { format } from 'date-fns';
+import useAccounts from '../../hooks/useAccounts';
 
 const StoreOutForm = () => {
   const [loading, setLoading] = useState(false);
-  const [vendors, setVendors] = useState([]);
+  const { accounts: vendors, loading: vendorsLoading } = useAccounts('VENDOR');
   const [grnList, setGrnList] = useState([]);
   const [selectedGRN, setSelectedGRN] = useState(null);
   const [isPrinted, setIsPrinted] = useState(false);
@@ -41,23 +42,6 @@ const StoreOutForm = () => {
     currentStock: 0,
     returnGRN: ''
   });
-
-  // Fetch vendors on component mount
-  useEffect(() => {
-    fetchVendors();
-  }, []);
-
-  const fetchVendors = async () => {
-    try {
-      const response = await fetch(`${config.apiUrl}/accounts/vendors`);
-      if (!response.ok) throw new Error('Failed to fetch vendors');
-      const data = await response.json();
-      setVendors(data);
-    } catch (error) {
-      console.error('Error:', error);
-      alert('Failed to fetch vendors');
-    }
-  };
 
   // Fetch GRNs based on selected vendor
   const fetchVendorGRNs = async (vendorId) => {
@@ -158,7 +142,6 @@ const StoreOutForm = () => {
         quantity: Number(formData.quantity),
         dateTime: formData.dateTime,
         remarks: formData.remarks,
-        entryType: 'STORE_RETURN',
         vendorId: formData.vendorId,
         itemId: formData.itemId,
         unit: formData.unit
@@ -179,7 +162,9 @@ const StoreOutForm = () => {
         throw new Error(errorData.error || 'Something went wrong');
       }
 
+      const result = await response.json();
       alert('Store return processed successfully');
+      
       // Reset form
       setFormData({
         vendorId: '',
@@ -197,6 +182,7 @@ const StoreOutForm = () => {
         returnGRN: ''
       });
       setSelectedGRN(null);
+      setGrnList([]);
     } catch (error) {
       console.error('Error:', error);
       alert(error.message);
@@ -297,7 +283,7 @@ const StoreOutForm = () => {
             </tr>
             <tr>
               <td><strong>Vendor:</strong></td>
-              <td>${selectedVendor?.account_name || 'N/A'}</td>
+              <td>${selectedVendor?.name || 'N/A'}</td>
             </tr>
           </table>
 
@@ -389,7 +375,7 @@ const StoreOutForm = () => {
                     label="Select Vendor"
                     value={formData.vendorId}
                     onChange={(e) => fetchVendorGRNs(e.target.value)}
-                    disabled={loading}
+                    disabled={loading || vendorsLoading}
                     onKeyPress={(e) => handleKeyPress(e, 'grnNumber')}
                   >
                     {vendors.map((vendor) => (

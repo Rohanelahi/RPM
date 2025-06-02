@@ -13,7 +13,7 @@ router.get('/purchase-returns', async (req, res) => {
         gep.account_id,
         gr.return_quantity as quantity,
         gep.status,
-        gep.original_grn_number,
+        gr.original_grn_number,
         gr.return_reason,
         gr.date_time,
         gr.vehicle_type,
@@ -25,7 +25,7 @@ router.get('/purchase-returns', async (req, res) => {
        FROM gate_entries_pricing gep
        JOIN gate_returns gr ON gr.return_number = gep.grn_number
        JOIN accounts s ON gep.account_id = s.id
-       LEFT JOIN gate_entries ge ON gep.original_grn_number = ge.grn_number
+       LEFT JOIN gate_entries ge ON gr.original_grn_number = ge.grn_number
        WHERE gep.entry_type = 'PURCHASE_RETURN'
        AND gep.status = 'PENDING'
        ORDER BY gr.date_time DESC`

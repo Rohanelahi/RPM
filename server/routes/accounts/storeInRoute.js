@@ -9,6 +9,7 @@ router.post('/process-store-purchase', async (req, res) => {
     await client.query('BEGIN');
 
     const { entryId, pricePerUnit, totalAmount } = req.body;
+    console.log('Processing store purchase:', { entryId, pricePerUnit, totalAmount });
 
     // Get store entry details with complete item information
     const { rows: [entry] } = await client.query(
@@ -19,10 +20,16 @@ router.post('/process-store-purchase', async (req, res) => {
          se.unit,
          se.grn_number,
          se.vendor_id,
+         se.id as store_entry_id,
          CURRENT_TIMESTAMP as process_time,
          si.item_name,
          si.item_code,
-         si.unit as item_unit
+         si.unit as item_unit,
+         COALESCE(
+           (SELECT name FROM chart_of_accounts_level3 WHERE id = se.vendor_id),
+           (SELECT name FROM chart_of_accounts_level2 WHERE id = se.vendor_id),
+           (SELECT name FROM chart_of_accounts_level1 WHERE id = se.vendor_id)
+         ) as vendor_name
        FROM pricing_entries pe
        JOIN store_entries se ON pe.reference_id = se.id
        JOIN store_items si ON se.item_id = si.id
@@ -34,8 +41,26 @@ router.post('/process-store-purchase', async (req, res) => {
       throw new Error('Store entry not found');
     }
 
+    console.log('Found store entry:', entry);
+
+    // Verify vendor exists in chart of accounts
+    const vendorCheck = await client.query(
+      `SELECT id FROM (
+        SELECT id FROM chart_of_accounts_level1 WHERE id = $1
+        UNION ALL
+        SELECT id FROM chart_of_accounts_level2 WHERE id = $1
+        UNION ALL
+        SELECT id FROM chart_of_accounts_level3 WHERE id = $1
+      ) as vendor WHERE id = $1`,
+      [entry.vendor_id]
+    );
+
+    if (vendorCheck.rows.length === 0) {
+      throw new Error('Invalid vendor ID');
+    }
+
     // Create transaction for vendor with description containing all details
-    await client.query(
+    const transactionResult = await client.query(
       `INSERT INTO transactions (
         account_id, 
         transaction_date, 
@@ -47,14 +72,15 @@ router.post('/process-store-purchase', async (req, res) => {
         quantity,
         unit,
         price_per_unit
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+      RETURNING id`,
       [
         entry.vendor_id,
         entry.process_time,
         entry.grn_number,
         'CREDIT',
         totalAmount,
-        `Store Purchase: ${entry.item_name}`,
+        `Store Purchase: ${entry.item_name} from ${entry.vendor_name}`,
         entry.item_name,
         entry.quantity,
         entry.unit,
@@ -62,26 +88,35 @@ router.post('/process-store-purchase', async (req, res) => {
       ]
     );
 
-    // Update pricing entry status
-    await client.query(
+    console.log('Created transaction:', transactionResult.rows[0]);
+
+    // Update pricing entry status and details
+    const pricingResult = await client.query(
       `UPDATE pricing_entries 
        SET status = 'PROCESSED', 
            price_per_unit = $1,
            total_amount = $2,
-           processed_at = CURRENT_TIMESTAMP
-       WHERE id = $3`,
-      [pricePerUnit, totalAmount, entryId]
+           processed_at = CURRENT_TIMESTAMP,
+           quantity = $3,
+           unit = $4,
+           reference_id = $5
+       WHERE id = $6
+       RETURNING *`,
+      [pricePerUnit, totalAmount, entry.quantity, entry.unit, entry.store_entry_id, entryId]
     );
 
+    console.log('Updated pricing entry:', pricingResult.rows[0]);
+
     await client.query('COMMIT');
-    res.json({ message: 'Store purchase processed successfully' });
+    res.json({ 
+      message: 'Store purchase processed successfully',
+      transaction: transactionResult.rows[0],
+      pricing: pricingResult.rows[0]
+    });
   } catch (error) {
     await client.query('ROLLBACK');
     console.error('Error processing store purchase:', error);
-    res.status(500).json({ 
-      message: 'Error processing store purchase',
-      error: error.message 
-    });
+    res.status(500).json({ error: error.message || 'Internal server error' });
   } finally {
     client.release();
   }
