@@ -115,7 +115,7 @@ router.get('/history', async (req, res) => {
   try {
     const { itemType, supplierId, startDate, endDate } = req.query;
     let params = [];
-    let conditions = ['ge.entry_type = \'PURCHASE_IN\''];
+    let conditions = ["ge.entry_type = 'PURCHASE_IN'"];
     
     let query = `
       SELECT 
@@ -125,13 +125,13 @@ router.get('/history', async (req, res) => {
         ge.item_type,
         COALESCE(gep.final_quantity, ge.quantity) as quantity,
         ge.unit,
-        a.account_name as supplier_name,
+        c3.name as supplier_name,
         gep.price_per_unit as price,
         (COALESCE(gep.final_quantity, ge.quantity) * COALESCE(gep.price_per_unit, 0)) as total_amount
       FROM gate_entries ge
       LEFT JOIN gate_entries_pricing gep ON ge.grn_number = gep.grn_number
-      LEFT JOIN accounts a ON ge.supplier_id::text = a.id::text
-      WHERE a.account_type = 'SUPPLIER'
+      LEFT JOIN chart_of_accounts_level3 c3 ON ge.supplier_id = c3.id
+      WHERE ${conditions.join(' AND ')}
     `;
     
     if (itemType) {
@@ -154,13 +154,26 @@ router.get('/history', async (req, res) => {
       conditions.push(`ge.date_time <= $${params.length}`);
     }
     
-    query += ` AND ${conditions.join(' AND ')} ORDER BY ge.date_time DESC`;
-
-    console.log('Query:', query);
-    console.log('Params:', params);
+    // Rebuild the query with all conditions
+    query = `
+      SELECT 
+        ge.id,
+        ge.date_time as date,
+        ge.grn_number as reference_number,
+        ge.item_type,
+        COALESCE(gep.final_quantity, ge.quantity) as quantity,
+        ge.unit,
+        c3.name as supplier_name,
+        gep.price_per_unit as price,
+        (COALESCE(gep.final_quantity, ge.quantity) * COALESCE(gep.price_per_unit, 0)) as total_amount
+      FROM gate_entries ge
+      LEFT JOIN gate_entries_pricing gep ON ge.grn_number = gep.grn_number
+      LEFT JOIN chart_of_accounts_level3 c3 ON ge.supplier_id = c3.id
+      WHERE ${conditions.join(' AND ')}
+      ORDER BY ge.date_time DESC
+    `;
 
     const result = await pool.query(query, params);
-    console.log('Stock history result:', result.rows);
     res.json(result.rows);
   } catch (error) {
     console.error('Error fetching stock history:', error);
@@ -219,20 +232,7 @@ router.get('/item-summary', async (req, res) => {
   try {
     const { startDate, endDate, supplierId } = req.query;
     let params = [];
-    let conditions = ['ge.entry_type = \'PURCHASE_IN\''];
-    
-    let query = `
-      SELECT 
-        ge.item_type,
-        SUM(COALESCE(gep.final_quantity, ge.quantity)) as total_quantity,
-        ge.unit,
-        AVG(gep.price_per_unit) as avg_price,
-        SUM(COALESCE(gep.final_quantity, ge.quantity) * COALESCE(gep.price_per_unit, 0)) as total_amount
-      FROM gate_entries ge
-      LEFT JOIN gate_entries_pricing gep ON ge.grn_number = gep.grn_number
-      LEFT JOIN accounts a ON ge.supplier_id::text = a.id::text
-      WHERE a.account_type = 'SUPPLIER'
-    `;
+    let conditions = ["ge.entry_type = 'PURCHASE_IN'"];
     
     if (supplierId) {
       params.push(supplierId);
@@ -249,10 +249,20 @@ router.get('/item-summary', async (req, res) => {
       conditions.push(`ge.date_time <= $${params.length}`);
     }
     
-    query += ` AND ${conditions.join(' AND ')} GROUP BY ge.item_type, ge.unit ORDER BY ge.item_type`;
-
-    console.log('Item Summary Query:', query);
-    console.log('Params:', params);
+    let query = `
+      SELECT 
+        ge.item_type,
+        SUM(COALESCE(gep.final_quantity, ge.quantity)) as total_quantity,
+        ge.unit,
+        AVG(gep.price_per_unit) as avg_price,
+        SUM(COALESCE(gep.final_quantity, ge.quantity) * COALESCE(gep.price_per_unit, 0)) as total_amount
+      FROM gate_entries ge
+      LEFT JOIN gate_entries_pricing gep ON ge.grn_number = gep.grn_number
+      LEFT JOIN chart_of_accounts_level3 c3 ON ge.supplier_id = c3.id
+      WHERE ${conditions.join(' AND ')}
+      GROUP BY ge.item_type, ge.unit 
+      ORDER BY ge.item_type
+    `;
 
     const result = await pool.query(query, params);
     res.json(result.rows);

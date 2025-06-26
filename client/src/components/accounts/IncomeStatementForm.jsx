@@ -384,15 +384,24 @@ const IncomeStatementForm = () => {
 
             <tr>
               <td style="padding: 8px; border: 1px solid #ddd;">
+                <strong>Freight Cost:</strong>
+              </td>
+              <td style="padding: 8px; border: 1px solid #ddd; text-align: right;">
+                Rs. ${(data?.expenses?.items?.find(expense => expense.type === 'FREIGHT')?.amount || 0).toLocaleString()}
+              </td>
+            </tr>
+
+            <tr>
+              <td style="padding: 8px; border: 1px solid #ddd;">
                 <strong>Additional Expenses:</strong>
                 <div style="padding-left: 20px;">
-                  ${(data?.expenses?.items || []).map(expense => `
+                  ${(data?.expenses?.items?.filter(expense => expense.type !== 'FREIGHT') || []).map(expense => `
                     <div>${expense.type}: Rs. ${expense.amount.toLocaleString()}</div>
                   `).join('')}
                 </div>
               </td>
               <td style="padding: 8px; border: 1px solid #ddd; text-align: right;">
-                Rs. ${(data?.expenses?.total || 0).toLocaleString()}
+                Rs. ${(data?.expenses?.items?.filter(expense => expense.type !== 'FREIGHT').reduce((sum, expense) => sum + expense.amount, 0) || 0).toLocaleString()}
               </td>
             </tr>
 

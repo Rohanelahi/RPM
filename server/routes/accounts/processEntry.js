@@ -25,12 +25,12 @@ async function cleanupDuplicateTransactions(client, grnNumber, accountId) {
 }
 
 // Process entry
-router.post('/process-entry', async (req, res) => {
+router.post('/', async (req, res) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
     
-    const { entryId, pricePerUnit, cutWeight, totalAmount, finalQuantity, processedBy } = req.body;
+    const { entryId, pricePerUnit, cutWeight, totalAmount, finalQuantity, processedBy, freight, freightAmount } = req.body;
     
     // 1. Get the pricing entry with account info
     const { rows: [pricing] } = await client.query(
@@ -43,7 +43,8 @@ router.post('/process-entry', async (req, res) => {
         ge.item_type,
         ge.paper_type,
         ge.quantity,
-        ge.unit
+        ge.unit,
+        COALESCE(ge.item_type, ge.paper_type) as item_name
        FROM gate_entries_pricing gep
        JOIN gate_entries ge ON gep.grn_number = ge.grn_number
        WHERE gep.id = $1`,
@@ -78,7 +79,7 @@ router.post('/process-entry', async (req, res) => {
     // 4. Clean up any existing duplicate transactions
     await cleanupDuplicateTransactions(client, pricing.grn_number, pricing.account_id);
 
-    // 5. Create new transaction record
+    // 5. Create new transaction record (original sale/purchase transaction)
     const { rows: [existingTransaction] } = await client.query(
       `SELECT id FROM transactions 
        WHERE reference_no = $1 AND account_id = $2
@@ -108,11 +109,49 @@ router.post('/process-entry', async (req, res) => {
           // Explicitly set entry_type
           (pricing.entry_type === 'PURCHASE' ? 'CREDIT' : (pricing.entry_type === 'SALE' ? 'DEBIT' : 'CREDIT')),
           totalAmount,
-          `${pricing.entry_type === 'SALE' ? 'Sale' : 'Purchase'} against GRN: ${pricing.grn_number}`,
-          pricing.item_type || pricing.paper_type,
+          pricing.entry_type === 'SALE' ? `Sale ${pricing.item_name}` : 'Purchase',  // Include paper type in description
+          pricing.item_name,
           finalQuantity || pricing.quantity,
           pricing.unit,
           pricePerUnit
+        ]
+      );
+    }
+
+    // 6. Create freight transaction if freight is checked (for SALE entries only)
+    if (freight && freightAmount && pricing.entry_type === 'SALE' && parseFloat(freightAmount) > 0) {
+      // Update account balance for freight (credit for sale - customer owes more)
+      await client.query(
+        'UPDATE accounts SET current_balance = current_balance + $1 WHERE id = $2',
+        [parseFloat(freightAmount), pricing.account_id]
+      );
+
+      // Create freight transaction
+      const freightGrn = `FR-${pricing.grn_number}`; // Add FR prefix for freight
+      await client.query(
+        `INSERT INTO transactions (
+          transaction_date,
+          account_id,
+          reference_no,
+          entry_type,
+          amount,
+          description,
+          item_name,
+          quantity,
+          unit,
+          price_per_unit
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+        [
+          new Date(),
+          pricing.account_id,
+          freightGrn,
+          'CREDIT', // Credit for freight adjustment
+          parseFloat(freightAmount),
+          'Freight Adjustment',
+          pricing.item_name,
+          finalQuantity || pricing.quantity,
+          pricing.unit,
+          0 // No price per unit for freight
         ]
       );
     }

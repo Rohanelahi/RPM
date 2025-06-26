@@ -27,7 +27,7 @@ const PaymentHistory = () => {
   const [payments, setPayments] = useState([]);
   const [filters, setFilters] = useState({
     startDate: new Date(new Date().getFullYear(), new Date().getMonth(), 1),
-    endDate: new Date(),
+    endDate: new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0),
     accountType: '',
     recordType: ''
   });
@@ -42,7 +42,8 @@ const PaymentHistory = () => {
 
   const recordTypes = [
     { value: '', label: 'All Records' },
-    { value: 'PAYMENT', label: 'Payments' },
+    { value: 'RECEIVED', label: 'Payments Received' },
+    { value: 'ISSUED', label: 'Payments Issued' },
     { value: 'EXPENSE', label: 'Expenses' }
   ];
 
@@ -67,7 +68,7 @@ const PaymentHistory = () => {
         queryParams.append('accountType', filters.accountType);
       }
       if (filters.recordType) {
-        queryParams.append('paymentType', filters.recordType);
+        queryParams.append('recordType', filters.recordType);
       }
 
       const url = `${config.apiUrl}/accounts/payments/history?${queryParams}`;
@@ -78,12 +79,7 @@ const PaymentHistory = () => {
       }
 
       const data = await response.json();
-      // Map OTHER account type to EXPENSE in the display
-      const processedData = data.map(record => ({
-        ...record,
-        record_type: record.account_type === 'OTHER' ? 'EXPENSE' : record.record_type
-      }));
-      setPayments(processedData);
+      setPayments(data);
     } catch (error) {
       console.error('Error fetching records:', error);
       setPayments([]);
@@ -94,12 +90,27 @@ const PaymentHistory = () => {
 
   const getRecordTypeColor = (type) => {
     switch (type) {
-      case 'PAYMENT':
-        return 'primary';
-      case 'EXPENSE':
+      case 'RECEIVED':
+        return 'success';
+      case 'ISSUED':
         return 'error';
+      case 'EXPENSE':
+        return 'warning';
       default:
         return 'default';
+    }
+  };
+
+  const getRecordTypeLabel = (type) => {
+    switch (type) {
+      case 'RECEIVED':
+        return 'Payment Received';
+      case 'ISSUED':
+        return 'Payment Issued';
+      case 'EXPENSE':
+        return 'Expense';
+      default:
+        return type;
     }
   };
 
@@ -235,12 +246,12 @@ const PaymentHistory = () => {
                   <TableCell>{format(new Date(record.payment_date), 'dd/MM/yyyy')}</TableCell>
                   <TableCell>{record.payment_time}</TableCell>
                   <TableCell>
-                    {record.record_type === 'PAYMENT' ? record.receipt_no : record.voucher_no}
+                    {record.receipt_no}
                   </TableCell>
                   <TableCell>
                     <Chip 
-                      label={record.record_type === 'PAYMENT' ? 'Payment' : 'Expense'}
-                      color={getRecordTypeColor(record.record_type)}
+                      label={getRecordTypeLabel(record.payment_type)}
+                      color={getRecordTypeColor(record.payment_type)}
                       size="small"
                     />
                   </TableCell>
@@ -254,7 +265,7 @@ const PaymentHistory = () => {
                   <TableCell 
                     align="right"
                     sx={{
-                      color: record.record_type === 'PAYMENT' ? 'success.main' : 'error.main',
+                      color: record.payment_type === 'RECEIVED' ? 'success.main' : 'error.main',
                       fontFamily: 'monospace'
                     }}
                   >

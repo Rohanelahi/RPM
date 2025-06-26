@@ -221,7 +221,7 @@ router.post('/', async (req, res) => {
 
     let expenseTypeName;
     let accountDetails = null;
-    
+
     // Handle different types of expense entries
     if (account_type === 'OTHER') {
       console.log('Processing OTHER type expense with account_id:', account_id);
@@ -297,13 +297,13 @@ router.post('/', async (req, res) => {
       expenseTypeName = expenseType;
     } else {
       // If it's a number, get the expense type name from the database
-      const { rows: [expenseTypeData] } = await client.query(
-        'SELECT name FROM expense_types WHERE id = $1',
-        [expenseType]
-      );
+    const { rows: [expenseTypeData] } = await client.query(
+      'SELECT name FROM expense_types WHERE id = $1',
+      [expenseType]
+    );
 
-      if (!expenseTypeData) {
-        throw new Error('Invalid expense type');
+    if (!expenseTypeData) {
+      throw new Error('Invalid expense type');
       }
       expenseTypeName = expenseTypeData.name;
     }
@@ -332,7 +332,7 @@ router.post('/', async (req, res) => {
         account_type
       )
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-      RETURNING *`,
+       RETURNING *`,
       [
         new Date(date), 
         expenseTypeName, 
@@ -462,7 +462,7 @@ router.post('/', async (req, res) => {
             req.body.processed_by_role,
             'LEVEL2'
           ]
-        );
+    );
         console.log('Created level2 ledger entry:', level2Result.rows[0]);
       }
 
@@ -611,13 +611,13 @@ router.get('/history', async (req, res) => {
         query += ` AND e.expense_type = $${paramCount}`;
         queryParams.push(expenseType);
       } else {
-        const { rows: [expenseTypeData] } = await pool.query(
-          'SELECT name FROM expense_types WHERE id = $1',
-          [expenseType]
-        );
-        if (expenseTypeData) {
-          query += ` AND e.expense_type = $${paramCount}`;
-          queryParams.push(expenseTypeData.name);
+      const { rows: [expenseTypeData] } = await pool.query(
+        'SELECT name FROM expense_types WHERE id = $1',
+        [expenseType]
+      );
+      if (expenseTypeData) {
+        query += ` AND e.expense_type = $${paramCount}`;
+        queryParams.push(expenseTypeData.name);
         }
       }
       paramCount++;

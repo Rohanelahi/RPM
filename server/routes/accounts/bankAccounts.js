@@ -102,7 +102,7 @@ router.get('/bank-accounts', async (req, res) => {
         b.account_number,
         b.branch_name,
         b.ifsc_code,
-        b.account_type,
+        'BANK' as account_type,
         b.status,
         COALESCE(lb.running_balance, 0) as balance
       FROM bank_accounts b
@@ -111,7 +111,16 @@ router.get('/bank-accounts', async (req, res) => {
       ORDER BY b.bank_name
     `);
     
-    res.json(result.rows);
+    // Format the response
+    const formattedAccounts = result.rows.map(account => ({
+      ...account,
+      balance: Number(account.balance) || 0,
+      bank_name: account.bank_name || 'Unknown Bank',
+      account_number: account.account_number || 'N/A',
+      account_type: 'BANK'
+    }));
+    
+    res.json(formattedAccounts);
   } catch (err) {
     console.error('Error fetching bank accounts:', err);
     res.status(500).json({ 
@@ -319,7 +328,12 @@ router.get('/bank-transactions', async (req, res) => {
           b.account_number,
           COALESCE(p.receiver_name, '') as receiver_name,
           COALESCE(p.payment_type, '') as payment_type,
-          COALESCE(a.account_name, '') as related_account_name,
+          CASE 
+            WHEN a.level = 'LEVEL3' THEN CONCAT(l1.name, ' > ', l2.name, ' > ', a.name)
+            WHEN a.level = 'LEVEL2' THEN CONCAT(l1.name, ' > ', a.name)
+            WHEN a.level = 'LEVEL1' THEN a.name
+            ELSE NULL
+          END as related_account_name,
           CASE 
             WHEN t.reference = 'Fund Transfer' THEN
               CASE 
@@ -353,9 +367,35 @@ router.get('/bank-transactions', async (req, res) => {
             (t.type = 'CREDIT' AND p.payment_type = 'RECEIVED') OR
             (t.type = 'DEBIT' AND p.payment_type = 'ISSUED')
           )
-        LEFT JOIN accounts a ON p.account_id = a.id
+        LEFT JOIN (
+          SELECT 
+            id,
+            name,
+            account_type,
+            NULL as level1_id,
+            'LEVEL1' as level
+          FROM chart_of_accounts_level1
+          UNION ALL
+          SELECT 
+            id,
+            name,
+            account_type,
+            level1_id,
+            'LEVEL2' as level
+          FROM chart_of_accounts_level2
+          UNION ALL
+          SELECT 
+            id,
+            name,
+            account_type,
+            level1_id,
+            'LEVEL3' as level
+          FROM chart_of_accounts_level3
+        ) a ON p.account_id = a.id
+        LEFT JOIN chart_of_accounts_level1 l1 ON a.level1_id = l1.id
+        LEFT JOIN chart_of_accounts_level2 l2 ON a.id = l2.id AND a.level = 'LEVEL3'
         WHERE 1=1
-        ${accountId ? ' AND t.account_id = $1' : ''}
+        ${accountId ? ` AND t.account_id = $1` : ''}
         ${startDate ? ` AND t.transaction_date >= ${accountId ? '$2' : '$1'}` : ''}
         ${endDate ? ` AND t.transaction_date <= ${accountId ? '$3' : '$2'} ` : ''}
         ORDER BY t.id, t.transaction_date ASC
@@ -392,18 +432,23 @@ router.get('/cash-balances', async (req, res) => {
     // Calculate cash in hand from cash_transactions
     const cashResult = await pool.query(`
       SELECT 
-        COALESCE(
-          SUM(CASE WHEN type = 'CREDIT' THEN amount ELSE -amount END),
-          0
-        ) as cash_in_hand
+        balance_after as cash_in_hand
       FROM cash_transactions
+      ORDER BY transaction_date DESC, id DESC
+      LIMIT 1
     `);
 
-    res.json([{
-      id: 1,
-      name: 'Cash in Hand',
-      amount: Number(cashResult.rows[0]?.cash_in_hand || 0)
-    }]);
+    console.log('Raw cash balance query result:', cashResult.rows[0]);
+    const cashInHand = Number(cashResult.rows[0]?.cash_in_hand || 0);
+    console.log('Formatted cash in hand:', cashInHand);
+
+    // Return cash balance in the expected format
+    const response = {
+      cash_in_hand: cashInHand,
+      cash_in_bank: 0
+    };
+    console.log('Sending response:', response);
+    res.json(response);
   } catch (err) {
     console.error('Error fetching cash balances:', err);
     res.status(500).json({ error: 'Failed to fetch cash balances' });

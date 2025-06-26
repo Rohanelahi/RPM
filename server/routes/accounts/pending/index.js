@@ -9,14 +9,14 @@ const saleReturns = require('./saleReturns');
 const storeReturns = require('./storeReturns');
 
 // Mount all pending entry routes
-router.use('/pending', purchaseEntries);
-router.use('/pending', purchaseReturns);
-router.use('/pending', saleEntries);
-router.use('/pending', saleReturns);
-router.use('/pending', storeReturns);
+router.use('/purchase', purchaseEntries);
+router.use('/sale', saleEntries);
+router.use('/purchase-returns', purchaseReturns);
+router.use('/sale-returns', saleReturns);
+router.use('/store-returns', storeReturns);
 
 // Get all pending entries (combined)
-router.get('/pending-entries', async (req, res) => {
+router.get('/', async (req, res) => {
   try {
     const { userRole } = req.query;
 
@@ -84,13 +84,22 @@ router.get('/pending-entries', async (req, res) => {
          ELSE gep.grn_number 
        END = ge.grn_number
        WHERE gep.status = 'PENDING'
-       ${userRole === 'TAX' ? 'AND (gep.processed_by_role IS NULL OR gep.processed_by_role = \'TAX\')' : ''}`;
+    `;
 
-    const gateResult = await pool.query(gateQuery);
+    const gateEntries = await pool.query(gateQuery);
+    console.log('Gate entries fetched:', gateEntries.rows.length);
 
-    // Get store purchase entries
-    const storeResult = await pool.query(
-      `SELECT 
+    // Process gate entries
+    const processedGateEntries = gateEntries.rows.map(entry => ({
+      ...entry,
+      display_grn: entry.return_number 
+        ? `${entry.return_number} (Original: ${entry.grn_number})`
+        : entry.grn_number
+    }));
+
+    // Get store entries
+    const storeQuery = `
+      SELECT 
         pe.id as pricing_id,
         'STORE_PURCHASE' as entry_type,
         se.grn_number,
@@ -104,15 +113,24 @@ router.get('/pending-entries', async (req, res) => {
           (SELECT name FROM chart_of_accounts_level2 WHERE id = se.vendor_id),
           (SELECT name FROM chart_of_accounts_level1 WHERE id = se.vendor_id)
         ) as vendor_name,
-        se.vehicle_number,
-        se.driver_name,
         se.date_time
        FROM pricing_entries pe
        JOIN store_entries se ON pe.reference_id = se.id
        JOIN store_items si ON se.item_id = si.id
        WHERE pe.status = 'PENDING' 
-       AND pe.entry_type = 'STORE_PURCHASE'`
-    );
+      AND pe.entry_type = 'STORE_PURCHASE'
+    `;
+
+    const storeEntries = await pool.query(storeQuery);
+    console.log('Store entries fetched:', storeEntries.rows.length);
+
+    // Process store entries
+    const processedStoreEntries = storeEntries.rows.map(entry => ({
+      ...entry,
+      display_grn: entry.grn_number,
+      item_type: entry.item_type,
+      account_name: entry.vendor_name
+    }));
 
     // Get store returns
     const storeReturnsQuery = `
@@ -146,28 +164,8 @@ router.get('/pending-entries', async (req, res) => {
       ORDER BY sr.date_time DESC
     `;
 
-    // Process and combine results
-    const processedGateEntries = gateResult.rows.map(row => ({
-      ...row,
-      quantity: row.return_quantity || row.quantity,
-      grn_number: row.return_number || row.grn_number,
-      account_name: row.entry_type === 'SALE_RETURN' 
-        ? row.purchaser_name 
-        : row.entry_type === 'SALE'
-          ? row.purchaser_name
-          : row.supplier_name,
-      date_time: row.return_date || row.date_time,
-      unit: row.original_unit || 'KG',
-      item_type: row.original_paper_type || row.item_type,
-      paper_type: row.original_paper_type
-    }));
-
-    const processedStoreEntries = storeResult.rows.map(row => ({
-      ...row,
-      account_name: row.vendor_name
-    }));
-
     const processedStoreReturns = await pool.query(storeReturnsQuery);
+    console.log('Store returns fetched:', processedStoreReturns.rows.length);
 
     // Combine all entries
     const allEntries = [

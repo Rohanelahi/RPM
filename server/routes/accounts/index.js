@@ -17,22 +17,24 @@ const expensesRouter = require('./expenses');
 const chartLevel1Router = require('./chart/level1');
 const chartLevel2Router = require('./chart/level2');
 const chartLevel3Router = require('./chart/level3');
+const bankAccountsRouter = require('./bankAccounts');
 
 router.use('/', listAccounts);
-router.use('/', createAccount);
-router.use('/', updateAccount);
-router.use('/', pendingEntries);
-router.use('/', processEntry);
-router.use('/', processReturn);
+router.use('/create', createAccount);
+router.use('/update', updateAccount);
+router.use('/pending', pendingEntries);
+router.use('/process-entry', processEntry);
+router.use('/return', processReturn);
 router.use('/ledger', ledgerRouter);
-router.use('/', storeInRoute);
-router.use('/', processStoreReturn);
+router.use('/store-in', storeInRoute);
+router.use('/store-return', processStoreReturn);
 router.use('/income-statement', incomeStatement);
 router.use('/payments', paymentsRouter);
 router.use('/expenses', expensesRouter);
 router.use('/chart/level1', chartLevel1Router);
 router.use('/chart/level2', chartLevel2Router);
 router.use('/chart/level3', chartLevel3Router);
+router.use('/bank-accounts', bankAccountsRouter);
 
 // Add this route to handle GRN lookups
 router.get('/grn/:grnNumber', async (req, res) => {
@@ -140,17 +142,6 @@ const createCashTrackingTable = async () => {
 
 // Run the migration
 createCashTrackingTable();
-
-// Add endpoint to get cash balances
-router.get('/cash-balances', async (req, res) => {
-  try {
-    const { rows } = await pool.query('SELECT cash_in_hand, cash_in_bank FROM cash_tracking LIMIT 1');
-    res.json(rows[0]);
-  } catch (error) {
-    console.error('Error fetching cash balances:', error);
-    res.status(500).json({ message: 'Error fetching cash balances' });
-  }
-});
 
 // Get payment details by voucher number
 router.get('/payment/:voucherNo', async (req, res) => {
@@ -430,23 +421,70 @@ router.post('/payments/long-voucher', async (req, res) => {
     if (!fromAccount || !toAccount || !amount) {
       return res.status(400).json({ error: 'Missing required fields' });
     }
+
+    // Create date object with current time in local timezone
+    const now = new Date();
+    const dateObj = new Date();
+    if (date) {
+      const [year, month, day] = date.split('-').map(Number);
+      dateObj.setFullYear(year, month - 1, day);
+    }
+    // Set the current time
+    dateObj.setHours(now.getHours(), now.getMinutes(), now.getSeconds());
+
     // Generate short voucher number
-    const dateObj = date ? new Date(date) : new Date();
     const yy = String(dateObj.getFullYear()).slice(-2);
     const mm = String(dateObj.getMonth() + 1).padStart(2, '0');
     const dd = String(dateObj.getDate()).padStart(2, '0');
     const random = Math.floor(100 + Math.random() * 900);
     const voucherNo = `LV-${yy}${mm}${dd}-${random}`;
 
-    // Get account names
-    const { rows: fromRows } = await client.query('SELECT name FROM chart_of_accounts_level1 WHERE id = $1 UNION ALL SELECT name FROM chart_of_accounts_level2 WHERE id = $1 UNION ALL SELECT name FROM chart_of_accounts_level3 WHERE id = $1', [fromAccount]);
-    const { rows: toRows } = await client.query('SELECT name FROM chart_of_accounts_level1 WHERE id = $1 UNION ALL SELECT name FROM chart_of_accounts_level2 WHERE id = $1 UNION ALL SELECT name FROM chart_of_accounts_level3 WHERE id = $1', [toAccount]);
-    const fromName = fromRows[0]?.name || 'Account';
-    const toName = toRows[0]?.name || 'Account';
+    // Get account names with hierarchy
+    const fromAccountQuery = `
+      SELECT 
+        l1.name as level1_name,
+        l2.name as level2_name,
+        l3.name as level3_name
+      FROM chart_of_accounts_level3 l3
+      JOIN chart_of_accounts_level2 l2 ON l3.level2_id = l2.id
+      JOIN chart_of_accounts_level1 l1 ON l2.level1_id = l1.id
+      WHERE l3.id = $1
+      UNION ALL
+      SELECT 
+        l1.name as level1_name,
+        l2.name as level2_name,
+        NULL as level3_name
+      FROM chart_of_accounts_level2 l2
+      JOIN chart_of_accounts_level1 l1 ON l2.level1_id = l1.id
+      WHERE l2.id = $1
+      UNION ALL
+      SELECT 
+        name as level1_name,
+        NULL as level2_name,
+        NULL as level3_name
+      FROM chart_of_accounts_level1
+      WHERE id = $1
+    `;
 
+    const toAccountQuery = fromAccountQuery;
+
+    const { rows: fromRows } = await client.query(fromAccountQuery, [fromAccount]);
+    const { rows: toRows } = await client.query(toAccountQuery, [toAccount]);
+
+    const fromName = fromRows[0] ? 
+      [fromRows[0].level1_name, fromRows[0].level2_name, fromRows[0].level3_name]
+        .filter(Boolean)
+        .join(' > ') : 'Account';
+
+    const toName = toRows[0] ? 
+      [toRows[0].level1_name, toRows[0].level2_name, toRows[0].level3_name]
+        .filter(Boolean)
+        .join(' > ') : 'Account';
+
+    // Create a more concise description
     const detail = description && description.trim().length > 0
       ? description
-      : `Long Voucher: Paid from ${fromName} to ${toName} (Voucher: ${voucherNo})`;
+      : `${fromName} to ${toName}`;
 
     await client.query('BEGIN');
     // CREDIT from account
@@ -475,27 +513,199 @@ router.get('/chart/all', async (req, res) => {
   const client = await pool.connect();
   try {
     // Level 1
-    const { rows: l1 } = await client.query('SELECT id, name, 1 as level FROM chart_of_accounts_level1');
+    const { rows: l1 } = await client.query(`
+      SELECT 
+        id, 
+        name, 
+        1 as level,
+        account_type,
+        name as level1_name,
+        NULL as level2_name,
+        NULL as level3_name,
+        id as level1_id,
+        NULL as level2_id,
+        NULL as level3_id
+      FROM chart_of_accounts_level1
+    `);
+
     // Level 2 with parent
     const { rows: l2 } = await client.query(`
-      SELECT l2.id, l2.name, 2 as level, l1.name as level1_name
+      SELECT 
+        l2.id, 
+        l2.name, 
+        2 as level,
+        l2.account_type,
+        l1.name as level1_name,
+        l2.name as level2_name,
+        NULL as level3_name,
+        l1.id as level1_id,
+        l2.id as level2_id,
+        NULL as level3_id
       FROM chart_of_accounts_level2 l2
       JOIN chart_of_accounts_level1 l1 ON l2.level1_id = l1.id
     `);
+
     // Level 3 with parents
     const { rows: l3 } = await client.query(`
-      SELECT l3.id, l3.name, 3 as level, l1.name as level1_name, l2.name as level2_name
+      SELECT 
+        l3.id, 
+        l3.name, 
+        3 as level,
+        l3.account_type,
+        l1.name as level1_name,
+        l2.name as level2_name,
+        l3.name as level3_name,
+        l1.id as level1_id,
+        l2.id as level2_id,
+        l3.id as level3_id
       FROM chart_of_accounts_level3 l3
       JOIN chart_of_accounts_level2 l2 ON l3.level2_id = l2.id
       JOIN chart_of_accounts_level1 l1 ON l2.level1_id = l1.id
     `);
-    // Add level1_name to level 1 for consistency
-    const l1WithNames = l1.map(acc => ({ ...acc, level1_name: acc.name }));
-    // Add level2_name to level 2 for consistency
-    const l2WithNames = l2.map(acc => ({ ...acc, level2_name: acc.name }));
-    res.json([...l1WithNames, ...l2WithNames, ...l3]);
+
+    // Combine all accounts and format them
+    const allAccounts = [...l1, ...l2, ...l3].map(account => ({
+      ...account,
+      displayName: account.level === 1 
+        ? account.name 
+        : account.level === 2 
+          ? `${account.level1_name} > ${account.name}`
+          : `${account.level1_name} > ${account.level2_name} > ${account.name}`,
+      uniqueId: `${account.level}-${account.id}` // Add a unique identifier
+    })).sort((a, b) => {
+      if (a.level1_name !== b.level1_name) {
+        return a.level1_name.localeCompare(b.level1_name);
+      }
+      if (a.level2_name !== b.level2_name) {
+        return (a.level2_name || '').localeCompare(b.level2_name || '');
+      }
+      return a.name.localeCompare(b.name);
+    });
+
+    res.json(allAccounts);
   } catch (err) {
+    console.error('Error fetching all accounts:', err);
     res.status(500).json({ error: err.message });
+  } finally {
+    client.release();
+  }
+});
+
+// Add route for process-store-purchase
+router.post('/process-store-purchase', async (req, res) => {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const { entryId, pricePerUnit, totalAmount, finalQuantity, processedBy } = req.body;
+    console.log('Processing store purchase:', { entryId, pricePerUnit, totalAmount, finalQuantity, processedBy });
+
+    // Get store entry details with complete item information
+    const { rows: [entry] } = await client.query(
+      `SELECT 
+         pe.id as pricing_id,
+         pe.price_per_unit,
+         se.quantity,
+         se.unit,
+         se.grn_number,
+         se.vendor_id,
+         se.id as store_entry_id,
+         CURRENT_TIMESTAMP as process_time,
+         si.item_name,
+         si.item_code,
+         si.unit as item_unit,
+         COALESCE(
+           (SELECT name FROM chart_of_accounts_level3 WHERE id = se.vendor_id),
+           (SELECT name FROM chart_of_accounts_level2 WHERE id = se.vendor_id),
+           (SELECT name FROM chart_of_accounts_level1 WHERE id = se.vendor_id)
+         ) as vendor_name
+       FROM pricing_entries pe
+       JOIN store_entries se ON pe.reference_id = se.id
+       JOIN store_items si ON se.item_id = si.id
+       WHERE pe.id = $1`,
+      [entryId]
+    );
+
+    if (!entry) {
+      throw new Error('Store entry not found');
+    }
+
+    console.log('Found store entry:', entry);
+
+    // Verify vendor exists in chart of accounts
+    const vendorCheck = await client.query(
+      `SELECT id FROM (
+        SELECT id FROM chart_of_accounts_level1 WHERE id = $1
+        UNION ALL
+        SELECT id FROM chart_of_accounts_level2 WHERE id = $1
+        UNION ALL
+        SELECT id FROM chart_of_accounts_level3 WHERE id = $1
+      ) as vendor WHERE id = $1`,
+      [entry.vendor_id]
+    );
+
+    if (vendorCheck.rows.length === 0) {
+      throw new Error('Invalid vendor ID');
+    }
+
+    // Create transaction for vendor with description containing all details
+    const transactionResult = await client.query(
+      `INSERT INTO transactions (
+        account_id, 
+        transaction_date, 
+        reference_no,
+        entry_type, 
+        amount, 
+        description,
+        item_name,
+        quantity,
+        unit,
+        price_per_unit
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+      RETURNING id`,
+      [
+        entry.vendor_id,
+        entry.process_time,
+        entry.grn_number,
+        'CREDIT',
+        totalAmount,
+        `Store Purchase: ${entry.item_name} from ${entry.vendor_name}`,
+        entry.item_name,
+        finalQuantity || entry.quantity,
+        entry.unit,
+        pricePerUnit
+      ]
+    );
+
+    console.log('Created transaction:', transactionResult.rows[0]);
+
+    // Update pricing entry status and details
+    const pricingResult = await client.query(
+      `UPDATE pricing_entries 
+       SET status = 'PROCESSED', 
+           price_per_unit = $1,
+           total_amount = $2,
+           processed_at = CURRENT_TIMESTAMP,
+           quantity = $3,
+           unit = $4,
+           reference_id = $5
+       WHERE id = $6
+       RETURNING *`,
+      [pricePerUnit, totalAmount, finalQuantity || entry.quantity, entry.unit, entry.store_entry_id, entryId]
+    );
+
+    console.log('Updated pricing entry:', pricingResult.rows[0]);
+
+    await client.query('COMMIT');
+    res.json({ 
+      message: 'Store purchase processed successfully',
+      transaction: transactionResult.rows[0],
+      pricing: pricingResult.rows[0]
+    });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('Error processing store purchase:', error);
+    res.status(500).json({ error: error.message || 'Internal server error' });
   } finally {
     client.release();
   }

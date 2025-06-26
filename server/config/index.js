@@ -1,11 +1,15 @@
 module.exports = {
-  apiUrl: process.env.API_URL || 'http://150.230.192.101:5000/api',
+  apiUrl: process.env.API_URL || 'http://localhost:5000/api',
   port: process.env.PORT || 5000,
   database: {
     host: process.env.DB_HOST || 'localhost',
     port: process.env.DB_PORT || 5432,
-    database: process.env.DB_NAME || 'rosepapermill',
-    user: process.env.DB_USER || 'opc',
+    database: process.env.DB_NAME || 'rpm',
+    user: process.env.DB_USER || 'postgres',
     password: process.env.DB_PASSWORD || '1234'
+  },
+  cors: {
+    origin: ['https://rpm-app.trycloudflare.com', 'http://localhost:3000'],
+    credentials: true
   }
 }; 

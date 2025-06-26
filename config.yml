@@ -1,0 +1,8 @@
+tunnel: ca392bd3-9f70-4863-b8a3-2e15880e31db
+credentials-file: C:\Users\G3NZ\.cloudflared\ca392bd3-9f70-4863-b8a3-2e15880e31db.json
+ingress:
+  - hostname: rpm-app.trycloudflare.com
+    service: http://localhost:3000
+  - hostname: rpm-api.trycloudflare.com
+    service: http://localhost:5000
+  - service: http_status:404

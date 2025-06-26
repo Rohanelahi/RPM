@@ -848,4 +848,120 @@ router.post('/paper-types', async (req, res) => {
   }
 });
 
+// Add new endpoint for production summary
+router.get('/summary', async (req, res) => {
+  try {
+    const result = await pool.query(`
+      WITH LatestPrices AS (
+        SELECT DISTINCT ON (item_type) 
+          item_type,
+          price_per_unit as latest_price,
+          date_time
+        FROM (
+          SELECT 
+            ge.item_type,
+            gep.price_per_unit,
+            ge.date_time
+          FROM gate_entries ge
+          JOIN gate_entries_pricing gep ON ge.grn_number = gep.grn_number
+          WHERE ge.entry_type = 'PURCHASE_IN'
+          
+          UNION ALL
+          
+          SELECT 
+            t.item_name as item_type,
+            t.price_per_unit,
+            t.transaction_date as date_time
+          FROM transactions t
+          WHERE t.item_name IS NOT NULL 
+          AND t.price_per_unit IS NOT NULL
+        ) all_prices
+        ORDER BY item_type, date_time DESC
+      ),
+      MaintenanceCosts AS (
+        SELECT 
+          DATE(mi.issue_date) as cost_date,
+          SUM(mii.quantity * mii.unit_price) as maintenance_cost
+        FROM maintenance_issues mi
+        JOIN maintenance_issue_items mii ON mi.id = mii.issue_id
+        GROUP BY DATE(mi.issue_date)
+      ),
+      DailyLabor AS (
+        SELECT 
+          a.attendance_date,
+          COUNT(CASE WHEN a.status = 'Present' THEN 1 END) as present_workers,
+          SUM(e.salary / 30.0) as daily_salary_cost
+        FROM daily_attendance a
+        JOIN employees e ON a.employee_id = e.id
+        GROUP BY a.attendance_date
+      ),
+      ContractorsCost AS (
+        SELECT SUM(monthly_salary) / 31.0 as daily_contractors_cost
+        FROM contractors
+        WHERE status = 'ACTIVE'
+      ),
+      DailyExpenses AS (
+        SELECT 
+          DATE(e.date) as expense_date,
+          SUM(e.amount) as daily_expense
+        FROM expenses e
+        GROUP BY DATE(e.date)
+      ),
+      PaperTypes AS (
+        SELECT 
+          ppt.production_id,
+          json_agg(
+            json_build_object(
+              'id', ppt.id,
+              'paper_type', ppt.paper_type,
+              'total_weight', ppt.total_weight,
+              'recipe', (
+                SELECT json_agg(
+                  json_build_object(
+                    'id', pr.id,
+                    'raddi_type', pr.raddi_type,
+                    'percentage_used', pr.percentage_used,
+                    'quantity_used', pr.quantity_used,
+                    'yield_percentage', pr.yield_percentage,
+                    'unit_price', COALESCE(lp.latest_price, 0)
+                  )
+                )
+                FROM production_recipe pr
+                LEFT JOIN LatestPrices lp ON pr.raddi_type = lp.item_type
+                WHERE pr.production_id = ppt.production_id
+              )
+            )
+          ) as paper_types
+        FROM production_paper_types ppt
+        GROUP BY ppt.production_id
+      )
+      SELECT 
+        p.*,
+        pt.paper_types,
+        COALESCE(mc.maintenance_cost, 0) as maintenance_cost,
+        COALESCE(dl.daily_salary_cost, 0) as labor_cost,
+        COALESCE(cc.daily_contractors_cost, 0) as contractors_cost,
+        COALESCE(de.daily_expense, 0) as daily_expenses,
+        (
+          SELECT COALESCE(lp.latest_price, 0)
+          FROM LatestPrices lp
+          WHERE lp.item_type = p.boiler_fuel_type
+        ) as boiler_fuel_price
+      FROM production p
+      LEFT JOIN PaperTypes pt ON p.id = pt.production_id
+      LEFT JOIN MaintenanceCosts mc ON DATE(p.date_time) = mc.cost_date
+      LEFT JOIN DailyLabor dl ON DATE(p.date_time) = dl.attendance_date
+      LEFT JOIN DailyExpenses de ON DATE(p.date_time) = de.expense_date
+      CROSS JOIN ContractorsCost cc
+      ORDER BY p.date_time DESC
+      LIMIT 5
+    `);
+
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Error fetching production summary:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 module.exports = router; 

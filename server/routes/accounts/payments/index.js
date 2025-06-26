@@ -230,29 +230,51 @@ router.post('/received', async (req, res) => {
       // Get current cash balance
       const cashBalanceResult = await client.query(`
         SELECT COALESCE(
-          SUM(CASE WHEN type = 'CREDIT' THEN amount ELSE -amount END),
+          SUM(CASE 
+            WHEN type = 'CREDIT' THEN amount 
+            WHEN type = 'DEBIT' THEN -amount 
+            ELSE 0 
+          END),
           0
         ) as current_balance
         FROM cash_transactions
-      `);
+        WHERE transaction_date <= $1
+      `, [new Date(payment_date)]);
       
       const currentBalance = Number(cashBalanceResult.rows[0].current_balance);
       const newBalance = currentBalance + Number(amount);
 
+      console.log('Cash balance update:', {
+        currentBalance,
+        amount,
+        newBalance,
+        paymentDate: payment_date,
+        voucherNo: finalVoucherNo
+      });
+
       // Create cash transaction
       await client.query(
         `INSERT INTO cash_transactions (
-          type, amount, reference, remarks, balance, balance_after
-        ) VALUES ($1, $2, $3, $4, $5, $6)`,
+          type, amount, reference, remarks, balance, balance_after, transaction_date
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
         [
           'CREDIT',
           amount,
           finalVoucherNo,
           remarks || `Payment from ${receiver_name}`,
           currentBalance,
-          newBalance
+          newBalance,
+          new Date(payment_date)
         ]
       );
+
+      // Update cash balance in bank_accounts table
+      await client.query(`
+        UPDATE bank_accounts 
+        SET balance = $1,
+            last_updated = NOW()
+        WHERE account_type = 'CASH'
+      `, [newBalance]);
     }
 
     // If payment mode is ONLINE, update bank balance
@@ -392,11 +414,16 @@ router.post('/issued', async (req, res) => {
       // Get current cash balance
       const cashBalanceResult = await client.query(`
         SELECT COALESCE(
-          SUM(CASE WHEN type = 'CREDIT' THEN amount ELSE -amount END),
+          SUM(CASE 
+            WHEN type = 'CREDIT' THEN amount 
+            WHEN type = 'DEBIT' THEN -amount 
+            ELSE 0 
+          END),
           0
         ) as current_balance
         FROM cash_transactions
-      `);
+        WHERE transaction_date <= $1
+      `, [new Date(payment_date)]);
       
       const currentBalance = Number(cashBalanceResult.rows[0].current_balance);
       const newBalance = currentBalance - Number(amount);
@@ -472,8 +499,8 @@ router.post('/issued', async (req, res) => {
 // Get payment history
 router.get('/history', async (req, res) => {
   try {
-    const { startDate, endDate, accountType, paymentType } = req.query;
-    console.log('Query parameters:', { startDate, endDate, accountType, paymentType });
+    const { startDate, endDate, accountType, recordType } = req.query;
+    console.log('Query parameters:', { startDate, endDate, accountType, recordType });
 
     let query = `
       WITH payment_data AS (
@@ -493,18 +520,57 @@ router.get('/history', async (req, res) => {
           END as receipt_no,
           p.created_by::text as created_by,
           p.processed_by_role,
-          a.account_name,
-          a.account_type,
+          CASE
+            WHEN l3.id IS NOT NULL THEN CONCAT(l1_l3.name, ' > ', l2_l3.name, ' > ', l3.name)
+            WHEN l2.id IS NOT NULL THEN CONCAT(l1_l2.name, ' > ', l2.name)
+            WHEN l1.id IS NOT NULL THEN l1.name
+            ELSE NULL
+          END as account_name,
+          p.account_type,
           CASE 
             WHEN p.bank_account_id IS NOT NULL THEN b.bank_name
             ELSE NULL
           END as bank_name,
-          'PAYMENT' as record_type
+          p.payment_type
         FROM payments p
-        JOIN accounts a ON p.account_id = a.id
+        LEFT JOIN chart_of_accounts_level3 l3 ON p.account_id = l3.id
+        LEFT JOIN chart_of_accounts_level2 l2 ON p.account_id = l2.id
+        LEFT JOIN chart_of_accounts_level1 l1 ON p.account_id = l1.id
+        LEFT JOIN chart_of_accounts_level1 l1_l3 ON l3.level1_id = l1_l3.id
+        LEFT JOIN chart_of_accounts_level2 l2_l3 ON l3.level2_id = l2_l3.id
+        LEFT JOIN chart_of_accounts_level1 l1_l2 ON l2.level1_id = l1_l2.id
         LEFT JOIN bank_accounts b ON p.bank_account_id = b.id
-        WHERE p.payment_type != 'EXPENSE'
-      ),
+        WHERE 1=1
+    `;
+
+    const queryParams = [];
+    let paramCount = 1;
+
+    if (startDate) {
+      query += ` AND DATE(p.payment_date) >= $${paramCount}`;
+      queryParams.push(startDate);
+      paramCount++;
+    }
+
+    if (endDate) {
+      query += ` AND DATE(p.payment_date) <= $${paramCount}`;
+      queryParams.push(endDate);
+      paramCount++;
+    }
+
+    if (accountType) {
+      query += ` AND p.account_type = $${paramCount}`;
+      queryParams.push(accountType);
+      paramCount++;
+    }
+
+    if (recordType) {
+      query += ` AND p.payment_type = $${paramCount}`;
+      queryParams.push(recordType);
+      paramCount++;
+    }
+
+    query += `),
       expense_data AS (
         SELECT 
           e.id::text as id,
@@ -530,7 +596,7 @@ router.get('/history', async (req, res) => {
           END as account_name,
           e.account_type,
           NULL as bank_name,
-          'EXPENSE' as record_type
+          'EXPENSE' as payment_type
         FROM expenses e
         LEFT JOIN (
           SELECT 
@@ -559,45 +625,90 @@ router.get('/history', async (req, res) => {
         ) a ON e.account_id = a.id
         LEFT JOIN chart_of_accounts_level1 l1 ON a.level1_id = l1.id
         LEFT JOIN chart_of_accounts_level2 l2 ON a.id = l2.id AND a.level = 'LEVEL3'
-      ),
-      combined_data AS (
-        SELECT * FROM payment_data
-        UNION ALL
-        SELECT * FROM expense_data
-      )
-      SELECT DISTINCT ON (id) *
-      FROM combined_data
       WHERE 1=1
     `;
 
-    const queryParams = [];
-    let paramCount = 1;
-
     if (startDate) {
-      query += ` AND DATE(payment_date) >= $${paramCount}`;
+      query += ` AND DATE(e.date) >= $${paramCount}`;
       queryParams.push(startDate);
       paramCount++;
     }
 
     if (endDate) {
-      query += ` AND DATE(payment_date) <= $${paramCount}`;
+      query += ` AND DATE(e.date) <= $${paramCount}`;
       queryParams.push(endDate);
       paramCount++;
     }
 
     if (accountType) {
-      query += ` AND account_type = $${paramCount}`;
+      query += ` AND e.account_type = $${paramCount}`;
       queryParams.push(accountType);
       paramCount++;
     }
 
-    if (paymentType) {
-      query += ` AND record_type = $${paramCount}`;
-      queryParams.push(paymentType);
+    if (recordType === 'EXPENSE') {
+      query += ` AND e.account_type = 'OTHER'`;
+    }
+
+    query += `),
+      long_voucher_data AS (
+        SELECT 
+          t.id::text as id,
+          t.transaction_date as payment_date,
+          TO_CHAR(t.transaction_date, 'HH24:MI:SS') as payment_time,
+          t.amount,
+          'CASH' as payment_mode,
+          NULL as receiver_name,
+          t.description as remarks,
+          t.reference_no as voucher_no,
+          t.reference_no as receipt_no,
+          NULL as created_by,
+          NULL as processed_by_role,
+          CASE
+            WHEN l3.id IS NOT NULL THEN CONCAT(l1_l3.name, ' > ', l2_l3.name, ' > ', l3.name)
+            WHEN l2.id IS NOT NULL THEN CONCAT(l1_l2.name, ' > ', l2.name)
+            WHEN l1.id IS NOT NULL THEN l1.name
+            ELSE NULL
+          END as account_name,
+          'OTHER' as account_type,
+          NULL as bank_name,
+          CASE 
+            WHEN t.entry_type = 'CREDIT' THEN 'RECEIVED'
+            WHEN t.entry_type = 'DEBIT' THEN 'ISSUED'
+          END as payment_type
+        FROM transactions t
+        LEFT JOIN chart_of_accounts_level3 l3 ON t.account_id = l3.id
+        LEFT JOIN chart_of_accounts_level2 l2 ON t.account_id = l2.id
+        LEFT JOIN chart_of_accounts_level1 l1 ON t.account_id = l1.id
+        LEFT JOIN chart_of_accounts_level1 l1_l3 ON l3.level1_id = l1_l3.id
+        LEFT JOIN chart_of_accounts_level2 l2_l3 ON l3.level2_id = l2_l3.id
+        LEFT JOIN chart_of_accounts_level1 l1_l2 ON l2.level1_id = l1_l2.id
+        WHERE t.reference_no LIKE 'LV-%'
+    `;
+
+    if (startDate) {
+      query += ` AND DATE(t.transaction_date) >= $${paramCount}`;
+      queryParams.push(startDate);
       paramCount++;
     }
 
-    query += ` ORDER BY id, payment_date DESC`;
+    if (endDate) {
+      query += ` AND DATE(t.transaction_date) <= $${paramCount}`;
+      queryParams.push(endDate);
+      paramCount++;
+    }
+
+    query += `),
+    combined_data AS (
+      SELECT * FROM payment_data
+      UNION ALL
+      SELECT * FROM expense_data
+      UNION ALL
+      SELECT * FROM long_voucher_data
+    )
+    SELECT *
+    FROM combined_data
+    ORDER BY payment_date DESC, id DESC`;
 
     console.log('Executing query:', query);
     console.log('Query parameters:', queryParams);

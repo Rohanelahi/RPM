@@ -30,6 +30,20 @@ router.get('/cash-flow', async (req, res) => {
           NULL AS voucher_no,
           remarks
         FROM cash_transactions
+        WHERE NOT EXISTS (
+          SELECT 1 FROM payments p
+          WHERE DATE(p.payment_date) = DATE(cash_transactions.transaction_date)
+            AND p.amount = cash_transactions.amount
+            AND p.payment_mode = 'CASH'
+            AND (
+              (p.payment_type = 'RECEIVED' AND cash_transactions.type = 'CREDIT') OR
+              (p.payment_type = 'ISSUED' AND cash_transactions.type = 'DEBIT')
+            )
+            AND (
+              p.voucher_no = cash_transactions.reference
+              OR (p.remarks IS NOT NULL AND cash_transactions.remarks IS NOT NULL AND p.remarks = cash_transactions.remarks)
+            )
+        )
 
         UNION ALL
 

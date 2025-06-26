@@ -22,11 +22,11 @@ router.get('/daily-activity/purchases', async (req, res) => {
         ge.unit,
         gep.price_per_unit,
         gep.total_amount,
-        s.account_name as supplier_name,
+        c3.name as supplier_name,
         TO_CHAR(ge.date_time, 'HH24:MI') as time
       FROM gate_entries ge
       JOIN gate_entries_pricing gep ON ge.grn_number = gep.grn_number
-      JOIN accounts s ON ge.supplier_id = s.id
+      JOIN chart_of_accounts_level3 c3 ON ge.supplier_id = c3.id
       WHERE DATE(ge.date_time) = $1
       AND ge.entry_type = 'PURCHASE_IN'
       ORDER BY ge.date_time

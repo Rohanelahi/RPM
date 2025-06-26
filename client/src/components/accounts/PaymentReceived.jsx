@@ -293,6 +293,7 @@ const PaymentReceived = () => {
       }
 
       const result = await response.json();
+      console.log('Payment submitted successfully:', result);
       
       // Generate new voucher number
       const newVoucherResponse = await fetch(`${config.apiUrl}/accounts/payments/generate-voucher/RECEIVED`);
@@ -319,8 +320,15 @@ const PaymentReceived = () => {
       alert(`Payment submitted successfully. Receipt No: ${result.voucher_no}`);
       
       // Dispatch events to update dashboard
+      if (formData.paymentMode === 'CASH') {
+        console.log('Dispatching cash payment events');
       window.dispatchEvent(new Event('paymentReceived'));
       window.dispatchEvent(new Event('cashBalanceUpdated'));
+      } else if (formData.paymentMode === 'ONLINE') {
+        console.log('Dispatching bank payment events');
+        window.dispatchEvent(new Event('paymentReceived'));
+        window.dispatchEvent(new Event('bankBalanceUpdated'));
+      }
     } catch (error) {
       console.error('Error:', error);
       alert('Error submitting payment: ' + error.message);

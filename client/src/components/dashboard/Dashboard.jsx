@@ -31,12 +31,15 @@ const Dashboard = () => {
     fetchDashboardData();
     // Set up event listeners for updates
     const handlePaymentReceived = () => {
+      console.log('Payment received event triggered');
       fetchDashboardData();
     };
     const handleCashBalanceUpdated = () => {
+      console.log('Cash balance updated event triggered');
       fetchDashboardData();
     };
     const handleBankBalanceUpdated = () => {
+      console.log('Bank balance updated event triggered');
       fetchDashboardData();
     };
     
@@ -54,42 +57,64 @@ const Dashboard = () => {
   const fetchDashboardData = async () => {
     try {
         setLoading(true);
-      const [cashResponse, bankResponse, stockResponse, productionResponse] = await Promise.all([
-        fetch(`${config.apiUrl}/accounts/cash-balances`),
-        fetch(`${config.apiUrl}/accounts/bank-accounts`),
-        fetch(`${config.apiUrl}/stock/overview`),
-        fetch(`${config.apiUrl}/production/history`)
-      ]);
-
-      if (!cashResponse.ok || !bankResponse.ok || !stockResponse.ok || !productionResponse.ok) {
-        throw new Error('Failed to fetch dashboard data');
+      console.log('Fetching dashboard data...');
+      
+      // Fetch cash balances
+      const cashResponse = await fetch(`${config.apiUrl}/accounts/bank-accounts/cash-balances`);
+      if (!cashResponse.ok) {
+        throw new Error('Failed to fetch cash balances');
       }
+      const cashData = await cashResponse.json();
+      console.log('Raw cash balances response:', cashData);
 
-      const [cashData, bankData, stockData, productionData] = await Promise.all([
-        cashResponse.json(),
-        bankResponse.json(),
-        stockResponse.json(),
-        productionResponse.json()
-      ]);
-
-      // Transform cash data into the expected format
-      const transformedCashData = [{
+      // Format cash balances
+      const cashBalance = Number(cashData.cash_in_hand || 0);
+      console.log('Parsed cash balance:', cashBalance);
+      
+      const formattedCashBalances = [{
         id: 1,
         name: 'Cash in Hand',
-        amount: Number(cashData.cash_in_hand || 0)
+        amount: cashBalance,
+        account_type: 'CASH',
+        account_name: 'Cash in Hand'
       }];
+      console.log('Formatted cash balances:', formattedCashBalances);
+      setCashBalances(formattedCashBalances);
 
-      setCashBalances(transformedCashData);
-      setBankAccounts(Array.isArray(bankData) ? bankData : []);
-      setStockData(Array.isArray(stockData) ? stockData : []);
-      setProductionData(Array.isArray(productionData) ? productionData : []);
+      // Fetch bank accounts
+      const bankResponse = await fetch(`${config.apiUrl}/accounts/bank-accounts`);
+      if (!bankResponse.ok) {
+        throw new Error('Failed to fetch bank accounts');
+      }
+      const bankData = await bankResponse.json();
+      console.log('Raw bank accounts:', bankData);
+      
+      // Format bank accounts
+      const formattedBankAccounts = bankData.map(account => ({
+        ...account,
+        balance: Number(account.balance) || 0,
+        bank_name: account.bank_name || 'Unknown Bank',
+        account_number: account.account_number || 'N/A',
+        account_name: account.account_name || account.bank_name || 'Unknown Account'
+      }));
+      console.log('Formatted bank accounts:', formattedBankAccounts);
+      setBankAccounts(formattedBankAccounts);
+
+      // Fetch stock data
+      const stockResponse = await fetch(`${config.apiUrl}/stock/overview`);
+      if (!stockResponse.ok) throw new Error('Failed to fetch stock data');
+      const stockData = await stockResponse.json();
+      console.log('Stock data:', stockData);
+      setStockData(stockData);
+
+      // Fetch production data
+      const productionResponse = await fetch(`${config.apiUrl}/production/summary`);
+      if (!productionResponse.ok) throw new Error('Failed to fetch production data');
+      const productionData = await productionResponse.json();
+      console.log('Production data:', productionData);
+      setProductionData(productionData);
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
-      alert('Failed to fetch dashboard data');
-      setCashBalances([]);
-      setBankAccounts([]);
-      setStockData([]);
-      setProductionData([]);
     } finally {
       setLoading(false);
     }
@@ -183,7 +208,7 @@ const Dashboard = () => {
                           <>
                             {cashBalances.map((balance) => (
                               <TableRow key={balance.id}>
-                                <TableCell>{balance.name || '-'}</TableCell>
+                                <TableCell>{balance.name}</TableCell>
                                 <TableCell align="right">
                                   Rs. {formatNumber(balance.amount)}
                                 </TableCell>
@@ -195,10 +220,8 @@ const Dashboard = () => {
                               </TableCell>
                               <TableCell align="right">
                                 <strong>
-                                  Rs. {formatNumber(cashBalances.reduce((sum, balance) => {
-                                    const amount = Number(balance.amount);
-                                    return sum + (isNaN(amount) ? 0 : amount);
-                                  }, 0))}
+                                  Rs. {formatNumber(cashBalances.reduce((sum, balance) => 
+                                    sum + (Number(balance.amount) || 0), 0))}
                                 </strong>
                               </TableCell>
                             </TableRow>
@@ -240,8 +263,8 @@ const Dashboard = () => {
                           <>
                             {bankAccounts.map((account) => (
                               <TableRow key={account.id}>
-                                <TableCell>{account.bank_name || '-'}</TableCell>
-                                <TableCell>{account.account_number || '-'}</TableCell>
+                                <TableCell>{account.bank_name}</TableCell>
+                                <TableCell>{account.account_number}</TableCell>
                               <TableCell align="right">
                                   Rs. {formatNumber(account.balance)}
                               </TableCell>
@@ -253,10 +276,8 @@ const Dashboard = () => {
                               </TableCell>
                               <TableCell align="right">
                                 <strong>
-                                  Rs. {formatNumber(bankAccounts.reduce((sum, account) => {
-                                    const balance = Number(account.balance);
-                                    return sum + (isNaN(balance) ? 0 : balance);
-                                  }, 0))}
+                                  Rs. {formatNumber(bankAccounts.reduce((sum, account) => 
+                                    sum + (Number(account.balance) || 0), 0))}
                                 </strong>
                               </TableCell>
                             </TableRow>

@@ -50,6 +50,7 @@ const ProductionForm = ({ onProductionAdded }) => {
   const [isPrinted, setIsPrinted] = useState(false);
   const [loading, setLoading] = useState(false);
   const [paperTypes, setPaperTypes] = useState([]);
+  const [itemTypes, setItemTypes] = useState([]);
   const [openNewPaperType, setOpenNewPaperType] = useState(false);
   const [newPaperType, setNewPaperType] = useState({
     name: '',
@@ -57,11 +58,11 @@ const ProductionForm = ({ onProductionAdded }) => {
   });
 
   const boilerFuelTypes = ['Boiler Fuel (Toori)', 'Boiler Fuel (Tukka)'];
-  const raddiTypes = ['Petti', 'DABBI', 'CEMENT BAG','Mix Maal','Pulp'];
 
-  // Fetch paper types on component mount
+  // Fetch paper types and item types on component mount
   useEffect(() => {
     fetchPaperTypes();
+    fetchItemTypes();
   }, []);
 
   const fetchPaperTypes = async () => {
@@ -73,6 +74,18 @@ const ProductionForm = ({ onProductionAdded }) => {
     } catch (error) {
       console.error('Error fetching paper types:', error);
       alert('Failed to fetch paper types');
+    }
+  };
+
+  const fetchItemTypes = async () => {
+    try {
+      const response = await fetch(`${config.apiUrl}/gate/item-types`);
+      if (!response.ok) throw new Error('Failed to fetch item types');
+      const data = await response.json();
+      setItemTypes(data);
+    } catch (error) {
+      console.error('Error fetching item types:', error);
+      alert('Failed to fetch item types: ' + error.message);
     }
   };
 
@@ -584,8 +597,8 @@ const ProductionForm = ({ onProductionAdded }) => {
                                         value={item.raddiType}
                                         onChange={(e) => handleRecipeChange(paperTypeIndex, recipeIndex, 'raddiType', e.target.value)}
                                       >
-                                        {raddiTypes.map(type => (
-                                          <MenuItem key={type} value={type}>{type}</MenuItem>
+                                        {itemTypes.map(type => (
+                                          <MenuItem key={type.id} value={type.name}>{type.name}</MenuItem>
                                         ))}
                                       </Select>
                                     </FormControl>
@@ -610,9 +623,9 @@ const ProductionForm = ({ onProductionAdded }) => {
                                     {item.percentageUsed && item.yield ? 
                                       (() => {
                                         const totalWeight = parseFloat(paperTypeData.totalWeight);
-                                        const wastage = totalWeight - (totalWeight * (parseFloat(item.yield) / 100));
-                                        const totalRequired = totalWeight + wastage;
-                                        return (totalRequired * (parseFloat(item.percentageUsed) / 100)).toFixed(2);
+                                        const percentageUsed = parseFloat(item.percentageUsed);
+                                        const yieldPercentage = parseFloat(item.yield);
+                                        return ((totalWeight * (percentageUsed / 100)) / (yieldPercentage / 100)).toFixed(2);
                                       })()
                                       : '0'
                                     }

@@ -18,7 +18,9 @@ import {
   DialogActions,
   Typography,
   IconButton,
-  Tooltip
+  Tooltip,
+  FormControlLabel,
+  Checkbox
 } from '@mui/material';
 import { Refresh } from '@mui/icons-material';
 import { useAuth } from '../../context/AuthContext';
@@ -35,6 +37,8 @@ const PendingEntries = () => {
     accountId: '',
     pricePerUnit: '',
     cutWeight: '0',
+    freight: false,
+    freightAmount: ''
   });
   const [refreshing, setRefreshing] = useState(false);
 
@@ -46,7 +50,7 @@ const PendingEntries = () => {
   const fetchPendingEntries = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`${config.apiUrl}/accounts/pending-entries?userRole=${user.role}`);
+      const response = await fetch(`${config.apiUrl}/accounts/pending?userRole=${user.role}`);
       if (!response.ok) throw new Error('Failed to fetch entries');
       const data = await response.json();
       
@@ -108,6 +112,8 @@ const PendingEntries = () => {
     setFormData({
       pricePerUnit: '',
       cutWeight: '0',
+      freight: false,
+      freightAmount: ''
     });
     setDialogOpen(true);
   };
@@ -117,6 +123,14 @@ const PendingEntries = () => {
       if (!formData.pricePerUnit || formData.pricePerUnit <= 0) {
         alert('Please enter a valid price per unit');
         return;
+      }
+
+      // Validate freight amount for sale entries
+      if (selectedEntry?.entry_type === 'SALE' && formData.freight) {
+        if (!formData.freightAmount || parseFloat(formData.freightAmount) <= 0) {
+          alert('Please enter a valid freight amount');
+          return;
+        }
       }
 
       if (!selectedEntry?.pricing_id) {
@@ -147,7 +161,9 @@ const PendingEntries = () => {
           cutWeight: parseFloat(formData.cutWeight) || 0,
           totalAmount: totalAmount,
           finalQuantity: finalQuantity,
-          processedBy: user.role
+          processedBy: user.role,
+          freight: formData.freight,
+          freightAmount: formData.freight ? parseFloat(formData.freightAmount) : 0
         }),
       });
 
@@ -401,6 +417,42 @@ const PendingEntries = () => {
                 sx={{ mb: 2 }}
               />
             )}
+            
+            {/* Freight option for SALE entries only */}
+            {selectedEntry?.entry_type === 'SALE' && (
+              <>
+                <FormControlLabel
+                  control={
+                    <Checkbox
+                      checked={formData.freight}
+                      onChange={(e) => setFormData(prev => ({
+                        ...prev,
+                        freight: e.target.checked,
+                        freightAmount: e.target.checked ? prev.freightAmount : ''
+                      }))}
+                    />
+                  }
+                  label="Include Freight"
+                  sx={{ mb: 2 }}
+                />
+                
+                {formData.freight && (
+                  <TextField
+                    fullWidth
+                    type="number"
+                    label="Freight Amount (Rs.)"
+                    required
+                    value={formData.freightAmount}
+                    onChange={(e) => setFormData(prev => ({
+                      ...prev,
+                      freightAmount: e.target.value
+                    }))}
+                    sx={{ mb: 2 }}
+                  />
+                )}
+              </>
+            )}
+            
             {formData.pricePerUnit && selectedEntry && (
               <>
                 <Typography variant="body2" color="text.secondary">
@@ -417,6 +469,11 @@ const PendingEntries = () => {
                 <Typography variant="body2" color="text.secondary">
                   Total Amount: Rs. {((parseFloat(formData.pricePerUnit) || 0) * (selectedEntry.quantity - (selectedEntry?.entry_type === 'PURCHASE' ? parseFloat(formData.cutWeight) || 0 : 0))).toFixed(2)}
                 </Typography>
+                {selectedEntry?.entry_type === 'SALE' && formData.freight && formData.freightAmount && (
+                  <Typography variant="body2" color="text.secondary">
+                    Freight Amount: Rs. {parseFloat(formData.freightAmount).toFixed(2)}
+                  </Typography>
+                )}
               </>
             )}
           </Box>
@@ -426,7 +483,11 @@ const PendingEntries = () => {
           <Button 
             onClick={handleSubmit}
             variant="contained"
-            disabled={loading || !formData.pricePerUnit}
+            disabled={
+              loading || 
+              !formData.pricePerUnit || 
+              (selectedEntry?.entry_type === 'SALE' && formData.freight && !formData.freightAmount)
+            }
             sx={{
               bgcolor: getEntryTypeColor(selectedEntry?.entry_type),
               '&:hover': {

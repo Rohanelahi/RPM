@@ -39,6 +39,7 @@ const PaymentIssued = () => {
     paymentMode: '',
     accountType: '',
     accountId: '',
+    accountLevel: null,
     bankAccountId: '',
     amount: '',
     remarks: '',
@@ -51,12 +52,10 @@ const PaymentIssued = () => {
 
   useEffect(() => {
     if (formData.accountType) {
-      if (formData.accountType === 'EXPENSE' || formData.accountType === 'OTHER') {
-        if (formData.accountType === 'EXPENSE') {
-          fetchExpenseTypes();
-        } else {
+      if (formData.accountType === 'EXPENSE') {
+        fetchExpenseTypes();
+      } else if (formData.accountType === 'OTHER') {
           fetchAllAccounts();
-        }
       } else {
         fetchAccounts();
       }
@@ -104,7 +103,6 @@ const PaymentIssued = () => {
     { value: 'CUSTOMER', label: 'Customer' },
     { value: 'SUPPLIER', label: 'Supplier' },
     { value: 'VENDOR', label: 'Vendor' },
-    { value: 'EXPENSE', label: 'Expense' },
     { value: 'OTHER', label: 'Other' }
   ];
 
@@ -206,8 +204,10 @@ const PaymentIssued = () => {
     try {
       const res = await fetch(`${config.apiUrl}/accounts/chart/all`);
       const data = await res.json();
-      setAllAccounts(Array.isArray(data) ? data : []);
+      console.log('Fetched accounts:', data);
+      setAllAccounts(data);
     } catch (err) {
+      console.error('Error fetching all accounts:', err);
       setAllAccounts([]);
     }
   };
@@ -304,7 +304,14 @@ const PaymentIssued = () => {
               <td style="padding: 8px; border: 1px solid #ddd;">${
                 formData.accountType === 'EXPENSE' 
                   ? expenseTypes.find(type => type.id === formData.expenseType)?.name 
-                  : accounts.find(acc => acc.id === formData.accountId)?.account_name || ''
+                  : formData.accountType === 'OTHER'
+                    ? (() => {
+                        const selectedAccount = allAccounts.find(acc => 
+                          acc.uniqueId === `${formData.accountLevel}-${formData.accountId}`
+                        );
+                        return selectedAccount ? selectedAccount.displayName : '';
+                      })()
+                    : accounts.find(acc => acc.id === formData.accountId)?.displayName || ''
               }</td>
             </tr>
             <tr>
@@ -447,6 +454,7 @@ const PaymentIssued = () => {
         paymentMode: '',
         accountType: '',
         accountId: '',
+        accountLevel: null,
         bankAccountId: '',
         amount: '',
         remarks: '',
@@ -581,16 +589,52 @@ const PaymentIssued = () => {
                     options={allAccounts}
                     getOptionLabel={(option) => {
                       if (!option) return '';
-                      if (option.level === 1) return option.level1_name;
-                      if (option.level === 2) return `${option.level1_name} > ${option.level2_name}`;
-                      if (option.level === 3) return `${option.level1_name} > ${option.level2_name} > ${option.name}`;
-                      return option.name;
+                      return option.displayName;
                     }}
-                    value={allAccounts.find(acc => String(acc.id) === String(formData.accountId)) || null}
-                    onChange={(_, value) => setFormData(prev => ({ ...prev, accountId: value ? value.id : '' }))}
+                    value={allAccounts.find(acc => acc.uniqueId === `${formData.accountLevel}-${formData.accountId}`) || null}
+                    onChange={(_, value) => {
+                      console.log('Selected value:', value);
+                      if (value) {
+                        setFormData(prev => ({ 
+                          ...prev, 
+                          accountId: value.id,
+                          accountLevel: value.level
+                        }));
+                      } else {
+                        setFormData(prev => ({ 
+                          ...prev, 
+                          accountId: '',
+                          accountLevel: null
+                        }));
+                      }
+                    }}
                     renderInput={(params) => (
-                      <TextField {...params} label="Account (Other)" required />
+                      <TextField {...params} label="Account" required />
                     )}
+                    renderOption={(props, option) => (
+                      <li {...props}>
+                        <div>
+                          <div>{option.displayName}</div>
+                          <div style={{ fontSize: '0.8em', color: 'gray' }}>
+                            Level {option.level} - {option.account_type}
+                          </div>
+                        </div>
+                      </li>
+                    )}
+                    groupBy={(option) => option.level1_name}
+                    isOptionEqualToValue={(option, value) => {
+                      if (!option || !value) return false;
+                      return option.uniqueId === value.uniqueId;
+                    }}
+                    filterOptions={(options, { inputValue }) => {
+                      const searchTerm = inputValue.toLowerCase();
+                      return options.filter(option => 
+                        option.displayName.toLowerCase().includes(searchTerm) ||
+                        option.name.toLowerCase().includes(searchTerm) ||
+                        option.level1_name.toLowerCase().includes(searchTerm) ||
+                        (option.level2_name && option.level2_name.toLowerCase().includes(searchTerm))
+                      );
+                    }}
                   />
                 </Grid>
               ) : (

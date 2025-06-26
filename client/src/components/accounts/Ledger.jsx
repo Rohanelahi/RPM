@@ -29,6 +29,7 @@ import { format, startOfMonth } from 'date-fns';
 import { Print } from '@mui/icons-material';
 import '../../styles/Ledger.css';
 import { useAuth } from '../../context/AuthContext';
+import axios from 'axios';
 
 const Ledger = () => {
   const [loading, setLoading] = useState(false);
@@ -36,7 +37,7 @@ const Ledger = () => {
   const [accounts, setAccounts] = useState([]);
   const [transactions, setTransactions] = useState([]);
   const [accountDetails, setAccountDetails] = useState(null);
-  const [selectedAccount, setSelectedAccount] = useState('');
+  const [selectedAccount, setSelectedAccount] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [filteredAccounts, setFilteredAccounts] = useState([]);
   const [dateRange, setDateRange] = useState({
@@ -49,8 +50,11 @@ const Ledger = () => {
   const [level1Accounts, setLevel1Accounts] = useState([]);
   const [level2Accounts, setLevel2Accounts] = useState([]);
   const [level3Accounts, setLevel3Accounts] = useState([]);
-  const [expandedAccounts, setExpandedAccounts] = useState({});
+  const [expandedAccounts, setExpandedAccounts] = useState(new Set());
   const [level3Balances, setLevel3Balances] = useState({});
+  const [openingBalance, setOpeningBalance] = useState(0);
+  const [currentBalance, setCurrentBalance] = useState(0);
+  const [showAccountSelection, setShowAccountSelection] = useState(false);
 
   useEffect(() => {
     fetchAllData();
@@ -58,7 +62,7 @@ const Ledger = () => {
 
   useEffect(() => {
     if (selectedAccount && dateRange.startDate && dateRange.endDate) {
-      fetchTransactions();
+      fetchTransactions(selectedAccount);
     }
   }, [selectedAccount, dateRange.startDate, dateRange.endDate]);
 
@@ -69,10 +73,39 @@ const Ledger = () => {
     }
   
     const searchLower = searchTerm.toLowerCase();
+    
+    // Create properly structured account objects for each level
+    const level1AccountsWithHierarchy = level1Accounts.map(acc => ({
+      ...acc,
+      level: 'Level 1',
+      level1_id: acc.id,
+      level2_id: null,
+      level1_name: acc.name,
+      level2_name: null
+    }));
+
+    const level2AccountsWithHierarchy = level2Accounts.map(acc => ({
+      ...acc,
+      level: 'Level 2',
+      level1_id: acc.level1_id,
+      level2_id: acc.id,
+      level1_name: level1Accounts.find(l1 => l1.id === acc.level1_id)?.name || '',
+      level2_name: acc.name
+    }));
+
+    const level3AccountsWithHierarchy = level3Accounts.map(acc => ({
+      ...acc,
+      level: 'Level 3',
+      level1_id: acc.level1_id,
+      level2_id: acc.level2_id,
+      level1_name: acc.level1_name || '',
+      level2_name: acc.level2_name || ''
+    }));
+
     const allAccounts = [
-      ...level1Accounts.map(acc => ({ ...acc, level: 'Level 1' })),
-      ...level2Accounts.map(acc => ({ ...acc, level: 'Level 2' })),
-      ...level3Accounts.map(acc => ({ ...acc, level: 'Level 3' }))
+      ...level1AccountsWithHierarchy,
+      ...level2AccountsWithHierarchy,
+      ...level3AccountsWithHierarchy
     ];
 
     const filtered = allAccounts.filter(account => 
@@ -133,13 +166,15 @@ const Ledger = () => {
           );
           return {
             ...level2,
-            level3_accounts: level3Accounts
+            level3_accounts: level3Accounts,
+            has_level3: level3Accounts.length > 0
           };
         });
 
         return {
           ...level1,
-          level2_accounts: level2WithLevel3
+          level2_accounts: level2WithLevel3,
+          has_level2: level2WithLevel3.length > 0
         };
       });
 
@@ -148,12 +183,14 @@ const Ledger = () => {
       setLevel3Accounts(allLevel3Accounts);
       setAccounts([...updatedLevel1Accounts, ...level2Data, ...allLevel3Accounts]);
 
-      // Fetch balances for all level 3 accounts
+      // Fetch balances for all accounts
       const tomorrow = new Date();
       tomorrow.setDate(tomorrow.getDate() + 1);
       const endDate = tomorrow.toISOString().split('T')[0];
       const startDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
       const balances = {};
+
+      // Fetch balances for Level 3 accounts
       for (const acc of allLevel3Accounts) {
         try {
           const balanceResponse = await fetch(
@@ -165,6 +202,33 @@ const Ledger = () => {
           balances[acc.id] = 0;
         }
       }
+
+      // Fetch balances for Level 2 accounts
+      for (const acc of level2Data) {
+        try {
+          const balanceResponse = await fetch(
+            `${config.apiUrl}/accounts/ledger?accountId=${acc.id}&startDate=${startDate}&endDate=${endDate}`
+          );
+          const data = await balanceResponse.json();
+          balances[acc.id] = data.account_details?.current_balance || 0;
+        } catch (error) {
+          balances[acc.id] = 0;
+        }
+      }
+
+      // Fetch balances for Level 1 accounts
+      for (const acc of level1Data) {
+        try {
+          const balanceResponse = await fetch(
+            `${config.apiUrl}/accounts/ledger?accountId=${acc.id}&startDate=${startDate}&endDate=${endDate}`
+          );
+          const data = await balanceResponse.json();
+          balances[acc.id] = data.account_details?.current_balance || 0;
+        } catch (error) {
+          balances[acc.id] = 0;
+        }
+      }
+
       setLevel3Balances(balances);
 
     } catch (error) {
@@ -175,191 +239,125 @@ const Ledger = () => {
   };
 
   const toggleExpand = (accountId) => {
-    setExpandedAccounts(prev => ({
-      ...prev,
-      [accountId]: !prev[accountId]
-    }));
+    setExpandedAccounts(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(accountId)) {
+        newSet.delete(accountId);
+      } else {
+        newSet.add(accountId);
+      }
+      return newSet;
+    });
   };
 
   const formatTransactionDetails = (transaction) => {
-    // Helper functions
-    const formatQuantity = (qty) => Math.round(parseFloat(qty)).toString();
-    const formatPrice = (price) => parseFloat(price).toFixed(2);
+    if (!transaction) return '-';
 
-    // Special handling for sale returns
-    if (transaction.entry_type === 'SALE_RETURN') {
-      const quantity = transaction.return_quantity || transaction.quantity || 0;
-      const price = transaction.price_per_unit || transaction.original_price || transaction.gep_price || 0;
-      const unit = transaction.unit || 'unit';
-      const itemType = transaction.paper_type || transaction.item_type || '';
-      const formattedQuantity = formatQuantity(quantity);
-      const formattedPrice = formatPrice(price);
-      return `Return against GRN: ${transaction.original_grn_number} - ${formattedQuantity} ${unit} of ${itemType} @ Rs.${formattedPrice}/${unit}`;
+    // For payment received entries
+    if (transaction.entry_type === 'CREDIT' && transaction.payment_date) {
+      return `Payment ${transaction.payment_mode ? `(${transaction.payment_mode})` : ''} ${transaction.receiver_name ? `to ${transaction.receiver_name}` : ''} ${transaction.payment_remarks ? `- ${transaction.payment_remarks}` : ''}`;
     }
 
-    // Special handling for purchase returns
-    if (transaction.entry_type === 'PURCHASE_RETURN') {
-      const quantity = transaction.return_quantity || transaction.quantity || 0;
-      const price = transaction.price_per_unit || transaction.original_price || transaction.gep_price || 0;
-      const unit = transaction.unit || 'unit';
-      const itemType = transaction.paper_type || transaction.item_type || '';
-      const formattedQuantity = formatQuantity(quantity);
-      const formattedPrice = formatPrice(price);
-      return `Return against GRN: ${transaction.original_grn_number} - ${formattedQuantity} ${unit} of ${itemType} @ Rs.${formattedPrice}/${unit}`;
+    // For long vouchers
+    if (transaction.entry_type === 'CREDIT' && transaction.reference_no?.startsWith('LV-')) {
+      return `Long Voucher: ${transaction.description}`;
     }
 
-    // If we have item details, use them
-    if (transaction.item_type) {
-      const quantity = transaction.final_quantity || transaction.quantity || 0;
-      const unit = transaction.unit || 'unit';
-      const price = transaction.price_per_unit || 0;
-      return `${formatQuantity(quantity)} ${unit} of ${transaction.item_type} @ Rs.${formatPrice(price)}/${unit}`;
+    // For purchase entries
+    if (transaction.entry_type === 'CREDIT' && transaction.reference_no?.startsWith('GRN-')) {
+      return transaction.item_name ? `Purchase - ${transaction.item_name}` : 'Purchase';
     }
 
-    // For store entries
-    if (transaction.store_item_name || transaction.store_item_type) {
-      const quantity = transaction.store_quantity || transaction.quantity || 0;
-      const unit = transaction.store_unit || transaction.unit || 'unit';
-      const price = transaction.price_per_unit || 0;
-      return `${formatQuantity(quantity)} ${unit} of ${transaction.store_item_name || transaction.store_item_type} @ Rs.${formatPrice(price)}/${unit}`;
+    // For sale entries
+    if (transaction.entry_type === 'DEBIT' && transaction.reference_no?.startsWith('GRN-')) {
+      return transaction.item_name ? `Sale - ${transaction.item_name}` : 'Sale';
     }
 
-    // For payment transactions, show description as is (bank name is already included)
-    if (transaction.description?.includes('Payment received from')) {
-      return transaction.description.replace('Payment received from', 'Receipt from');
-    }
-    if (transaction.description?.includes('Payment issued to')) {
-      return transaction.description.replace('Payment issued to', 'Payment to');
-    }
-    
-    // Special handling for store returns
-    if (transaction.description === 'STORE_RETURN') {
-      return `Return: ${formatQuantity(transaction.quantity)} ${transaction.unit} of ${transaction.item_name} @ Rs.${formatPrice(transaction.price_per_unit)}/${transaction.unit}`;
-    }
-    
-    // Special handling for sales
-    if (transaction.entry_type === 'SALE' || transaction.description?.includes('Sale')) {
-      return `Sale: ${formatQuantity(transaction.quantity)} ${transaction.unit} of ${transaction.paper_type || transaction.item_type} @ Rs.${formatPrice(transaction.price_per_unit)}/${transaction.unit}`;
-    }
-    
-    // Keep existing logic for all other cases
-    if (transaction.reference?.startsWith('STI-')) {
-      return `${formatQuantity(transaction.quantity)} ${transaction.unit} of ${transaction.item_name} @ Rs.${formatPrice(transaction.price_per_unit)}/${transaction.unit}`;
-    }
-    
-    // Special handling for purchase entries
-    if (transaction.description?.includes('Purchase against GRN')) {
-      return `${formatQuantity(transaction.quantity)} ${transaction.gate_unit || transaction.unit || 'unit'} of ${transaction.item_type || transaction.paper_type} @ Rs.${formatPrice(transaction.price_per_unit)}/${transaction.gate_unit || transaction.unit || 'unit'}`;
-    }
-    
-    if (transaction.weight && (transaction.item_type || transaction.paper_type)) {
-      return `${formatQuantity(transaction.weight)} ${transaction.gate_unit || transaction.unit || 'unit'} of ${transaction.item_type || transaction.paper_type}${transaction.price_per_unit ? ` @ Rs.${formatPrice(transaction.price_per_unit)}/${transaction.gate_unit || transaction.unit || 'unit'}` : ''}`;
-    }
-    
-    if (transaction.description) {
-      return transaction.description;
-    }
-    
-    return '-';
+    return transaction.description || '-';
   };
 
-  const formatDateTime = (date, transactionType) => {
-    if (!date) return '';
-    try {
-      const dateObj = typeof date === 'string' ? new Date(date) : date;
-      if (isNaN(dateObj.getTime())) {
-        console.warn('Invalid date:', date);
-        return '-';
-      }
-      return format(dateObj, 'dd/MM/yyyy HH:mm');
-    } catch (error) {
-      console.error('Error formatting date:', date, error);
-      return '-';
-    }
+  const formatDateTime = (date, entryType) => {
+    if (!date) return '-';
+    const d = new Date(date);
+    if (isNaN(d.getTime())) return '-';
+    
+    // Format: DD/MM/YYYY HH:mm:ss
+    const day = String(d.getDate()).padStart(2, '0');
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const year = d.getFullYear();
+    const hours = String(d.getHours()).padStart(2, '0');
+    const minutes = String(d.getMinutes()).padStart(2, '0');
+    const seconds = String(d.getSeconds()).padStart(2, '0');
+    
+    return `${day}/${month}/${year} ${hours}:${minutes}:${seconds}`;
   };
 
-  const fetchTransactions = async () => {
+  const handleAccountSelect = (account) => {
+    console.log('handleAccountSelect called with account:', account);
+    
+    // Convert level string to number if needed
+    const level = typeof account.level === 'string' 
+      ? parseInt(account.level.replace('Level ', ''))
+      : account.level;
+    
+    console.log('Account from search results with level:', account.level);
+
+    // Create a new account object with the correct level
+    const selectedAccount = {
+      ...account,
+      level: level,
+      // Ensure we have the correct hierarchy information
+      level1_id: account.level1_id,
+      level1_name: account.level1_name,
+      level2_id: account.level2_id,
+      level2_name: account.level2_name,
+      level3_accounts: account.level3_accounts || []
+    };
+
+    setSelectedAccount(selectedAccount);
+    setSearchTerm('');
+    fetchTransactions(selectedAccount);
+  };
+
+  const fetchTransactions = async (account) => {
     try {
+      console.log('Fetching transactions for account:', account);
       setLoading(true);
+      setError(null);
       
-      const formattedStartDate = format(dateRange.startDate, "yyyy-MM-dd'T'00:00:00.000'Z'");
-      const formattedEndDate = format(dateRange.endDate, "yyyy-MM-dd'T'23:59:59.999'Z'");
+      const startDate = new Date(dateRange.startDate);
+      const endDate = new Date(dateRange.endDate);
+      endDate.setHours(23, 59, 59, 999);
 
-      console.log('Fetching transactions with params:', {
-        accountId: selectedAccount,
-        startDate: formattedStartDate,
-        endDate: formattedEndDate
-      });
+      const formattedStartDate = startDate.toISOString();
+      const formattedEndDate = endDate.toISOString();
+
+      console.log('Date range:', { formattedStartDate, formattedEndDate });
 
       const response = await fetch(
-        `${config.apiUrl}/accounts/ledger?` + 
-        new URLSearchParams({
-          accountId: selectedAccount,
-          startDate: formattedStartDate,
-          endDate: formattedEndDate,
-          userRole: user.role
-        })
+        `${config.apiUrl}/accounts/ledger?accountId=${account.id}&startDate=${formattedStartDate}&endDate=${formattedEndDate}${user?.role ? `&userRole=${user.role}` : ''}`
       );
+      const data = await response.json();
+
+      console.log('Received ledger data:', data);
       
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to fetch transactions');
+        throw new Error(data.error || 'Failed to fetch transactions');
       }
 
-      const data = await response.json();
-      
-      if (!data.account_details) {
-        throw new Error('Invalid response format: missing account details');
-      }
+      // Preserve the selected account's details
+      const accountDetails = {
+        ...account,
+        current_balance: data.current_balance
+      };
 
-      console.log('Received transactions:', data.transactions);
-      
-      setAccountDetails({
-        ...data.account_details,
-        opening_balance: parseFloat(data.account_details.opening_balance) || 0,
-        current_balance: parseFloat(data.account_details.current_balance) || 0
-      });
-      
-      // Process transactions
-      const processedTransactions = data.transactions
-        .map(t => {
-          console.log('Processing transaction:', t);
-          const processed = {
-            ...t,
-            date: t.date,
-            amount: parseFloat(t.amount) || 0,
-            type: t.entry_type === 'PURCHASE_RETURN' ? 'DEBIT' : t.entry_type || t.type,
-            entry_type: t.entry_type || t.type,
-            details: formatTransactionDetails({
-              ...t,
-              quantity: t.quantity || t.weight || 0,
-              unit: t.unit || t.gate_unit || 'unit',
-              item_type: t.item_type || t.paper_type || '',
-              item_name: t.item_name || '',
-              price_per_unit: parseFloat(t.price_per_unit) || 0,
-              weight: t.weight || 0,
-              gate_unit: t.gate_unit || '',
-              paper_type: t.paper_type || ''
-            }),
-            quantity: t.quantity || t.weight || 0,
-            unit: t.unit || t.gate_unit || 'unit',
-            item_type: t.item_type || t.paper_type || '',
-            item_name: t.item_name || '',
-            price_per_unit: parseFloat(t.price_per_unit) || 0
-          };
-          console.log('Processed transaction:', processed);
-          return processed;
-        })
-        .sort((a, b) => new Date(a.date) - new Date(b.date));
-
-      console.log('Final processed transactions:', processedTransactions);
-      setTransactions(processedTransactions);
-
-    } catch (error) {
-      console.error('Error fetching transactions:', error);
-      setError(error.message || 'Failed to fetch transactions');
-      setTransactions([]);
-      setAccountDetails(null);
+      setAccountDetails(accountDetails);
+      setTransactions(data.transactions);
+      setOpeningBalance(data.opening_balance);
+      setCurrentBalance(data.current_balance);
+    } catch (err) {
+      console.error('Error fetching transactions:', err);
+      setError(err.message);
     } finally {
       setLoading(false);
     }
@@ -390,29 +388,28 @@ const Ledger = () => {
   };
 
   const calculateTotals = () => {
-    // Start with opening balance
-    let finalBalance = accountDetails?.opening_balance || 0;
-    
-    // If opening balance type is DEBIT, make it negative
-    if (accountDetails?.balance_type === 'DEBIT') {
-      finalBalance = -Math.abs(finalBalance);
-    } else {
-      finalBalance = Math.abs(finalBalance);
-    }
+    let totalDebits = 0;
+    let totalCredits = 0;
 
-    return transactions.reduce((acc, t) => {
-      if (t.type === 'CREDIT') {
-        acc.totalCredits += t.amount;
-        finalBalance += t.amount;
-      } else if (t.type === 'DEBIT') {
-        acc.totalDebits += t.amount;
-        finalBalance -= t.amount;
+    transactions.forEach(transaction => {
+      const amount = parseFloat(transaction.amount) || 0;
+      if (transaction.entry_type === 'DEBIT') {
+        totalDebits += amount;
+      } else if (transaction.entry_type === 'CREDIT') {
+        totalCredits += amount;
       }
-      return { ...acc, finalBalance };
-    }, { totalDebits: 0, totalCredits: 0, finalBalance });
+    });
+
+    const balance = totalCredits - totalDebits;
+
+    return {
+      totalDebits: totalDebits.toFixed(2),
+      totalCredits: totalCredits.toFixed(2),
+      balance: balance.toFixed(2)
+    };
   };
 
-  const { totalDebits, totalCredits, finalBalance } = calculateTotals();
+  const totals = calculateTotals();
 
   const handlePrint = () => {
     const printWindow = window.open('', '_blank');
@@ -426,7 +423,7 @@ const Ledger = () => {
           <title>Account Ledger - ${accountDetails.name}</title>
           <style>
             @page { 
-              size: A4 portrait; 
+              size: A4 landscape; 
               margin: 1cm; 
             }
             body { 
@@ -438,34 +435,36 @@ const Ledger = () => {
             }
             .header {
               text-align: center;
-              margin-bottom: 0.8cm;
+              margin-bottom: 0.5cm;
+              border-bottom: 2px solid #000;
+              padding-bottom: 0.3cm;
             }
             .company-name {
-              font-size: 22pt;
+              font-size: 24pt;
               font-weight: bold;
-              margin-bottom: 0.3cm;
+              margin-bottom: 0.2cm;
               font-family: 'Times New Roman', Times, serif;
             }
             .document-title {
-              font-size: 14pt;
+              font-size: 16pt;
               text-transform: uppercase;
-              margin: 0.3cm 0;
+              margin: 0.2cm 0;
               font-weight: bold;
             }
             .date-container {
               text-align: right;
-              margin-bottom: 0.3cm;
+              margin-bottom: 0.2cm;
               font-size: 9pt;
             }
             table {
               width: 100%;
               border-collapse: collapse;
-              margin: 0.3cm 0;
+              margin: 0.2cm 0;
               font-size: 8pt;
             }
             th, td {
               border: 1px solid #000;
-              padding: 0.15cm 0.2cm;
+              padding: 0.1cm 0.15cm;
               text-align: left;
             }
             th {
@@ -476,13 +475,17 @@ const Ledger = () => {
             td {
               font-size: 8pt;
             }
-            /* Column widths */
-            th:nth-child(1), td:nth-child(1) { width: 15%; } /* Date & Time */
-            th:nth-child(2), td:nth-child(2) { width: 12%; } /* Reference */
-            th:nth-child(3), td:nth-child(3) { width: 33%; } /* Details */
-            th:nth-child(4), td:nth-child(4) { width: 12%; } /* Debit */
-            th:nth-child(5), td:nth-child(5) { width: 12%; } /* Credit */
-            th:nth-child(6), td:nth-child(6) { width: 16%; } /* Balance */
+            /* Column widths for landscape */
+            th:nth-child(1), td:nth-child(1) { width: 10%; } /* Date & Time */
+            th:nth-child(2), td:nth-child(2) { width: 8%; } /* Voucher No */
+            th:nth-child(3), td:nth-child(3) { width: 20%; } /* Description */
+            th:nth-child(4), td:nth-child(4) { width: 6%; } /* Qnt */
+            th:nth-child(5), td:nth-child(5) { width: 6%; } /* Ded */
+            th:nth-child(6), td:nth-child(6) { width: 6%; } /* Net Qnt */
+            th:nth-child(7), td:nth-child(7) { width: 6%; } /* Price */
+            th:nth-child(8), td:nth-child(8) { width: 12%; } /* Debit */
+            th:nth-child(9), td:nth-child(9) { width: 12%; } /* Credit */
+            th:nth-child(10), td:nth-child(10) { width: 14%; } /* Balance */
 
             .amount-cell {
               text-align: right;
@@ -491,9 +494,9 @@ const Ledger = () => {
               white-space: nowrap;
             }
             .totals-section {
-              margin-top: 0.8cm;
+              margin-top: 0.5cm;
               border: 1px solid #000;
-              padding: 0.4cm;
+              padding: 0.3cm;
               background: #f8f9fa;
             }
             .totals-grid {
@@ -512,13 +515,34 @@ const Ledger = () => {
               font-size: 12pt;
               font-weight: bold;
             }
+            .account-details {
+              margin: 0.3cm 0;
+              padding: 0.2cm;
+              border: 1px solid #ddd;
+              background: #f9f9f9;
+              display: flex;
+              justify-content: space-between;
+            }
+            .account-details p {
+              margin: 0.1cm 0;
+              font-size: 9pt;
+            }
+            .account-hierarchy {
+              font-size: 9pt;
+              color: #666;
+              margin-bottom: 0.2cm;
+            }
+            .account-info {
+              display: flex;
+              gap: 2cm;
+            }
           </style>
         </head>
         <body>
           <div class="header">
             <div class="company-name">ROSE PAPER MILL</div>
             <div class="document-title">Account Ledger</div>
-            <div>${accountDetails.name}</div>
+            <div style="font-size: 12pt; margin: 0.1cm 0;">${accountDetails.name}</div>
             <div style="font-size: 10pt;">Period: ${periodText}</div>
           </div>
 
@@ -526,12 +550,37 @@ const Ledger = () => {
             <div>Date: ${currentDate}</div>
           </div>
 
+          <div class="account-details">
+            <div class="account-info">
+              <div>
+                <div class="account-hierarchy">
+                  ${accountDetails.level1_name && accountDetails.level1_name !== accountDetails.name ? 
+                    `${accountDetails.level1_name} › ` : ''}
+                  ${accountDetails.level2_name && accountDetails.level2_name !== accountDetails.name ? 
+                    `${accountDetails.level2_name} › ` : ''}
+                  ${accountDetails.level3_name && accountDetails.level3_name !== accountDetails.name ? 
+                    `${accountDetails.level3_name} › ` : ''}
+                  ${accountDetails.name}
+                </div>
+                <p><strong>Account Name:</strong> ${accountDetails.name}</p>
+              </div>
+              <div>
+                <p><strong>Opening Balance:</strong> Rs.${Math.abs(accountDetails.opening_balance).toFixed(2)} 
+                   ${accountDetails.opening_balance >= 0 ? 'CR' : 'DB'}</p>
+              </div>
+            </div>
+          </div>
+
           <table>
             <thead>
               <tr>
                 <th>Date & Time</th>
-                <th>Reference</th>
-                <th>Details</th>
+                <th>Voucher No.</th>
+                <th>Description</th>
+                <th>Qnt</th>
+                <th>Ded</th>
+                <th>Net Qnt</th>
+                <th>Price</th>
                 <th class="amount-cell">Debit</th>
                 <th class="amount-cell">Credit</th>
                 <th class="amount-cell">Balance</th>
@@ -539,20 +588,27 @@ const Ledger = () => {
             </thead>
             <tbody>
               <tr>
-                <td colspan="5">Opening Balance</td>
-                <td class="amount-cell">
+                <td colspan="7">Opening Balance</td>
+                <td class="amount-cell" colspan="3">
                   Rs.${Math.abs(accountDetails.opening_balance).toFixed(2)}
                   ${accountDetails.opening_balance >= 0 ? ' CR' : ' DB'}
                 </td>
               </tr>
               ${transactions.map((transaction, index) => `
                 <tr>
-                  <td>${formatDateTime(transaction.date, transaction.entry_type)}</td>
-                  <td>${transaction.reference}</td>
+                  <td>${formatDateTime(transaction.display_date)}</td>
+                  <td>${transaction.entry_type === 'CREDIT' && transaction.voucher_no ? 
+                    transaction.voucher_no : 
+                    transaction.reference_no
+                  }</td>
                   <td>${formatTransactionDetails(transaction)}</td>
-                  <td class="amount-cell">${transaction.type === 'DEBIT' ? transaction.amount.toFixed(2) : ''}</td>
-                  <td class="amount-cell">${transaction.type === 'CREDIT' ? transaction.amount.toFixed(2) : ''}</td>
-                  <td class="amount-cell">${calculateBalance(index)}</td>
+                  <td class="amount-cell">${transaction.qnt || '-'}</td>
+                  <td class="amount-cell">${transaction.ded || '-'}</td>
+                  <td class="amount-cell">${transaction.net_qnt || '-'}</td>
+                  <td class="amount-cell">${transaction.price ? formatAmount(transaction.price) : '-'}</td>
+                  <td class="amount-cell">${transaction.entry_type === 'DEBIT' ? formatAmount(transaction.amount) : ''}</td>
+                  <td class="amount-cell">${transaction.entry_type === 'CREDIT' ? formatAmount(transaction.amount) : ''}</td>
+                  <td class="amount-cell">${formatAmount(transaction.running_balance)}</td>
                 </tr>
               `).join('')}
             </tbody>
@@ -560,22 +616,22 @@ const Ledger = () => {
 
           <div class="totals-section">
             <div class="totals-grid">
-              <div className="total-item">
+              <div class="total-item">
                 <div>Total Debits:</div>
-                <div style="color: #d32f2f; font-weight: bold; font-size: 14pt;">
-                  Rs.${totalDebits.toFixed(2)}
+                <div style="color: #d32f2f;">
+                  Rs.${totals.totalDebits}
                 </div>
               </div>
-              <div className="total-item">
+              <div class="total-item">
                 <div>Total Credits:</div>
-                <div style="color: #2e7d32; font-weight: bold; font-size: 14pt;">
-                  Rs.${totalCredits.toFixed(2)}
+                <div style="color: #2e7d32;">
+                  Rs.${totals.totalCredits}
                 </div>
               </div>
-              <div className="total-item">
+              <div class="total-item">
                 <div>Current Balance:</div>
-                <div style="font-weight: bold; font-size: 14pt;">
-                  Rs.${Math.abs(finalBalance).toFixed(2)}${finalBalance >= 0 ? ' CR' : ' DB'}
+                <div>
+                  Rs.${totals.balance} CR
                 </div>
               </div>
             </div>
@@ -597,22 +653,37 @@ const Ledger = () => {
   };
 
   const getLevel2NetBalance = (level2Id) => {
-    let totalDebit = 0;
-    let totalCredit = 0;
-    level3Accounts.filter(acc => acc.level2_id === level2Id).forEach(acc => {
-      const bal = getLevel3Balance(acc.id);
-      if (bal < 0) totalDebit += Math.abs(bal);
-      if (bal > 0) totalCredit += bal;
-    });
-    return totalCredit - totalDebit;
+    const level2Account = level2Accounts.find(acc => acc.id === level2Id);
+    if (!level2Account) return 0;
+
+    // If the Level 2 account has Level 3 children, sum their balances
+    if (level2Account.has_level3) {
+      const level3Accounts = level3Accounts.filter(acc => acc.level2_id === level2Id);
+      return level3Accounts.reduce((sum, acc) => sum + getLevel3Balance(acc.id), 0);
+    }
+
+    // If the Level 2 account has no Level 3 children, use its own balance
+    return level3Balances[level2Id] || 0;
   };
 
   const getLevel1NetBalance = (level1Id) => {
-    let sum = 0;
-    level2Accounts.filter(acc => acc.level1_id === level1Id).forEach(level2 => {
-      sum += getLevel2NetBalance(level2.id);
-    });
-    return sum;
+    const level1Account = level1Accounts.find(acc => acc.id === level1Id);
+    if (!level1Account) return 0;
+
+    // If the Level 1 account has Level 2 children, sum their balances
+    if (level1Account.has_level2) {
+      const level2Accounts = level1Account.level2_accounts;
+      return level2Accounts.reduce((sum, acc) => sum + getLevel2NetBalance(acc.id), 0);
+    }
+
+    // If the Level 1 account has no Level 2 children, use its own balance
+    return level3Balances[level1Id] || 0;
+  };
+
+  const formatAmount = (amount) => {
+    if (!amount) return '';
+    const numAmount = parseFloat(amount);
+    return isNaN(numAmount) ? '' : numAmount.toFixed(2);
   };
 
   return (
@@ -663,7 +734,7 @@ const Ledger = () => {
                   return (
                     <TableRow 
                       key={`${account.level}-${account.id}`}
-                      onClick={() => setSelectedAccount(account.id)}
+                            onClick={() => handleAccountSelect(account)}
                       sx={{ 
                         cursor: 'pointer',
                         backgroundColor: selectedAccount === account.id ? '#e3f2fd' : 'inherit',
@@ -693,7 +764,7 @@ const Ledger = () => {
                           <TableRow 
                             onClick={() => {
                               toggleExpand(level1Account.id);
-                              setSelectedAccount(level1Account.id);
+                              handleAccountSelect(level1Account);
                             }}
                             sx={{ 
                               cursor: 'pointer',
@@ -711,12 +782,15 @@ const Ledger = () => {
                               {parseFloat(level1Account.current_balance || 0).toFixed(2)}
                             </TableCell>
                           </TableRow>
-                          {expandedAccounts[level1Account.id] && level1Account.level2_accounts?.map((level2Account) => (
+                          {expandedAccounts.has(level1Account.id) && level1Account.level2_accounts?.map((level2Account) => (
                             <React.Fragment key={`level2-${level2Account.id}`}>
                               <TableRow 
                                 onClick={() => {
+                                  if (!level2Account.has_level3) {
+                                    handleAccountSelect(level2Account);
+                                  } else {
                                   toggleExpand(level2Account.id);
-                                  setSelectedAccount(level2Account.id);
+                                  }
                                 }}
                                 sx={{ 
                                   cursor: 'pointer',
@@ -732,10 +806,10 @@ const Ledger = () => {
                                   {parseFloat(level2Account.current_balance || 0).toFixed(2)}
                                 </TableCell>
                               </TableRow>
-                              {expandedAccounts[level2Account.id] && level2Account.level3_accounts?.map((level3Account) => (
+                              {expandedAccounts.has(level2Account.id) && level2Account.level3_accounts?.map((level3Account) => (
                                 <TableRow 
                                   key={`level3-${level3Account.id}`}
-                                  onClick={() => setSelectedAccount(level3Account.id)}
+                                  onClick={() => handleAccountSelect(level3Account)}
                                   sx={{ 
                                     cursor: 'pointer',
                                     backgroundColor: selectedAccount === level3Account.id ? '#e3f2fd' : 'inherit',
@@ -879,13 +953,17 @@ const Ledger = () => {
               <TableContainer component={Paper} className="rpm-ledger-table-container">
                 <Table className="rpm-ledger-table">
                   <TableHead>
-                    <TableRow sx={{ backgroundColor: 'primary.main' }}>
-                      <TableCell sx={{ color: 'white' }}>Date & Time</TableCell>
-                      <TableCell sx={{ color: 'white' }}>Reference</TableCell>
-                      <TableCell sx={{ color: 'white' }}>Details</TableCell>
-                      <TableCell sx={{ color: 'white' }} align="right">Debit</TableCell>
-                      <TableCell sx={{ color: 'white' }} align="right">Credit</TableCell>
-                      <TableCell sx={{ color: 'white' }} align="right">Balance</TableCell>
+                    <TableRow>
+                      <TableCell>Date & Time</TableCell>
+                      <TableCell>Voucher No.</TableCell>
+                      <TableCell>Description</TableCell>
+                      <TableCell>Qnt</TableCell>
+                      <TableCell>Ded</TableCell>
+                      <TableCell>Net Qnt</TableCell>
+                      <TableCell>Price</TableCell>
+                      <TableCell>Debit</TableCell>
+                      <TableCell>Credit</TableCell>
+                      <TableCell>Balance</TableCell>
                     </TableRow>
                   </TableHead>
                   <TableBody>
@@ -907,51 +985,39 @@ const Ledger = () => {
                         sx={{ '&:hover': { backgroundColor: '#f5f5f5' } }}
                       >
                         <TableCell>
-                          {formatDateTime(transaction.date)}
+                          {formatDateTime(transaction.display_date, transaction.entry_type)}
                         </TableCell>
-                        <TableCell>{transaction.reference || '-'}</TableCell>
+                        <TableCell>
+                          {transaction.entry_type === 'CREDIT' && transaction.voucher_no ? 
+                            transaction.voucher_no : 
+                            transaction.reference_no
+                          }
+                        </TableCell>
                         <TableCell>
                           {formatTransactionDetails(transaction)}
                         </TableCell>
+                        <TableCell align="right">{transaction.qnt || '-'}</TableCell>
+                        <TableCell align="right">{transaction.ded || '-'}</TableCell>
+                        <TableCell align="right">{transaction.net_qnt || '-'}</TableCell>
+                        <TableCell align="right">{transaction.price ? formatAmount(transaction.price) : '-'}</TableCell>
                         <TableCell align="right">
-                          {transaction.type === 'DEBIT' && 
-                            transaction.amount.toFixed(2)}
+                          {transaction.entry_type === 'DEBIT' ? formatAmount(transaction.amount) : '-'}
                         </TableCell>
                         <TableCell align="right">
-                          {transaction.type === 'CREDIT' && 
-                            transaction.amount.toFixed(2)}
+                          {transaction.entry_type === 'CREDIT' ? formatAmount(transaction.amount) : '-'}
                         </TableCell>
-                        <TableCell align="right">
-                          {calculateBalance(index)}
-                        </TableCell>
+                        <TableCell align="right">{formatAmount(transaction.running_balance)}</TableCell>
                       </TableRow>
                     ))}
+                    <TableRow>
+                      <TableCell colSpan={7} align="right"><strong>Totals</strong></TableCell>
+                      <TableCell align="right"><strong>{formatAmount(calculateTotals().totalDebits)}</strong></TableCell>
+                      <TableCell align="right"><strong>{formatAmount(calculateTotals().totalCredits)}</strong></TableCell>
+                      <TableCell align="right"><strong>{formatAmount(calculateTotals().balance)}</strong></TableCell>
+                    </TableRow>
                   </TableBody>
                 </Table>
               </TableContainer>
-
-              <Paper className="rpm-ledger-totals">
-                <Grid container spacing={2}>
-                  <Grid item xs={12} md={4}>
-                    <Typography variant="subtitle2">Total Debits:</Typography>
-                    <Typography variant="h6" color="error">
-                      {totalDebits.toFixed(2)}
-                    </Typography>
-                  </Grid>
-                  <Grid item xs={12} md={4}>
-                    <Typography variant="subtitle2">Total Credits:</Typography>
-                    <Typography variant="h6" color="success.main">
-                      {totalCredits.toFixed(2)}
-                    </Typography>
-                  </Grid>
-                  <Grid item xs={12} md={4}>
-                    <Typography variant="subtitle2">Current Balance:</Typography>
-                    <Typography variant="h6" fontWeight="bold">
-                      Rs.{Math.abs(finalBalance).toFixed(2)}{finalBalance >= 0 ? ' CR' : ' DB'}
-                    </Typography>
-                  </Grid>
-                </Grid>
-              </Paper>
             </Box>
           )
         )}

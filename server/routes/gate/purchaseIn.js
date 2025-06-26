@@ -92,6 +92,7 @@ router.post('/in/purchase', async (req, res) => {
     // 2. Create pricing entry with default values for required fields
     await client.query(
       `INSERT INTO gate_entries_pricing (
+        id,
         entry_type, 
         grn_number, 
         account_id, 
@@ -99,7 +100,10 @@ router.post('/in/purchase', async (req, res) => {
         price_per_unit, 
         total_amount,
         status
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      ) VALUES (
+        nextval('gate_entries_pricing_id_seq'),
+        $1, $2, $3, $4, $5, $6, $7
+      )`,
       [
         'PURCHASE', 
         grnNumber, 

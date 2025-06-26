@@ -68,7 +68,7 @@ const ProductionHistory = () => {
         const costs = await calculatePerKgCost(row);
         setPerKgCosts(prev => ({
           ...prev,
-          ...costs
+          [row.id]: costs  // Use production ID as key
         }));
       });
     }
@@ -168,7 +168,26 @@ const ProductionHistory = () => {
     if (!row || !row.paper_types) return {};
 
     const costs = {};
+    let totalRecipeCost = 0;
     
+    // Calculate recipe costs
+    row.paper_types.forEach(paperType => {
+      if (paperType.recipe) {
+        paperType.recipe.forEach(item => {
+          const quantity = parseFloat(item.quantity_used) || 0;
+          const unitPrice = parseFloat(item.unit_price) || 0;
+          const itemCost = quantity * unitPrice;
+          totalRecipeCost += itemCost;
+          
+          // Store individual recipe item costs
+          if (!costs[item.raddi_type]) {
+            costs[item.raddi_type] = 0;
+          }
+          costs[item.raddi_type] += itemCost;
+        });
+      }
+    });
+
     // Calculate total common costs
     const boilerFuelCost = parseFloat(row.boiler_fuel_quantity || 0) * parseFloat(row.boiler_fuel_price || 0);
     const electricityCost = parseFloat(row.electricity_cost || 0);
@@ -176,31 +195,27 @@ const ProductionHistory = () => {
     const laborCost = parseFloat(row.labor_cost || 0);
     const contractorsCost = parseFloat(row.contractors_cost || 0);
     const dailyExpenses = parseFloat(row.daily_expenses || 0);
+    
     const totalCommonCost = boilerFuelCost + electricityCost + maintenanceCost + 
                            laborCost + contractorsCost + dailyExpenses;
-
-    // Calculate total weight for all paper types
+    
+    const totalCost = totalRecipeCost + totalCommonCost;
     const totalWeight = row.paper_types.reduce((sum, type) => 
       sum + parseFloat(type.total_weight || 0), 0);
+    
+    const costPerKg = totalWeight > 0 ? totalCost / totalWeight : 0;
 
-    // Calculate cost per kg for each paper type
-    row.paper_types.forEach(paperType => {
-      const paperTypeWeight = parseFloat(paperType.total_weight || 0);
-      const weightRatio = totalWeight > 0 ? paperTypeWeight / totalWeight : 0;
-      
-      // Calculate recipe costs
-      const recipeCost = paperType.recipe?.reduce((total, item) => {
-        return total + (parseFloat(item.quantity_used || 0) * parseFloat(item.unit_price || 0));
-      }, 0) || 0;
-
-      // Calculate total cost (recipe cost + proportional common costs)
-      const totalCost = recipeCost + (totalCommonCost * weightRatio);
-      const perKgCost = paperTypeWeight > 0 ? totalCost / paperTypeWeight : 0;
-
-      costs[paperType.id] = perKgCost.toFixed(2);
-    });
-
-    return costs;
+    return {
+      ...costs,
+      boiler_fuel_cost: boilerFuelCost,
+      electricity_cost: electricityCost,
+      maintenance_cost: maintenanceCost,
+      labor_cost: laborCost,
+      contractors_cost: contractorsCost,
+      daily_expenses: dailyExpenses,
+      total_cost: totalCost,
+      cost_per_kg: costPerKg
+    };
   };
 
   const handlePrintCosts = async (row) => {
@@ -323,7 +338,18 @@ const ProductionHistory = () => {
                   </tr>
                   <tr>
                     <th>Cost per kg</th>
-                    <td>Rs. ${perKgCosts[paperType.id] || 'Calculating...'}</td>
+                    <td>Rs. ${formatNumber(
+                      (Number(perKgCosts[row.id]?.boiler_fuel_cost || 0) + 
+                      Number(perKgCosts[row.id]?.electricity_cost || 0) + 
+                      Number(perKgCosts[row.id]?.maintenance_cost || 0) + 
+                      Number(perKgCosts[row.id]?.labor_cost || 0) + 
+                      Number(perKgCosts[row.id]?.contractors_cost || 0) + 
+                      Number(perKgCosts[row.id]?.daily_expenses || 0) +
+                      Object.entries(perKgCosts[row.id] || {}).reduce((sum, [key, value]) => 
+                        !key.includes('_cost') && key !== 'cost_per_kg' && key !== 'daily_expenses' ? 
+                        sum + Number(value || 0) : sum, 0)) / 
+                      (parseFloat(paperType.total_weight) || 1)
+                    )}</td>
                   </tr>
                   <tr>
                     <th colspan="2">Recipe</th>
@@ -349,38 +375,69 @@ const ProductionHistory = () => {
                 <th>Cost Type</th>
                 <th>Amount (Rs)</th>
               </tr>
+              ${Object.entries(perKgCosts[row.id] || {}).filter(([key]) => 
+                !key.includes('_cost') && 
+                key !== 'cost_per_kg' && 
+                key !== 'daily_expenses'
+              ).map(([type, cost]) => `
+                <tr>
+                  <td>${type} Cost</td>
+                  <td>${formatNumber(cost)}</td>
+                </tr>
+              `).join('')}
               <tr>
                 <td>Boiler Fuel</td>
-                <td>${row.boiler_fuel_cost}</td>
+                <td>${formatNumber(perKgCosts[row.id]?.boiler_fuel_cost || 0)}</td>
               </tr>
               <tr>
                 <td>Electricity</td>
-                <td>${row.electricity_cost}</td>
+                <td>${formatNumber(row.electricity_cost || 0)}</td>
               </tr>
               <tr>
                 <td>Maintenance</td>
-                <td>${row.maintenance_cost}</td>
+                <td>${formatNumber(row.maintenance_cost || 0)}</td>
               </tr>
               <tr>
                 <td>Labor</td>
-                <td>${row.labor_cost}</td>
+                <td>${formatNumber(row.labor_cost || 0)}</td>
               </tr>
               <tr>
                 <td>Contractors</td>
-                <td>${row.contractors_cost}</td>
+                <td>${formatNumber(row.contractors_cost || 0)}</td>
               </tr>
               <tr>
                 <td>Daily Expenses</td>
-                <td>${dailyExpense}</td>
+                <td>${formatNumber(dailyExpense || 0)}</td>
               </tr>
               <tr class="total-row">
                 <td>Total Cost</td>
-                <td>${Number(row.boiler_fuel_cost || 0) + 
-                    Number(row.electricity_cost || 0) + 
-                    Number(row.maintenance_cost || 0) + 
-                    Number(row.labor_cost || 0) + 
-                    Number(row.contractors_cost || 0) + 
-                    Number(dailyExpense || 0)}</td>
+                <td>${formatNumber(
+                  Number(perKgCosts[row.id]?.boiler_fuel_cost || 0) + 
+                  Number(row.electricity_cost || 0) + 
+                  Number(row.maintenance_cost || 0) + 
+                  Number(row.labor_cost || 0) + 
+                  Number(row.contractors_cost || 0) + 
+                  Number(dailyExpense || 0) +
+                  Object.entries(perKgCosts[row.id] || {}).reduce((sum, [key, value]) => 
+                    !key.includes('_cost') && key !== 'cost_per_kg' && key !== 'daily_expenses' ? 
+                    sum + Number(value || 0) : sum, 0)
+                )}</td>
+              </tr>
+              <tr>
+                <td>Cost per kg:</td>
+                <td>Rs. ${formatNumber(
+                  (Number(perKgCosts[row.id]?.boiler_fuel_cost || 0) + 
+                  Number(row.electricity_cost || 0) + 
+                  Number(row.maintenance_cost || 0) + 
+                  Number(row.labor_cost || 0) + 
+                  Number(row.contractors_cost || 0) + 
+                  Number(dailyExpense || 0) +
+                  Object.entries(perKgCosts[row.id] || {}).reduce((sum, [key, value]) => 
+                    !key.includes('_cost') && key !== 'cost_per_kg' && key !== 'daily_expenses' ? 
+                    sum + Number(value || 0) : sum, 0)) / 
+                  (row.paper_types?.reduce((sum, type) => 
+                    sum + parseFloat(type.total_weight || 0), 0) || 1)
+                )}</td>
               </tr>
             </table>
           </div>
@@ -419,11 +476,22 @@ const ProductionHistory = () => {
           quantity_used: 0
         };
       }
-      // For 80% yield, we need 120% of the target weight
-      const quantity = totalWeight * 1.2;
+      // Calculate quantity based on percentage and yield
+      const percentageUsed = parseFloat(item.percentage_used) || 0;
+      const yieldPercentage = parseFloat(item.yield_percentage) || 0;
+      const quantity = (totalWeight * (percentageUsed / 100)) / (yieldPercentage / 100);
       combined[item.raddi_type].quantity_used = quantity;
     });
     return Object.values(combined);
+  };
+
+  // Add formatNumber function
+  const formatNumber = (value) => {
+    if (value === undefined || value === null || isNaN(value)) return '0';
+    return Number(value).toLocaleString('en-IN', {
+      maximumFractionDigits: 2,
+      minimumFractionDigits: 2
+    });
   };
 
   return (
@@ -554,7 +622,18 @@ const ProductionHistory = () => {
                             <Stack spacing={0.5}>
                               {row.paper_types?.map(type => (
                                 <Typography key={type.id} variant="body2">
-                                  {type.paper_type}: Rs. {perKgCosts[type.id] || 'Calculating...'}
+                                  {type.paper_type}: Rs. {formatNumber(
+                                    (Number(perKgCosts[row.id]?.boiler_fuel_cost || 0) + 
+                                    Number(perKgCosts[row.id]?.electricity_cost || 0) + 
+                                    Number(perKgCosts[row.id]?.maintenance_cost || 0) + 
+                                    Number(perKgCosts[row.id]?.labor_cost || 0) + 
+                                    Number(perKgCosts[row.id]?.contractors_cost || 0) + 
+                                    Number(perKgCosts[row.id]?.daily_expenses || 0) +
+                                    Object.entries(perKgCosts[row.id] || {}).reduce((sum, [key, value]) => 
+                                      !key.includes('_cost') && key !== 'cost_per_kg' && key !== 'daily_expenses' ? 
+                                      sum + Number(value || 0) : sum, 0)) / 
+                                    (parseFloat(type.total_weight) || 1)
+                                  )}
                                 </Typography>
                               ))}
                             </Stack>
@@ -662,34 +741,61 @@ const ProductionHistory = () => {
                           <Typography variant="subtitle1" gutterBottom>
                             Cost Summary
                           </Typography>
-                          <Table size="small">
-                            <TableBody>
-                              <TableRow>
-                                <TableCell>Boiler Fuel Cost</TableCell>
-                                <TableCell align="right">Rs. {row.boiler_fuel_cost}</TableCell>
-                              </TableRow>
-                              <TableRow>
-                                <TableCell>Electricity Cost</TableCell>
-                                <TableCell align="right">Rs. {row.electricity_cost}</TableCell>
-                              </TableRow>
-                              <TableRow>
-                                <TableCell>Maintenance Cost</TableCell>
-                                <TableCell align="right">Rs. {row.maintenance_cost}</TableCell>
-                              </TableRow>
-                              <TableRow>
-                                <TableCell>Labor Cost</TableCell>
-                                <TableCell align="right">Rs. {row.labor_cost}</TableCell>
-                              </TableRow>
-                              <TableRow>
-                                <TableCell>Contractors Cost</TableCell>
-                                <TableCell align="right">Rs. {row.contractors_cost}</TableCell>
-                              </TableRow>
-                              <TableRow>
-                                <TableCell>Daily Expenses</TableCell>
-                                <TableCell align="right">Rs. {row.daily_expenses}</TableCell>
-                              </TableRow>
-                            </TableBody>
-                          </Table>
+                          <TableContainer>
+                            <Table size="small">
+                              <TableHead>
+                                <TableRow>
+                                  <TableCell>Cost Type</TableCell>
+                                  <TableCell align="right">Amount (Rs.)</TableCell>
+                                </TableRow>
+                              </TableHead>
+                              <TableBody>
+                                {/* Recipe Costs */}
+                                {Object.entries(perKgCosts[row.id] || {}).filter(([key]) => 
+                                  !key.includes('_cost') && 
+                                  key !== 'cost_per_kg' && 
+                                  key !== 'daily_expenses'
+                                ).map(([type, cost]) => (
+                                  <TableRow key={type}>
+                                    <TableCell>{type} Cost</TableCell>
+                                    <TableCell align="right">{formatNumber(cost)}</TableCell>
+                                  </TableRow>
+                                ))}
+                                <TableRow>
+                                  <TableCell>Boiler Fuel Cost</TableCell>
+                                  <TableCell align="right">{formatNumber(perKgCosts[row.id]?.boiler_fuel_cost || 0)}</TableCell>
+                                </TableRow>
+                                <TableRow>
+                                  <TableCell>Electricity Cost</TableCell>
+                                  <TableCell align="right">{formatNumber(perKgCosts[row.id]?.electricity_cost || 0)}</TableCell>
+                                </TableRow>
+                                <TableRow>
+                                  <TableCell>Maintenance Cost</TableCell>
+                                  <TableCell align="right">{formatNumber(perKgCosts[row.id]?.maintenance_cost || 0)}</TableCell>
+                                </TableRow>
+                                <TableRow>
+                                  <TableCell>Labor Cost</TableCell>
+                                  <TableCell align="right">{formatNumber(perKgCosts[row.id]?.labor_cost || 0)}</TableCell>
+                                </TableRow>
+                                <TableRow>
+                                  <TableCell>Contractors Cost</TableCell>
+                                  <TableCell align="right">{formatNumber(perKgCosts[row.id]?.contractors_cost || 0)}</TableCell>
+                                </TableRow>
+                                <TableRow>
+                                  <TableCell>Daily Expenses</TableCell>
+                                  <TableCell align="right">{formatNumber(perKgCosts[row.id]?.daily_expenses || 0)}</TableCell>
+                                </TableRow>
+                                <TableRow>
+                                  <TableCell><strong>Total Cost</strong></TableCell>
+                                  <TableCell align="right"><strong>{formatNumber(perKgCosts[row.id]?.total_cost || 0)}</strong></TableCell>
+                                </TableRow>
+                                <TableRow>
+                                  <TableCell><strong>Cost per kg</strong></TableCell>
+                                  <TableCell align="right"><strong>Rs. {formatNumber(perKgCosts[row.id]?.cost_per_kg || 0)}</strong></TableCell>
+                                </TableRow>
+                              </TableBody>
+                            </Table>
+                          </TableContainer>
                         </Grid>
 
                         {row.paper_types?.map(paperType => (

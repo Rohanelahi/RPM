@@ -150,12 +150,12 @@ router.get('/:month/:year', async (req, res) => {
         GROUP BY account_type
       ),
       regular_expenses AS (
-        SELECT 
-          expense_type,
-          SUM(amount) as total_amount
-        FROM expenses
-        WHERE EXTRACT(MONTH FROM date) = $1 
-        AND EXTRACT(YEAR FROM date) = $2
+      SELECT 
+        expense_type,
+        SUM(amount) as total_amount
+      FROM expenses
+      WHERE EXTRACT(MONTH FROM date) = $1 
+      AND EXTRACT(YEAR FROM date) = $2
         GROUP BY expense_type
       )
       SELECT 
@@ -169,6 +169,17 @@ router.get('/:month/:year', async (req, res) => {
       GROUP BY expense_type
     `;
 
+    // Add query for freight costs
+    const freightQuery = `
+      SELECT 
+        'FREIGHT' as expense_type,
+        SUM(amount) as total_amount
+      FROM transactions
+      WHERE description = 'Freight Adjustment'
+      AND EXTRACT(MONTH FROM transaction_date) = $1 
+      AND EXTRACT(YEAR FROM transaction_date) = $2
+    `;
+
     // Execute all queries in parallel
     const [
       salaryResult, 
@@ -179,7 +190,8 @@ router.get('/:month/:year', async (req, res) => {
       productionResult,
       salePricesResult,
       adjustmentsResult,
-      expensesResult
+      expensesResult,
+      freightResult
     ] = await Promise.all([
       client.query(salaryQuery, [month, year]),
       client.query(materialsQuery, [month, year]),
@@ -189,7 +201,8 @@ router.get('/:month/:year', async (req, res) => {
       client.query(productionQuery, [month, year]),
       client.query(salePricesQuery, [month, year]),
       client.query(adjustmentsQuery, [month, year]),
-      client.query(expensesQuery, [month, year])
+      client.query(expensesQuery, [month, year]),
+      client.query(freightQuery, [month, year])
     ]);
 
     const salaryData = salaryResult.rows[0];
@@ -197,6 +210,7 @@ router.get('/:month/:year', async (req, res) => {
     const boilerData = boilerResult.rows;
     const energyData = energyResult.rows[0];
     const maintenanceData = maintenanceResult.rows[0];
+    const freightData = freightResult.rows[0];
 
     // Calculate total materials cost including adjustments
     const totalMaterialsCost = materialsData.reduce((sum, item) => sum + parseFloat(item.total_cost || 0), 0);
@@ -233,20 +247,25 @@ router.get('/:month/:year', async (req, res) => {
       sum + parseFloat(expense.total_amount || 0), 0
     );
 
+    // Get freight cost
+    const freightCost = parseFloat(freightData?.total_amount || 0);
+
     // Calculate total expenses with both original and adjusted values
     const totalExpenses = parseFloat(salaryData.total_labor_cost) + 
                          totalMaterialsCost + 
                          totalBoilerCost + 
                          parseFloat(energyData.total_cost || 0) + 
                          parseFloat(maintenanceData.total_maintenance_cost || 0) +
-                         additionalExpenses;
+                         additionalExpenses +
+                         freightCost;
 
     const adjustedTotalExpenses = parseFloat(salaryData.total_labor_cost) + 
                                 adjustedMaterialsCost + 
                                 adjustedBoilerCost + 
                                 adjustedEnergyCost + 
                                 parseFloat(maintenanceData.total_maintenance_cost || 0) +
-                                additionalExpenses;
+                                additionalExpenses +
+                                freightCost;
 
     // Calculate revenue and profit for each paper type
     const productionData = productionResult.rows.map(prod => {
@@ -348,11 +367,18 @@ router.get('/:month/:year', async (req, res) => {
       },
       adjustments: adjustments || [],
       expenses: {
-        items: expensesResult.rows.map(expense => ({
-          type: expense.expense_type,
-          amount: parseFloat(expense.total_amount || 0)
-        })),
-        total: additionalExpenses
+        items: [
+          ...expensesResult.rows.map(expense => ({
+            type: expense.expense_type,
+            amount: parseFloat(expense.total_amount || 0)
+          })),
+          // Add freight cost if it exists
+          ...(freightCost > 0 ? [{
+            type: 'FREIGHT',
+            amount: freightCost
+          }] : [])
+        ],
+        total: additionalExpenses + freightCost
       },
       summary: {
         totalExpenses: totalExpenses || 0,

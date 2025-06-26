@@ -5,89 +5,188 @@ const pool = require('../../db');
 // Get inventory items with current stock levels and latest prices
 router.get('/inventory', async (req, res) => {
   try {
+    console.log('Starting inventory query...');
+    
     const query = `
-      WITH store_transactions AS (
-        -- Store In transactions
+      WITH item_stock AS (
+        -- Calculate stock levels for each item with vendor info
         SELECT 
+          si.id as item_id,
           si.item_name,
           si.item_code,
           si.category as item_type,
           si.unit,
-          se.quantity as qty_in,
-          0 as qty_out,
-          COALESCE(pe.price_per_unit, 0) as price_per_unit,
-          se.created_at as transaction_date,
-          COALESCE(
-            (SELECT l1.name FROM chart_of_accounts_level1 l1 
-             JOIN chart_of_accounts_level3 l3 ON l3.level1_id = l1.id 
-             JOIN accounts a2 ON a2.chart_account_id = l3.id 
-             WHERE a2.id = se.vendor_id),
-            (SELECT l1.name FROM chart_of_accounts_level1 l1 
-             JOIN chart_of_accounts_level2 l2 ON l2.level1_id = l1.id 
-             JOIN accounts a2 ON a2.chart_account_id = l2.id 
-             WHERE a2.id = se.vendor_id),
-            (SELECT l1.name FROM chart_of_accounts_level1 l1 
-             JOIN accounts a2 ON a2.chart_account_id = l1.id 
-             WHERE a2.id = se.vendor_id)
-          ) as vendor_name
-        FROM store_entries se
-        JOIN store_items si ON se.item_id = si.id
-        LEFT JOIN pricing_entries pe ON pe.reference_id = se.id
-        LEFT JOIN accounts a ON se.vendor_id = a.id
-        WHERE se.entry_type = 'STORE_IN'
-        
-        UNION ALL
-        
-        -- Store Out transactions (including returns)
-        SELECT 
-          si.item_name,
-          si.item_code,
-          si.category as item_type,
-          si.unit,
-          0 as qty_in,
-          CASE 
-            WHEN se.entry_type = 'STORE_OUT' THEN se.quantity
-            WHEN sr.id IS NOT NULL THEN sr.quantity
-          END as qty_out,
-          0 as price_per_unit,
-          COALESCE(sr.date_time, se.created_at) as transaction_date,
-          NULL as vendor_name
-        FROM store_entries se
-        JOIN store_items si ON se.item_id = si.id
+          COALESCE(SUM(
+            CASE 
+              WHEN se.entry_type = 'STORE_IN' THEN se.quantity
+              WHEN se.entry_type = 'STORE_OUT' THEN -se.quantity
+            END
+          ), 0) + COALESCE(SUM(
+            CASE 
+              WHEN sr.id IS NOT NULL THEN sr.quantity
+            END
+          ), 0) as quantity,
+          MAX(COALESCE(sr.date_time, se.date_time)) as last_updated,
+          STRING_AGG(DISTINCT 
+            COALESCE(l3.name, l2.name, l1.name), ', ' 
+            ORDER BY COALESCE(l3.name, l2.name, l1.name)
+          ) FILTER (WHERE se.entry_type = 'STORE_IN' AND se.vendor_id IS NOT NULL) as vendor_names
+        FROM store_items si
+        LEFT JOIN store_entries se ON si.id = se.item_id
         LEFT JOIN store_returns sr ON sr.grn_number = se.grn_number
-        WHERE se.entry_type = 'STORE_OUT' OR sr.id IS NOT NULL
+        LEFT JOIN chart_of_accounts_level3 l3 ON se.vendor_id = l3.id
+        LEFT JOIN chart_of_accounts_level2 l2 ON se.vendor_id = l2.id
+        LEFT JOIN chart_of_accounts_level1 l1 ON se.vendor_id = l1.id
+        GROUP BY si.id, si.item_name, si.item_code, si.category, si.unit
+        HAVING COALESCE(SUM(
+          CASE 
+            WHEN se.entry_type = 'STORE_IN' THEN se.quantity
+            WHEN se.entry_type = 'STORE_OUT' THEN -se.quantity
+          END
+        ), 0) + COALESCE(SUM(
+          CASE 
+            WHEN sr.id IS NOT NULL THEN sr.quantity
+          END
+        ), 0) > 0
       ),
-      current_stock AS (
+      item_prices AS (
+        -- Get latest price for each item
         SELECT 
-          item_name,
-          item_code,
-          item_type,
-          unit,
-          SUM(COALESCE(qty_in, 0) - COALESCE(qty_out, 0)) as quantity,
-          MAX(transaction_date) as last_updated,
-          MAX(CASE WHEN price_per_unit > 0 THEN price_per_unit END) as last_price,
-          STRING_AGG(DISTINCT vendor_name, ', ' ORDER BY vendor_name) FILTER (WHERE vendor_name IS NOT NULL) as vendors
-        FROM store_transactions
-        GROUP BY item_name, item_code, item_type, unit
-        HAVING SUM(COALESCE(qty_in, 0) - COALESCE(qty_out, 0)) > 0
+          se.item_id,
+          pe.price_per_unit,
+          ROW_NUMBER() OVER (PARTITION BY se.item_id ORDER BY se.date_time DESC) as rn
+        FROM store_entries se
+        JOIN pricing_entries pe ON pe.reference_id = se.id AND pe.entry_type = 'STORE_PURCHASE'
+        WHERE se.entry_type = 'STORE_IN'
       )
       SELECT 
-        ROW_NUMBER() OVER (ORDER BY item_name) as id,
-        item_name,
-        item_code,
-        item_type,
-        unit,
-        quantity,
-        last_updated,
-        last_price,
-        vendors as vendor_name
-      FROM current_stock
-      ORDER BY item_name;
+        ROW_NUMBER() OVER (ORDER BY istock.item_name) as id,
+        istock.item_name,
+        istock.item_code,
+        istock.item_type,
+        istock.unit,
+        istock.quantity,
+        istock.last_updated,
+        COALESCE(ip.price_per_unit, 0) as last_price,
+        COALESCE(istock.vendor_names, '') as vendor_name
+      FROM item_stock istock
+      LEFT JOIN item_prices ip ON istock.item_id = ip.item_id AND ip.rn = 1
+      ORDER BY istock.item_name;
     `;
 
     console.log('Executing inventory query...'); // Debug log
     const { rows } = await pool.query(query);
     console.log('Found inventory items:', rows.length); // Debug log
+    
+    // Debug: Check vendor data
+    if (rows.length > 0) {
+      console.log('Sample inventory items:', rows.slice(0, 3).map(item => ({
+        name: item.item_name,
+        quantity: item.quantity,
+        vendor: item.vendor_name,
+        price: item.last_price
+      })));
+      
+      // Debug: Check raw vendor data
+      const debugQuery = `
+        SELECT 
+          se.item_id,
+          se.vendor_id,
+          a.account_name,
+          a.chart_account_id,
+          l1.name as level1_name,
+          l2.name as level2_name,
+          l3.name as level3_name
+        FROM store_entries se
+        JOIN accounts a ON se.vendor_id = a.id
+        LEFT JOIN chart_of_accounts_level1 l1 ON a.chart_account_id = l1.id
+        LEFT JOIN chart_of_accounts_level2 l2 ON a.chart_account_id = l2.id
+        LEFT JOIN chart_of_accounts_level3 l3 ON a.chart_account_id = l3.id
+        WHERE se.entry_type = 'STORE_IN' AND se.vendor_id IS NOT NULL
+        LIMIT 5
+      `;
+      
+      try {
+        const debugResult = await pool.query(debugQuery);
+        console.log('Debug vendor data:', debugResult.rows);
+      } catch (debugError) {
+        console.log('Debug query error:', debugError.message);
+      }
+      
+      // Debug: Check all store entries
+      const allStoreEntriesQuery = `
+        SELECT 
+          se.id,
+          se.entry_type,
+          se.vendor_id,
+          se.item_id,
+          se.quantity,
+          se.grn_number,
+          a.account_name,
+          si.item_name
+        FROM store_entries se
+        LEFT JOIN accounts a ON se.vendor_id = a.id
+        LEFT JOIN store_items si ON se.item_id = si.id
+        ORDER BY se.date_time DESC
+        LIMIT 10
+      `;
+      
+      try {
+        const allEntriesResult = await pool.query(allStoreEntriesQuery);
+        console.log('All store entries:', allEntriesResult.rows);
+      } catch (allEntriesError) {
+        console.log('All entries query error:', allEntriesError.message);
+      }
+      
+      // Debug: Check what accounts exist
+      const accountsQuery = `
+        SELECT 
+          id,
+          account_name,
+          account_type,
+          chart_account_id
+        FROM accounts
+        ORDER BY id
+        LIMIT 10
+      `;
+      
+      try {
+        const accountsResult = await pool.query(accountsQuery);
+        console.log('Available accounts:', accountsResult.rows);
+      } catch (accountsError) {
+        console.log('Accounts query error:', accountsError.message);
+      }
+      
+      // Debug: Check chart of accounts
+      const chartQuery = `
+        SELECT 
+          'level1' as level,
+          id,
+          name
+        FROM chart_of_accounts_level1
+        UNION ALL
+        SELECT 
+          'level2' as level,
+          id,
+          name
+        FROM chart_of_accounts_level2
+        UNION ALL
+        SELECT 
+          'level3' as level,
+          id,
+          name
+        FROM chart_of_accounts_level3
+        ORDER BY level, id
+        LIMIT 20
+      `;
+      
+      try {
+        const chartResult = await pool.query(chartQuery);
+        console.log('Chart of accounts:', chartResult.rows);
+      } catch (chartError) {
+        console.log('Chart query error:', chartError.message);
+      }
+    }
     
     res.json(rows);
 
@@ -191,23 +290,27 @@ router.post('/issue', async (req, res) => {
       // Update inventory (create STORE_OUT entry without GRN)
       await client.query(`
         INSERT INTO store_entries (
+          grn_number,
           item_id,
           entry_type,
           quantity,
-          reference_type,
-          reference_id,
           unit,
-          date_time
+          department,
+          issued_to,
+          date_time,
+          remarks
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
       `, [
+        `ISSUE-${issue.id}-${Date.now()}`, // Generate a unique GRN
         itemDetails.id,
         'STORE_OUT',
         item.quantity,
-        'MAINTENANCE',
-        issue.id,
         itemDetails.unit,
-        issueDate
+        department,
+        'Maintenance Issue',
+        issueDate,
+        `Maintenance issue ID: ${issue.id}`
       ]);
     }
     

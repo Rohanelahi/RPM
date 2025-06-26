@@ -28,7 +28,11 @@ const LongVoucher = () => {
   };
 
   const handleAccountChange = (name, value) => {
-    setForm({ ...form, [name]: value ? value.id : '' });
+    if (value) {
+      setForm({ ...form, [name]: value });
+    } else {
+      setForm({ ...form, [name]: null });
+    }
   };
 
   const handleChange = (e) => {
@@ -47,8 +51,8 @@ const LongVoucher = () => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          fromAccount: form.creditAccount,
-          toAccount: form.debitAccount,
+          fromAccount: form.creditAccount.id,
+          toAccount: form.debitAccount.id,
           amount: form.amount,
           date: form.date,
           description: form.description
@@ -56,7 +60,13 @@ const LongVoucher = () => {
       });
       if (!res.ok) throw new Error('Failed to create voucher');
       alert('Long voucher created successfully!');
-      setForm({ creditAccount: '', debitAccount: '', amount: '', date: new Date().toISOString().slice(0, 10), description: '' });
+      setForm({ 
+        creditAccount: null, 
+        debitAccount: null, 
+        amount: '', 
+        date: new Date().toISOString().slice(0, 10), 
+        description: '' 
+      });
     } catch (err) {
       alert(err.message);
     } finally {
@@ -70,21 +80,23 @@ const LongVoucher = () => {
       <form onSubmit={handleSubmit}>
         <Autocomplete
           options={accounts}
-          getOptionLabel={(option) => option.name || ''}
-          value={accounts.find(acc => acc.id === form.creditAccount) || null}
+          getOptionLabel={(option) => option.displayName || ''}
+          value={form.creditAccount}
           onChange={(_, value) => handleAccountChange('creditAccount', value)}
           renderInput={(params) => (
             <TextField {...params} label="Credit Account" required sx={{ mb: 2 }} />
           )}
+          isOptionEqualToValue={(option, value) => option.id === value?.id}
         />
         <Autocomplete
           options={accounts}
-          getOptionLabel={(option) => option.name || ''}
-          value={accounts.find(acc => acc.id === form.debitAccount) || null}
+          getOptionLabel={(option) => option.displayName || ''}
+          value={form.debitAccount}
           onChange={(_, value) => handleAccountChange('debitAccount', value)}
           renderInput={(params) => (
             <TextField {...params} label="Debit Account" required sx={{ mb: 2 }} />
           )}
+          isOptionEqualToValue={(option, value) => option.id === value?.id}
         />
         <TextField
           label="Amount"

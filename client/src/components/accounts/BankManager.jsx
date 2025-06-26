@@ -534,13 +534,9 @@ const BankManager = () => {
                   ) : (
                     <>
                       {transaction.type === 'CREDIT' ? (
-                        <>
-                          Payment received from Account: {transaction.related_account_name}
-                        </>
+                        <>Payment received from {transaction.related_account_name || 'Account'}</>
                       ) : (
-                        <>
-                          Payment to {transaction.related_account_name}
-                        </>
+                        <>Payment to {transaction.related_account_name || 'Account'}</>
                       )}
                     </>
                   )}
