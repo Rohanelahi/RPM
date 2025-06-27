@@ -267,7 +267,7 @@ const SalaryIncrementForm = () => {
   };
 
   return (
-    <div className="salary-increment-form">
+    <div className="salary-increment-form page-container">
       <Paper className="content-paper">
         <Box sx={{ p: 3 }}>
           <Typography variant="h6" sx={{ mb: 3 }}>

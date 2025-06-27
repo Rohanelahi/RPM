@@ -490,7 +490,7 @@ const ProductionForm = ({ onProductionAdded }) => {
   };
 
   return (
-    <Box sx={{ p: 3, maxWidth: 1200, margin: '0 auto' }}>
+    <Box className="page-container" sx={{ p: 3, maxWidth: 1200 }}>
       <Paper sx={{ p: 3 }}>
         <Typography variant="h5" gutterBottom>
           Add Production Record
