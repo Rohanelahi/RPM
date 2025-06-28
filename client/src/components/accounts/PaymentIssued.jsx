@@ -202,12 +202,73 @@ const PaymentIssued = () => {
 
   const fetchAllAccounts = async () => {
     try {
-      const res = await fetch(`${config.apiUrl}/accounts/chart/all`);
-      const data = await res.json();
-      console.log('Fetched accounts:', data);
-      setAllAccounts(data);
+      // Fetch accounts from all levels with account_type = 'EXPENSE'
+      const [level1Res, level2Res, level3Res] = await Promise.all([
+        fetch(`${config.apiUrl}/accounts/chart/level1?account_type=EXPENSE`),
+        fetch(`${config.apiUrl}/accounts/chart/level2?account_type=EXPENSE`),
+        fetch(`${config.apiUrl}/accounts/chart/level3?account_type=EXPENSE`)
+      ]);
+
+      if (!level1Res.ok || !level2Res.ok || !level3Res.ok) {
+        throw new Error('Failed to fetch expense accounts');
+      }
+
+      const [level1Data, level2Data, level3Data] = await Promise.all([
+        level1Res.json(),
+        level2Res.json(),
+        level3Res.json()
+      ]);
+
+      // Extract all Level 3 accounts from the nested structure
+      const allLevel3Accounts = [];
+      level3Data.forEach(level1 => {
+        if (level1.level2_accounts) {
+          level1.level2_accounts.forEach(level2 => {
+            if (level2.level3_accounts) {
+              level2.level3_accounts.forEach(level3 => {
+                if (level3.account_type === 'EXPENSE') {
+                  allLevel3Accounts.push({
+                    ...level3,
+                    level: 3,
+                    level1_id: level1.id,
+                    level2_id: level2.id,
+                    level1_name: level1.name,
+                    level2_name: level2.name,
+                    displayName: `${level1.name} > ${level2.name} > ${level3.name}`,
+                    uniqueId: `3-${level3.id}`
+                  });
+                }
+              });
+            }
+          });
+        }
+      });
+
+      // Filter and combine all accounts from different levels
+      const allAccounts = [
+        ...level1Data
+          .filter(account => account.account_type === 'EXPENSE')
+          .map(account => ({
+            ...account,
+            level: 1,
+            displayName: account.name,
+            uniqueId: `1-${account.id}`
+          })),
+        ...level2Data
+          .filter(account => account.account_type === 'EXPENSE')
+          .map(account => ({
+            ...account,
+            level: 2,
+            displayName: `${account.level1_name} > ${account.name}`,
+            uniqueId: `2-${account.id}`
+          })),
+        ...allLevel3Accounts
+      ];
+
+      console.log('Fetched expense accounts:', allAccounts);
+      setAllAccounts(allAccounts);
     } catch (err) {
-      console.error('Error fetching all accounts:', err);
+      console.error('Error fetching expense accounts:', err);
       setAllAccounts([]);
     }
   };

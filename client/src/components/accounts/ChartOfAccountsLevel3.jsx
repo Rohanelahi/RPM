@@ -326,6 +326,7 @@ const ChartOfAccountsLevel3 = () => {
                 <MenuItem value="SUPPLIER">Supplier</MenuItem>
                 <MenuItem value="CUSTOMER">Customer</MenuItem>
                 <MenuItem value="VENDOR">Vendor</MenuItem>
+                <MenuItem value="EXPENSE">Expense</MenuItem>
               </Select>
             </FormControl>
           </DialogContent>

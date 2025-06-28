@@ -2,7 +2,7 @@
 CREATE TABLE IF NOT EXISTS accounts (
     id SERIAL PRIMARY KEY,
     account_name VARCHAR(100) NOT NULL,
-    account_type VARCHAR(20) NOT NULL CHECK (account_type IN ('SUPPLIER', 'CUSTOMER')),
+    account_type VARCHAR(20) NOT NULL CHECK (account_type IN ('SUPPLIER', 'CUSTOMER', 'EXPENSE')),
     contact_person VARCHAR(100),
     phone VARCHAR(20),
     email VARCHAR(100),

@@ -409,6 +409,28 @@ router.post('/issued', async (req, res) => {
       ]
     );
 
+    // If account_type is OTHER (expense account), create additional transaction for the expense account
+    if (account_type === 'OTHER') {
+      await client.query(
+        `INSERT INTO transactions (
+          transaction_date,
+          account_id,
+          reference_no,
+          entry_type,
+          amount,
+          description
+        ) VALUES ($1, $2, $3, $4, $5, $6)`,
+        [
+          new Date(payment_date),
+          account_id,
+          finalVoucherNo,
+          'DEBIT',
+          amount,
+          `Expense payment to ${receiver_name}${remarks ? ` - ${remarks}` : ''}`
+        ]
+      );
+    }
+
     // If payment mode is CASH, update cash balance
     if (payment_mode === 'CASH') {
       // Get current cash balance
@@ -432,21 +454,64 @@ router.post('/issued', async (req, res) => {
         throw new Error('Insufficient cash balance');
       }
 
-      // Create cash transaction
-      await client.query(
-        `INSERT INTO cash_transactions (
-          type, amount, reference, remarks, balance, balance_after, transaction_date
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-        [
-          'DEBIT',
+      // Create cash transaction - ONLY for non-OTHER payments
+      if (account_type !== 'OTHER') {
+        console.log('Creating cash transaction for regular payment:', {
+          type: 'DEBIT',
           amount,
-          finalVoucherNo,
-          remarks || `Payment to ${receiver_name}`,
+          reference: finalVoucherNo,
+          remarks: remarks || `Payment to ${receiver_name}`,
           currentBalance,
           newBalance,
-          new Date(payment_date)
-        ]
-      );
+          transactionDate: new Date(payment_date)
+        });
+
+        await client.query(
+          `INSERT INTO cash_transactions (
+            type, amount, reference, remarks, balance, balance_after, transaction_date
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+          [
+            'DEBIT',
+            amount,
+            finalVoucherNo,
+            remarks || `Payment to ${receiver_name}`,
+            currentBalance,
+            newBalance,
+            new Date(payment_date)
+          ]
+        );
+      }
+
+      // If account_type is OTHER (expense), create cash transaction for cash account
+      if (account_type === 'OTHER') {
+        console.log('Creating cash transaction for OTHER payment:', {
+          type: 'DEBIT',
+          amount,
+          reference: finalVoucherNo,
+          remarks: `Expense payment to ${receiver_name}${remarks ? ` - ${remarks}` : ''}`,
+          currentBalance,
+          newBalance,
+          transactionDate: new Date(payment_date)
+        });
+
+        // Create cash transaction for OTHER payments
+        await client.query(
+          `INSERT INTO cash_transactions (
+            type, amount, reference, remarks, balance, balance_after, transaction_date
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+          [
+            'DEBIT',
+            amount,
+            finalVoucherNo,
+            `Expense payment to ${receiver_name}${remarks ? ` - ${remarks}` : ''}`,
+            currentBalance,
+            newBalance,
+            new Date(payment_date)
+          ]
+        );
+
+        console.log('Cash transaction created successfully for OTHER payment');
+      }
     } else if (payment_mode === 'ONLINE' && bank_account_id) {
       // Get current bank balance
       const bankBalanceResult = await client.query(`

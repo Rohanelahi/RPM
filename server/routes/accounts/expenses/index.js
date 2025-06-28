@@ -317,6 +317,50 @@ router.post('/', async (req, res) => {
       [amount]
     );
 
+    // Create cash_transactions entry for dashboard
+    const cashBalanceResult = await client.query(`
+      SELECT COALESCE(
+        SUM(CASE 
+          WHEN type = 'CREDIT' THEN amount 
+          WHEN type = 'DEBIT' THEN -amount 
+          ELSE 0 
+        END),
+        0
+      ) as current_balance
+      FROM cash_transactions
+      WHERE transaction_date <= $1
+    `, [new Date(date)]);
+    
+    const currentBalance = Number(cashBalanceResult.rows[0].current_balance);
+    const newBalance = currentBalance - Number(amount);
+
+    console.log('Creating cash_transactions entry for expense:', {
+      type: 'DEBIT',
+      amount,
+      reference: finalVoucherNo,
+      remarks: `Expense payment to ${receiverName}${remarks ? ` - ${remarks}` : ''}`,
+      currentBalance,
+      newBalance,
+      transactionDate: new Date(date)
+    });
+
+    await client.query(
+      `INSERT INTO cash_transactions (
+        type, amount, reference, remarks, balance, balance_after, transaction_date
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      [
+        'DEBIT',
+        amount,
+        finalVoucherNo,
+        `Expense payment to ${receiverName}${remarks ? ` - ${remarks}` : ''}`,
+        currentBalance,
+        newBalance,
+        new Date(date)
+      ]
+    );
+
+    console.log('Cash transaction created successfully for expense');
+
     // Insert into expenses table
     const { rows: [expense] } = await client.query(
       `INSERT INTO expenses (
