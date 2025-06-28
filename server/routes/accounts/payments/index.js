@@ -272,7 +272,7 @@ router.post('/received', async (req, res) => {
       await client.query(`
         UPDATE bank_accounts 
         SET balance = $1,
-            last_updated = NOW()
+            updated_at = NOW()
         WHERE account_type = 'CASH'
       `, [newBalance]);
     }
