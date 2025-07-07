@@ -18,6 +18,60 @@ SET client_min_messages = warning;
 SET row_security = off;
 
 --
+-- Name: assign_unified_id_level1(); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public.assign_unified_id_level1() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+    IF NEW.unified_id IS NULL THEN
+        NEW.unified_id := get_next_unified_account_id();
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
+
+ALTER FUNCTION public.assign_unified_id_level1() OWNER TO postgres;
+
+--
+-- Name: assign_unified_id_level2(); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public.assign_unified_id_level2() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+    IF NEW.unified_id IS NULL THEN
+        NEW.unified_id := get_next_unified_account_id();
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
+
+ALTER FUNCTION public.assign_unified_id_level2() OWNER TO postgres;
+
+--
+-- Name: assign_unified_id_level3(); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public.assign_unified_id_level3() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+    IF NEW.unified_id IS NULL THEN
+        NEW.unified_id := get_next_unified_account_id();
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
+
+ALTER FUNCTION public.assign_unified_id_level3() OWNER TO postgres;
+
+--
 -- Name: check_account_id_exists(); Type: FUNCTION; Schema: public; Owner: postgres
 --
 
@@ -102,6 +156,21 @@ $$;
 
 
 ALTER FUNCTION public.check_chart_account_exists_pricing() OWNER TO postgres;
+
+--
+-- Name: get_next_unified_account_id(); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public.get_next_unified_account_id() RETURNS integer
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+    RETURN nextval('unified_account_id_seq');
+END;
+$$;
+
+
+ALTER FUNCTION public.get_next_unified_account_id() OWNER TO postgres;
 
 --
 -- Name: update_bank_balance(); Type: FUNCTION; Schema: public; Owner: postgres
@@ -403,6 +472,7 @@ CREATE TABLE public.chart_of_accounts_level1 (
     account_type character varying(10),
     created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
     updated_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
+    unified_id integer NOT NULL,
     CONSTRAINT chart_of_accounts_level1_account_type_check CHECK (((account_type)::text = ANY ((ARRAY['SUPPLIER'::character varying, 'CUSTOMER'::character varying, 'VENDOR'::character varying, 'ACCOUNT'::character varying, 'EXPENSE'::character varying])::text[]))),
     CONSTRAINT chart_of_accounts_level1_balance_type_check CHECK (((balance_type)::text = ANY ((ARRAY['DEBIT'::character varying, 'CREDIT'::character varying])::text[])))
 );
@@ -445,6 +515,7 @@ CREATE TABLE public.chart_of_accounts_level2 (
     level1_id integer,
     created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
     updated_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
+    unified_id integer NOT NULL,
     CONSTRAINT chart_of_accounts_level2_account_type_check CHECK (((account_type)::text = ANY ((ARRAY['SUPPLIER'::character varying, 'CUSTOMER'::character varying, 'VENDOR'::character varying, 'ACCOUNT'::character varying, 'EXPENSE'::character varying])::text[]))),
     CONSTRAINT chart_of_accounts_level2_balance_type_check CHECK (((balance_type)::text = ANY (ARRAY[('DEBIT'::character varying)::text, ('CREDIT'::character varying)::text])))
 );
@@ -488,6 +559,7 @@ CREATE TABLE public.chart_of_accounts_level3 (
     level2_id integer,
     created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
     updated_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
+    unified_id integer NOT NULL,
     CONSTRAINT chart_of_accounts_level3_account_type_check CHECK (((account_type)::text = ANY ((ARRAY['SUPPLIER'::character varying, 'CUSTOMER'::character varying, 'VENDOR'::character varying, 'ACCOUNT'::character varying, 'EXPENSE'::character varying])::text[]))),
     CONSTRAINT chart_of_accounts_level3_balance_type_check CHECK (((balance_type)::text = ANY (ARRAY[('DEBIT'::character varying)::text, ('CREDIT'::character varying)::text])))
 );
@@ -2108,6 +2180,7 @@ CREATE TABLE public.transactions (
     unit character varying(20),
     price_per_unit numeric(10,2),
     created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
+    unified_account_id integer,
     CONSTRAINT transactions_entry_type_check CHECK (((entry_type)::text = ANY (ARRAY[('DEBIT'::character varying)::text, ('CREDIT'::character varying)::text])))
 );
 
@@ -2135,6 +2208,20 @@ ALTER SEQUENCE public.transactions_id_seq OWNER TO postgres;
 
 ALTER SEQUENCE public.transactions_id_seq OWNED BY public.transactions.id;
 
+
+--
+-- Name: unified_account_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE public.unified_account_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER SEQUENCE public.unified_account_id_seq OWNER TO postgres;
 
 --
 -- Name: workers_salary_totals; Type: TABLE; Schema: public; Owner: postgres
@@ -2539,7 +2626,7 @@ COPY public.bank_transactions (id, account_id, transaction_date, balance, refere
 --
 
 COPY public.cash_tracking (id, cash_in_hand, cash_in_bank, last_updated) FROM stdin;
-2	4900.00	0.00	2025-06-28 15:54:25.039527
+2	1014.00	0.00	2025-07-07 15:39:32.056119
 \.
 
 
@@ -2551,6 +2638,20 @@ COPY public.cash_transactions (id, transaction_date, type, amount, reference, re
 18	2025-06-28 14:07:59.453	CREDIT	10000.00	RV20250001	Payment from ali	0.00	10000.00	2025-06-28 14:10:29.807657
 19	2025-06-28 14:11:35.022	DEBIT	5000.00	PV20250001	Payment to ali	10000.00	5000.00	2025-06-28 14:11:48.45832
 20	2025-06-28 15:52:45.34	DEBIT	57.00	EV20250011	Expense payment to afrt	5000.00	4943.00	2025-06-28 15:54:25.039527
+21	2025-07-06 00:54:45.033	CREDIT	1000.00	RV20250002	Payment from ali	4943.00	5943.00	2025-07-06 00:55:03.006922
+22	2025-07-06 00:59:37.807	CREDIT	1000.00	RV20250003	Payment from ali	5943.00	6943.00	2025-07-06 00:59:58.394038
+23	2025-07-06 01:48:08.664	CREDIT	500.00	RV20250004	Payment from adeel	6943.00	7443.00	2025-07-06 01:48:25.717389
+24	2025-07-06 22:32:51.949	DEBIT	100.00	EV20250012	Expense payment to fida	7443.00	7343.00	2025-07-06 22:33:09.384342
+25	2025-07-06 22:36:30.565	DEBIT	100.00	EV20250013	Expense payment to fida	7343.00	7243.00	2025-07-06 22:36:48.895236
+26	2025-07-06 22:38:45.188	DEBIT	99.00	EV20250014	Expense payment to ali	7243.00	7144.00	2025-07-06 22:39:01.233736
+27	2025-07-06 22:48:10.874	CREDIT	109.00	RV20250005	Payment from ali	7144.00	7253.00	2025-07-06 22:48:27.708073
+28	2025-07-06 23:06:20.507	DEBIT	99.00	EV20250015	Expense payment to ali	7253.00	7154.00	2025-07-06 23:06:39.364405
+29	2025-07-06 23:08:07.563	DEBIT	100.00	EV20250016	Expense payment to LI	7154.00	7054.00	2025-07-06 23:08:47.289703
+30	2025-07-07 14:55:40.46	DEBIT	499.00	EV20250017	Expense payment to fida	7054.00	6555.00	2025-07-07 14:56:00.867258
+31	2025-07-07 15:19:53.806	DEBIT	600.00	EV20250018	Expense payment to gtyu	6555.00	5955.00	2025-07-07 15:20:12.451271
+32	2025-07-07 15:28:35.998	DEBIT	890.00	EV20250019	Expense payment to ghj	5955.00	5065.00	2025-07-07 15:28:59.17125
+33	2025-07-07 15:31:10.935	DEBIT	700.00	EV20250020	Expense payment to bnm	5065.00	4365.00	2025-07-07 15:37:37.91199
+34	2025-07-07 15:39:12.771	DEBIT	699.00	EV20250021	Expense payment to ali	4365.00	3666.00	2025-07-07 15:39:32.056119
 \.
 
 
@@ -2566,10 +2667,10 @@ COPY public.chart_of_accounts (id, name, account_type, level1_id, level2_id, lev
 -- Data for Name: chart_of_accounts_level1; Type: TABLE DATA; Schema: public; Owner: postgres
 --
 
-COPY public.chart_of_accounts_level1 (id, name, opening_balance, balance_type, account_type, created_at, updated_at) FROM stdin;
-5	Receivables	0.00	DEBIT	ACCOUNT	2025-06-28 14:05:49.099681	2025-06-28 14:05:49.099681
-6	Payables	0.00	DEBIT	ACCOUNT	2025-06-28 14:06:25.502073	2025-06-28 14:06:25.502073
-7	Expense	0.00	DEBIT	ACCOUNT	2025-06-28 14:18:49.26688	2025-06-28 14:18:49.26688
+COPY public.chart_of_accounts_level1 (id, name, opening_balance, balance_type, account_type, created_at, updated_at, unified_id) FROM stdin;
+5	Receivables	0.00	DEBIT	ACCOUNT	2025-06-28 14:05:49.099681	2025-06-28 14:05:49.099681	1
+6	Payables	0.00	DEBIT	ACCOUNT	2025-06-28 14:06:25.502073	2025-06-28 14:06:25.502073	2
+7	Expense	0.00	DEBIT	ACCOUNT	2025-06-28 14:18:49.26688	2025-06-28 14:18:49.26688	3
 \.
 
 
@@ -2577,10 +2678,10 @@ COPY public.chart_of_accounts_level1 (id, name, opening_balance, balance_type, a
 -- Data for Name: chart_of_accounts_level2; Type: TABLE DATA; Schema: public; Owner: postgres
 --
 
-COPY public.chart_of_accounts_level2 (id, name, opening_balance, balance_type, account_type, level1_id, created_at, updated_at) FROM stdin;
-5	Raddi	0.00	DEBIT	ACCOUNT	5	2025-06-28 14:06:02.198046	2025-06-28 14:06:02.198046
-6	customer	0.00	DEBIT	ACCOUNT	5	2025-06-28 14:06:36.212237	2025-06-28 14:06:36.212237
-7	Regular	0.00	DEBIT	ACCOUNT	7	2025-06-28 14:19:01.965002	2025-06-28 14:19:01.965002
+COPY public.chart_of_accounts_level2 (id, name, opening_balance, balance_type, account_type, level1_id, created_at, updated_at, unified_id) FROM stdin;
+5	Raddi	0.00	DEBIT	ACCOUNT	5	2025-06-28 14:06:02.198046	2025-06-28 14:06:02.198046	4
+6	customer	0.00	DEBIT	ACCOUNT	5	2025-06-28 14:06:36.212237	2025-06-28 14:06:36.212237	5
+7	Regular	0.00	DEBIT	ACCOUNT	7	2025-06-28 14:19:01.965002	2025-06-28 14:19:01.965002	6
 \.
 
 
@@ -2588,11 +2689,11 @@ COPY public.chart_of_accounts_level2 (id, name, opening_balance, balance_type, a
 -- Data for Name: chart_of_accounts_level3; Type: TABLE DATA; Schema: public; Owner: postgres
 --
 
-COPY public.chart_of_accounts_level3 (id, name, opening_balance, balance_type, account_type, level1_id, level2_id, created_at, updated_at) FROM stdin;
-7	Sajjad	0.00	DEBIT	SUPPLIER	5	5	2025-06-28 14:06:16.228922	2025-06-28 14:06:16.228922
-8	RS	0.00	DEBIT	CUSTOMER	5	6	2025-06-28 14:06:49.237034	2025-06-28 14:06:49.237034
-9	Petrol	0.00	DEBIT	ACCOUNT	7	7	2025-06-28 14:19:16.90545	2025-06-28 14:19:16.90545
-11	Petrol1	0.00	DEBIT	EXPENSE	7	7	2025-06-28 15:00:11.98864	2025-06-28 15:00:11.98864
+COPY public.chart_of_accounts_level3 (id, name, opening_balance, balance_type, account_type, level1_id, level2_id, created_at, updated_at, unified_id) FROM stdin;
+7	Sajjad	0.00	DEBIT	SUPPLIER	5	5	2025-06-28 14:06:16.228922	2025-06-28 14:06:16.228922	7
+8	RS	0.00	DEBIT	CUSTOMER	5	6	2025-06-28 14:06:49.237034	2025-06-28 14:06:49.237034	8
+9	Petrol	0.00	DEBIT	ACCOUNT	7	7	2025-06-28 14:19:16.90545	2025-06-28 14:19:16.90545	9
+11	Petrol1	0.00	DEBIT	EXPENSE	7	7	2025-06-28 15:00:11.98864	2025-06-28 15:00:11.98864	10
 \.
 
 
@@ -2668,6 +2769,16 @@ COPY public.expenses (id, date, expense_type, amount, receiver_name, remarks, vo
 14	2025-06-28 15:42:54.092	Expense > Regular	33.00	afrt		EV20250009	\N	ACCOUNTS	11	OTHER	2025-06-28 15:48:13.445555
 15	2025-06-28 15:48:13.55	Expense > Regular	10.00	afrt		EV20250010	\N	ACCOUNTS	11	OTHER	2025-06-28 15:52:45.211685
 16	2025-06-28 15:52:45.34	Expense > Regular	57.00	afrt		EV20250011	\N	ACCOUNTS	11	OTHER	2025-06-28 15:54:25.039527
+17	2025-07-06 22:32:51.949	Expense > Regular	100.00	fida		EV20250012	\N	ACCOUNTS	11	OTHER	2025-07-06 22:33:09.384342
+18	2025-07-06 22:36:30.565	Expense > Regular	100.00	fida		EV20250013	\N	ACCOUNTS	11	OTHER	2025-07-06 22:36:48.895236
+19	2025-07-06 22:38:45.188	Expense > Regular	99.00	ali		EV20250014	\N	ACCOUNTS	11	OTHER	2025-07-06 22:39:01.233736
+20	2025-07-06 23:06:20.507	Expense > Regular	99.00	ali		EV20250015	\N	ACCOUNTS	11	OTHER	2025-07-06 23:06:39.364405
+21	2025-07-06 23:08:07.563	Expense > Regular	100.00	LI		EV20250016	\N	ACCOUNTS	11	OTHER	2025-07-06 23:08:47.289703
+22	2025-07-07 14:55:40.46	Expense > Regular	499.00	fida		EV20250017	\N	ACCOUNTS	11	OTHER	2025-07-07 14:56:00.867258
+23	2025-07-07 15:19:53.806	Expense > Regular > Petrol1	600.00	gtyu		EV20250018	\N	ACCOUNTS	11	OTHER	2025-07-07 15:20:12.451271
+24	2025-07-07 15:28:35.998	Expense > Regular > Petrol1	890.00	ghj		EV20250019	\N	ACCOUNTS	11	OTHER	2025-07-07 15:28:59.17125
+25	2025-07-07 15:31:10.935	Expense > Regular > Petrol1	700.00	bnm		EV20250020	\N	ACCOUNTS	11	OTHER	2025-07-07 15:37:37.91199
+26	2025-07-07 15:39:12.771	Expense > Regular > Petrol1	699.00	ali		EV20250021	\N	ACCOUNTS	11	OTHER	2025-07-07 15:39:32.056119
 \.
 
 
@@ -2779,6 +2890,46 @@ COPY public.ledger_entries (id, date, account_id, debit_amount, credit_amount, d
 46	2025-06-28 15:52:45.34	1	0.00	57.00	Expense payment to afrt - No remarks	EV20250011	\N	ACCOUNTS	CASH	2025-06-28 15:54:25.039527
 47	2025-06-28 15:52:45.34	7	57.00	0.00	Expense payment to afrt - No remarks	EV20250011	\N	ACCOUNTS	LEVEL1	2025-06-28 15:54:25.039527
 48	2025-06-28 15:52:45.34	7	57.00	0.00	Expense payment to afrt - No remarks	EV20250011	\N	ACCOUNTS	LEVEL2	2025-06-28 15:54:25.039527
+49	2025-07-06 22:32:51.949	11	100.00	0.00	Expense payment to fida - No remarks	EV20250012	\N	ACCOUNTS	LEVEL3	2025-07-06 22:33:09.384342
+50	2025-07-06 22:32:51.949	1	0.00	100.00	Expense payment to fida - No remarks	EV20250012	\N	ACCOUNTS	CASH	2025-07-06 22:33:09.384342
+51	2025-07-06 22:32:51.949	7	100.00	0.00	Expense payment to fida - No remarks	EV20250012	\N	ACCOUNTS	LEVEL1	2025-07-06 22:33:09.384342
+52	2025-07-06 22:32:51.949	7	100.00	0.00	Expense payment to fida - No remarks	EV20250012	\N	ACCOUNTS	LEVEL2	2025-07-06 22:33:09.384342
+53	2025-07-06 22:36:30.565	11	100.00	0.00	Expense payment to fida - No remarks	EV20250013	\N	ACCOUNTS	LEVEL3	2025-07-06 22:36:48.895236
+54	2025-07-06 22:36:30.565	1	0.00	100.00	Expense payment to fida - No remarks	EV20250013	\N	ACCOUNTS	CASH	2025-07-06 22:36:48.895236
+55	2025-07-06 22:36:30.565	7	100.00	0.00	Expense payment to fida - No remarks	EV20250013	\N	ACCOUNTS	LEVEL1	2025-07-06 22:36:48.895236
+56	2025-07-06 22:36:30.565	7	100.00	0.00	Expense payment to fida - No remarks	EV20250013	\N	ACCOUNTS	LEVEL2	2025-07-06 22:36:48.895236
+57	2025-07-06 22:38:45.188	11	99.00	0.00	Expense payment to ali - No remarks	EV20250014	\N	ACCOUNTS	LEVEL3	2025-07-06 22:39:01.233736
+58	2025-07-06 22:38:45.188	1	0.00	99.00	Expense payment to ali - No remarks	EV20250014	\N	ACCOUNTS	CASH	2025-07-06 22:39:01.233736
+59	2025-07-06 22:38:45.188	7	99.00	0.00	Expense payment to ali - No remarks	EV20250014	\N	ACCOUNTS	LEVEL1	2025-07-06 22:39:01.233736
+60	2025-07-06 22:38:45.188	7	99.00	0.00	Expense payment to ali - No remarks	EV20250014	\N	ACCOUNTS	LEVEL2	2025-07-06 22:39:01.233736
+61	2025-07-06 23:06:20.507	11	99.00	0.00	Expense payment to ali - No remarks	EV20250015	\N	ACCOUNTS	LEVEL3	2025-07-06 23:06:39.364405
+62	2025-07-06 23:06:20.507	1	0.00	99.00	Expense payment to ali - No remarks	EV20250015	\N	ACCOUNTS	CASH	2025-07-06 23:06:39.364405
+63	2025-07-06 23:06:20.507	7	99.00	0.00	Expense payment to ali - No remarks	EV20250015	\N	ACCOUNTS	LEVEL1	2025-07-06 23:06:39.364405
+64	2025-07-06 23:06:20.507	7	99.00	0.00	Expense payment to ali - No remarks	EV20250015	\N	ACCOUNTS	LEVEL2	2025-07-06 23:06:39.364405
+65	2025-07-06 23:08:07.563	11	100.00	0.00	Expense payment to LI - No remarks	EV20250016	\N	ACCOUNTS	LEVEL3	2025-07-06 23:08:47.289703
+66	2025-07-06 23:08:07.563	1	0.00	100.00	Expense payment to LI - No remarks	EV20250016	\N	ACCOUNTS	CASH	2025-07-06 23:08:47.289703
+67	2025-07-06 23:08:07.563	7	100.00	0.00	Expense payment to LI - No remarks	EV20250016	\N	ACCOUNTS	LEVEL1	2025-07-06 23:08:47.289703
+68	2025-07-06 23:08:07.563	7	100.00	0.00	Expense payment to LI - No remarks	EV20250016	\N	ACCOUNTS	LEVEL2	2025-07-06 23:08:47.289703
+69	2025-07-07 14:55:40.46	11	499.00	0.00	Expense payment to fida (Expense > Regular) - No remarks	EV20250017	\N	ACCOUNTS	LEVEL3	2025-07-07 14:56:00.867258
+70	2025-07-07 14:55:40.46	1	0.00	499.00	Expense payment to fida (Expense > Regular) - No remarks	EV20250017	\N	ACCOUNTS	CASH	2025-07-07 14:56:00.867258
+71	2025-07-07 14:55:40.46	7	499.00	0.00	Expense payment to fida (Expense > Regular) - No remarks	EV20250017	\N	ACCOUNTS	LEVEL1	2025-07-07 14:56:00.867258
+72	2025-07-07 14:55:40.46	7	499.00	0.00	Expense payment to fida (Expense > Regular) - No remarks	EV20250017	\N	ACCOUNTS	LEVEL2	2025-07-07 14:56:00.867258
+73	2025-07-07 15:19:53.806	11	600.00	0.00	Expense payment to gtyu (Expense > Regular > Petrol1) - No remarks	EV20250018	\N	ACCOUNTS	LEVEL3	2025-07-07 15:20:12.451271
+74	2025-07-07 15:19:53.806	1	0.00	600.00	Expense payment to gtyu (Expense > Regular > Petrol1) - No remarks	EV20250018	\N	ACCOUNTS	CASH	2025-07-07 15:20:12.451271
+75	2025-07-07 15:19:53.806	7	600.00	0.00	Expense payment to gtyu (Expense > Regular > Petrol1) - No remarks	EV20250018	\N	ACCOUNTS	LEVEL1	2025-07-07 15:20:12.451271
+76	2025-07-07 15:19:53.806	7	600.00	0.00	Expense payment to gtyu (Expense > Regular > Petrol1) - No remarks	EV20250018	\N	ACCOUNTS	LEVEL2	2025-07-07 15:20:12.451271
+77	2025-07-07 15:28:35.998	11	890.00	0.00	Expense payment to ghj (Expense > Regular > Petrol1) - No remarks	EV20250019	\N	ACCOUNTS	LEVEL3	2025-07-07 15:28:59.17125
+78	2025-07-07 15:28:35.998	1	0.00	890.00	Expense payment to ghj (Expense > Regular > Petrol1) - No remarks	EV20250019	\N	ACCOUNTS	CASH	2025-07-07 15:28:59.17125
+79	2025-07-07 15:28:35.998	7	890.00	0.00	Expense payment to ghj (Expense > Regular > Petrol1) - No remarks	EV20250019	\N	ACCOUNTS	LEVEL1	2025-07-07 15:28:59.17125
+80	2025-07-07 15:28:35.998	7	890.00	0.00	Expense payment to ghj (Expense > Regular > Petrol1) - No remarks	EV20250019	\N	ACCOUNTS	LEVEL2	2025-07-07 15:28:59.17125
+81	2025-07-07 15:31:10.935	11	700.00	0.00	Expense payment to bnm (Expense > Regular > Petrol1) - No remarks	EV20250020	\N	ACCOUNTS	LEVEL3	2025-07-07 15:37:37.91199
+82	2025-07-07 15:31:10.935	1	0.00	700.00	Expense payment to bnm (Expense > Regular > Petrol1) - No remarks	EV20250020	\N	ACCOUNTS	CASH	2025-07-07 15:37:37.91199
+83	2025-07-07 15:31:10.935	7	700.00	0.00	Expense payment to bnm (Expense > Regular > Petrol1) - No remarks	EV20250020	\N	ACCOUNTS	LEVEL1	2025-07-07 15:37:37.91199
+84	2025-07-07 15:31:10.935	7	700.00	0.00	Expense payment to bnm (Expense > Regular > Petrol1) - No remarks	EV20250020	\N	ACCOUNTS	LEVEL2	2025-07-07 15:37:37.91199
+85	2025-07-07 15:39:12.771	11	699.00	0.00	Expense payment to ali (Expense > Regular > Petrol1) - No remarks	EV20250021	\N	ACCOUNTS	LEVEL3	2025-07-07 15:39:32.056119
+86	2025-07-07 15:39:12.771	1	0.00	699.00	Expense payment to ali (Expense > Regular > Petrol1) - No remarks	EV20250021	\N	ACCOUNTS	CASH	2025-07-07 15:39:32.056119
+87	2025-07-07 15:39:12.771	7	699.00	0.00	Expense payment to ali (Expense > Regular > Petrol1) - No remarks	EV20250021	\N	ACCOUNTS	LEVEL1	2025-07-07 15:39:32.056119
+88	2025-07-07 15:39:12.771	7	699.00	0.00	Expense payment to ali (Expense > Regular > Petrol1) - No remarks	EV20250021	\N	ACCOUNTS	LEVEL2	2025-07-07 15:39:32.056119
 \.
 
 
@@ -2794,9 +2945,9 @@ COPY public.ledgers (id, account_id, account_type, opening_balance, balance_type
 19	6	LEVEL2	0.00	DEBIT	0.00	2025-06-28 14:06:36.212237	2025-06-28 14:06:36.212237	2025-06-28 14:06:36.212237
 15	5	LEVEL1	0.00	DEBIT	0.00	2025-06-28 14:05:49.099681	2025-06-28 14:05:49.099681	2025-06-28 14:05:49.099681
 23	9	LEVEL3	0.00	DEBIT	0.00	2025-06-28 14:19:16.90545	2025-06-28 14:19:16.90545	2025-06-28 14:19:16.90545
-24	11	LEVEL3	0.00	DEBIT	3249.00	2025-06-28 15:00:11.98864	2025-06-28 15:00:11.98864	2025-06-28 15:00:11.98864
-21	7	LEVEL1	0.00	DEBIT	3249.00	2025-06-28 14:18:49.26688	2025-06-28 14:18:49.26688	2025-06-28 14:18:49.26688
-22	7	LEVEL2	0.00	DEBIT	3249.00	2025-06-28 14:19:01.965002	2025-06-28 14:19:01.965002	2025-06-28 14:19:01.965002
+24	11	LEVEL3	0.00	DEBIT	7135.00	2025-06-28 15:00:11.98864	2025-06-28 15:00:11.98864	2025-06-28 15:00:11.98864
+21	7	LEVEL1	0.00	DEBIT	7135.00	2025-06-28 14:18:49.26688	2025-06-28 14:18:49.26688	2025-06-28 14:18:49.26688
+22	7	LEVEL2	0.00	DEBIT	7135.00	2025-06-28 14:19:01.965002	2025-06-28 14:19:01.965002	2025-06-28 14:19:01.965002
 \.
 
 
@@ -2854,6 +3005,7 @@ COPY public.monthly_salary_totals (id, month, year, total_amount, payment_date, 
 --
 
 COPY public.paper_types (id, name, description, created_at) FROM stdin;
+2	Super		2025-07-07 16:05:51.944065
 \.
 
 
@@ -2864,6 +3016,10 @@ COPY public.paper_types (id, name, description, created_at) FROM stdin;
 COPY public.payments (id, payment_date, payment_mode, account_id, account_type, amount, payment_type, remarks, created_at, receiver_name, voucher_no, is_tax_payment, created_by, processed_by_role, bank_account_id) FROM stdin;
 22	2025-06-28 14:07:59.453	CASH	8	CUSTOMER	10000.00	RECEIVED		2025-06-28 14:10:29.807657	ali	RV20250001	f	\N	ACCOUNTS	\N
 23	2025-06-28 14:11:35.022	CASH	7	SUPPLIER	5000.00	ISSUED		2025-06-28 14:11:48.45832	ali	PV20250001	f	\N	ACCOUNTS	\N
+24	2025-07-06 00:54:45.033	CASH	8	CUSTOMER	1000.00	RECEIVED		2025-07-06 00:55:03.006922	ali	RV20250002	f	\N	ACCOUNTS	\N
+25	2025-07-06 00:59:37.807	CASH	8	CUSTOMER	1000.00	RECEIVED		2025-07-06 00:59:58.394038	ali	RV20250003	f	\N	ACCOUNTS	\N
+26	2025-07-06 01:48:08.664	CASH	8	CUSTOMER	500.00	RECEIVED		2025-07-06 01:48:25.717389	adeel	RV20250004	f	\N	ACCOUNTS	\N
+27	2025-07-06 22:48:10.874	CASH	8	CUSTOMER	109.00	RECEIVED		2025-07-06 22:48:27.708073	ali	RV20250005	f	\N	ACCOUNTS	\N
 \.
 
 
@@ -2880,6 +3036,7 @@ COPY public.pricing_entries (id, entry_type, reference_id, status, quantity, uni
 --
 
 COPY public.production (id, date_time, paper_type, total_weight, total_reels, boiler_fuel_type, boiler_fuel_quantity, boiler_fuel_cost, total_yield_percentage, created_at, electricity_units, electricity_unit_price, electricity_cost) FROM stdin;
+3	2025-07-07 16:05:43.66	Super	999.00	0	Boiler Fuel (Toori)	10000.00	100000.00	\N	2025-07-07 16:07:31.028571	1000.00	45.00	45000.00
 \.
 
 
@@ -2888,6 +3045,7 @@ COPY public.production (id, date_time, paper_type, total_weight, total_reels, bo
 --
 
 COPY public.production_paper_types (id, production_id, paper_type, total_weight, boiler_fuel_cost, electricity_cost) FROM stdin;
+3	3	Super	999.00	0.00	0.00
 \.
 
 
@@ -2896,6 +3054,7 @@ COPY public.production_paper_types (id, production_id, paper_type, total_weight,
 --
 
 COPY public.production_recipe (id, production_id, raddi_type, percentage_used, quantity_used, yield_percentage) FROM stdin;
+4	3	Petti	100.00	1248.75	80.00
 \.
 
 
@@ -2936,6 +3095,8 @@ COPY public.salary_payments (id, employee_id, payment_month, payment_year, basic
 --
 
 COPY public.stock_adjustments (id, item_type, quantity, adjustment_type, reference_type, reference_id, date_time, created_at) FROM stdin;
+6	Petti	-1248.75	PRODUCTION_USAGE	PRODUCTION	3	2025-07-07 16:05:43.66	2025-07-07 16:07:31.028571
+7	Boiler Fuel (Toori)	-10000.00	PRODUCTION_USAGE	PRODUCTION	3	2025-07-07 16:05:43.66	2025-07-07 16:07:31.028571
 \.
 
 
@@ -2975,10 +3136,32 @@ COPY public.suppliers (id, name, contact, address, created_at) FROM stdin;
 -- Data for Name: transactions; Type: TABLE DATA; Schema: public; Owner: postgres
 --
 
-COPY public.transactions (id, transaction_date, account_id, reference_no, entry_type, amount, description, item_name, quantity, unit, price_per_unit, created_at) FROM stdin;
-66	2025-06-28 14:07:59.453	8	RV20250001	CREDIT	10000.00	Payment received in cash	\N	\N	\N	\N	2025-06-28 14:10:29.807657
-67	2025-06-28 14:11:35.022	7	PV20250001	DEBIT	5000.00	Payment issued in cash	\N	\N	\N	\N	2025-06-28 14:11:48.45832
-68	2025-06-28 14:14:04.655	7	GRN-SP-250628-055	CREDIT	500000.00	Purchase	Petti	10000.00	KG	50.00	2025-06-28 14:14:04.648499
+COPY public.transactions (id, transaction_date, account_id, reference_no, entry_type, amount, description, item_name, quantity, unit, price_per_unit, created_at, unified_account_id) FROM stdin;
+66	2025-06-28 14:07:59.453	8	RV20250001	CREDIT	10000.00	Payment received in cash	\N	\N	\N	\N	2025-06-28 14:10:29.807657	8
+67	2025-06-28 14:11:35.022	7	PV20250001	DEBIT	5000.00	Payment issued in cash	\N	\N	\N	\N	2025-06-28 14:11:48.45832	7
+68	2025-06-28 14:14:04.655	7	GRN-SP-250628-055	CREDIT	500000.00	Purchase	Petti	10000.00	KG	50.00	2025-06-28 14:14:04.648499	7
+71	2025-07-06 00:54:45.033	8	RV20250002	CREDIT	1000.00	Payment received in cash	\N	\N	\N	\N	2025-07-06 00:55:03.006922	\N
+72	2025-07-06 00:59:37.807	8	RV20250003	CREDIT	1000.00	Payment received in cash	\N	\N	\N	\N	2025-07-06 00:59:58.394038	8
+73	2025-07-06 01:48:08.664	8	RV20250004	CREDIT	500.00	Payment received in cash	\N	\N	\N	\N	2025-07-06 01:48:25.717389	8
+74	2025-07-06 22:38:45.188	11	EV20250014	DEBIT	99.00	Expense payment to ali	\N	\N	\N	\N	2025-07-06 22:39:01.233736	10
+75	2025-07-06 22:48:10.874	8	RV20250005	CREDIT	109.00	Payment received in cash	\N	\N	\N	\N	2025-07-06 22:48:27.708073	8
+76	2025-07-06 23:06:20.507	11	EV20250015	DEBIT	99.00	Expense payment to ali ( >  > Petrol1)	\N	\N	\N	\N	2025-07-06 23:06:39.364405	10
+77	2025-07-06 23:08:07.563	11	EV20250016	DEBIT	100.00	Expense payment to LI ( >  > Petrol1)	\N	\N	\N	\N	2025-07-06 23:08:47.289703	10
+78	2025-07-07 14:55:40.46	11	EV20250017	DEBIT	499.00	Expense payment to fida ( >  > Petrol1)	\N	\N	\N	\N	2025-07-07 14:56:00.867258	10
+79	2025-07-07 15:19:53.806	11	EV20250018	DEBIT	600.00	Expense payment to gtyu ( >  > Petrol1)	\N	\N	\N	\N	2025-07-07 15:20:12.451271	10
+80	2025-07-07 15:28:35.998	11	EV20250019	DEBIT	890.00	Expense payment to ghj ( >  > Petrol1)	\N	\N	\N	\N	2025-07-07 15:28:59.17125	10
+81	2025-07-07 15:31:10.935	11	EV20250020	DEBIT	700.00	Expense payment to bnm ( >  > Petrol1)	\N	\N	\N	\N	2025-07-07 15:37:37.91199	10
+82	2025-07-07 15:39:12.771	11	EV20250021	DEBIT	699.00	Expense payment to ali ( >  > Petrol1)	\N	\N	\N	\N	2025-07-07 15:39:32.056119	10
+83	2025-07-07 15:41:44.015	8	LV-250707-737	CREDIT	500.00	Receivables > customer > RS to Receivables > Raddi > Sajjad	\N	\N	\N	\N	2025-07-07 15:41:44.030876	8
+84	2025-07-07 15:41:44.015	7	LV-250707-737	DEBIT	500.00	Receivables > customer > RS to Receivables > Raddi > Sajjad	\N	\N	\N	\N	2025-07-07 15:41:44.030876	3
+85	2025-07-07 15:50:03.587	8	LV-250707-988	CREDIT	5000.00	Receivables > customer > RS to Receivables > Raddi > Sajjad	\N	\N	\N	\N	2025-07-07 15:50:03.623421	8
+86	2025-07-07 15:50:03.587	7	LV-250707-988	DEBIT	5000.00	Receivables > customer > RS to Receivables > Raddi > Sajjad	\N	\N	\N	\N	2025-07-07 15:50:03.623421	3
+87	2025-07-07 15:55:27.535	8	LV-250707-362	CREDIT	670.00	Receivables > customer > RS to Receivables > Raddi > Sajjad	\N	\N	\N	\N	2025-07-07 15:55:27.560375	8
+88	2025-07-07 15:55:27.535	7	LV-250707-362	DEBIT	670.00	Receivables > customer > RS to Receivables > Raddi > Sajjad	\N	\N	\N	\N	2025-07-07 15:55:27.560375	3
+89	2025-07-07 16:01:09.687	8	LV-250707-258	CREDIT	680.00	Receivables > customer > RS to Receivables > Raddi > Sajjad	\N	\N	\N	\N	2025-07-07 16:01:09.717646	8
+90	2025-07-07 16:01:09.687	7	LV-250707-258	DEBIT	680.00	Receivables > customer > RS to Receivables > Raddi > Sajjad	\N	\N	\N	\N	2025-07-07 16:01:09.717646	3
+91	2025-07-07 16:04:16.742	8	LV-250707-285	CREDIT	600.00	Receivables > customer > RS to Receivables > Raddi > Sajjad	\N	\N	\N	\N	2025-07-07 16:04:16.775298	8
+92	2025-07-07 16:04:16.742	7	LV-250707-285	DEBIT	600.00	Receivables > customer > RS to Receivables > Raddi > Sajjad	\N	\N	\N	\N	2025-07-07 16:04:16.775298	7
 \.
 
 
@@ -3022,7 +3205,7 @@ SELECT pg_catalog.setval('public.cash_tracking_id_seq', 2, true);
 -- Name: cash_transactions_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
-SELECT pg_catalog.setval('public.cash_transactions_id_seq', 20, true);
+SELECT pg_catalog.setval('public.cash_transactions_id_seq', 34, true);
 
 
 --
@@ -3099,7 +3282,7 @@ SELECT pg_catalog.setval('public.expense_types_id_seq', 1, false);
 -- Name: expenses_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
-SELECT pg_catalog.setval('public.expenses_id_seq', 16, true);
+SELECT pg_catalog.setval('public.expenses_id_seq', 26, true);
 
 
 --
@@ -3155,7 +3338,7 @@ SELECT pg_catalog.setval('public.leave_applications_id_seq', 1, false);
 -- Name: ledger_entries_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
-SELECT pg_catalog.setval('public.ledger_entries_id_seq', 48, true);
+SELECT pg_catalog.setval('public.ledger_entries_id_seq', 88, true);
 
 
 --
@@ -3204,7 +3387,7 @@ SELECT pg_catalog.setval('public.maintenance_issues_id_seq', 3, true);
 -- Name: monthly_price_averages_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
-SELECT pg_catalog.setval('public.monthly_price_averages_id_seq', 1, true);
+SELECT pg_catalog.setval('public.monthly_price_averages_id_seq', 186, true);
 
 
 --
@@ -3218,14 +3401,14 @@ SELECT pg_catalog.setval('public.monthly_salary_totals_id_seq', 1, true);
 -- Name: paper_types_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
-SELECT pg_catalog.setval('public.paper_types_id_seq', 1, true);
+SELECT pg_catalog.setval('public.paper_types_id_seq', 2, true);
 
 
 --
 -- Name: payments_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
-SELECT pg_catalog.setval('public.payments_id_seq', 23, true);
+SELECT pg_catalog.setval('public.payments_id_seq', 27, true);
 
 
 --
@@ -3239,21 +3422,21 @@ SELECT pg_catalog.setval('public.pricing_entries_id_seq', 38, true);
 -- Name: production_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
-SELECT pg_catalog.setval('public.production_id_seq', 2, true);
+SELECT pg_catalog.setval('public.production_id_seq', 3, true);
 
 
 --
 -- Name: production_paper_types_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
-SELECT pg_catalog.setval('public.production_paper_types_id_seq', 2, true);
+SELECT pg_catalog.setval('public.production_paper_types_id_seq', 3, true);
 
 
 --
 -- Name: production_recipe_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
-SELECT pg_catalog.setval('public.production_recipe_id_seq', 3, true);
+SELECT pg_catalog.setval('public.production_recipe_id_seq', 4, true);
 
 
 --
@@ -3288,7 +3471,7 @@ SELECT pg_catalog.setval('public.salary_payments_id_seq', 1, false);
 -- Name: stock_adjustments_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
-SELECT pg_catalog.setval('public.stock_adjustments_id_seq', 5, true);
+SELECT pg_catalog.setval('public.stock_adjustments_id_seq', 7, true);
 
 
 --
@@ -3323,7 +3506,14 @@ SELECT pg_catalog.setval('public.suppliers_id_seq', 1, false);
 -- Name: transactions_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
-SELECT pg_catalog.setval('public.transactions_id_seq', 70, true);
+SELECT pg_catalog.setval('public.transactions_id_seq', 92, true);
+
+
+--
+-- Name: unified_account_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
+--
+
+SELECT pg_catalog.setval('public.unified_account_id_seq', 10, true);
 
 
 --
@@ -3854,6 +4044,30 @@ ALTER TABLE ONLY public.transactions
 
 
 --
+-- Name: chart_of_accounts_level1 unique_level1_unified_id; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.chart_of_accounts_level1
+    ADD CONSTRAINT unique_level1_unified_id UNIQUE (unified_id);
+
+
+--
+-- Name: chart_of_accounts_level2 unique_level2_unified_id; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.chart_of_accounts_level2
+    ADD CONSTRAINT unique_level2_unified_id UNIQUE (unified_id);
+
+
+--
+-- Name: chart_of_accounts_level3 unique_level3_unified_id; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.chart_of_accounts_level3
+    ADD CONSTRAINT unique_level3_unified_id UNIQUE (unified_id);
+
+
+--
 -- Name: workers_salary_totals workers_salary_totals_month_year_key; Type: CONSTRAINT; Schema: public; Owner: postgres
 --
 
@@ -4136,6 +4350,13 @@ CREATE INDEX idx_transactions_date ON public.transactions USING btree (transacti
 
 
 --
+-- Name: idx_transactions_unified_account_id; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_transactions_unified_account_id ON public.transactions USING btree (unified_account_id);
+
+
+--
 -- Name: bank_transactions bank_balance_update; Type: TRIGGER; Schema: public; Owner: postgres
 --
 
@@ -4161,6 +4382,27 @@ CREATE TRIGGER check_chart_account_trigger BEFORE INSERT OR UPDATE ON public.gat
 --
 
 CREATE TRIGGER check_chart_account_trigger_pricing BEFORE INSERT OR UPDATE ON public.gate_entries_pricing FOR EACH ROW EXECUTE FUNCTION public.check_chart_account_exists_pricing();
+
+
+--
+-- Name: chart_of_accounts_level1 trigger_assign_unified_id_level1; Type: TRIGGER; Schema: public; Owner: postgres
+--
+
+CREATE TRIGGER trigger_assign_unified_id_level1 BEFORE INSERT ON public.chart_of_accounts_level1 FOR EACH ROW EXECUTE FUNCTION public.assign_unified_id_level1();
+
+
+--
+-- Name: chart_of_accounts_level2 trigger_assign_unified_id_level2; Type: TRIGGER; Schema: public; Owner: postgres
+--
+
+CREATE TRIGGER trigger_assign_unified_id_level2 BEFORE INSERT ON public.chart_of_accounts_level2 FOR EACH ROW EXECUTE FUNCTION public.assign_unified_id_level2();
+
+
+--
+-- Name: chart_of_accounts_level3 trigger_assign_unified_id_level3; Type: TRIGGER; Schema: public; Owner: postgres
+--
+
+CREATE TRIGGER trigger_assign_unified_id_level3 BEFORE INSERT ON public.chart_of_accounts_level3 FOR EACH ROW EXECUTE FUNCTION public.assign_unified_id_level3();
 
 
 --
