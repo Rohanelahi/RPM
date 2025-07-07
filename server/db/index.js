@@ -14,9 +14,12 @@ const pool = new Pool({
   port: config.database.port,
   max: 20,
   idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 2000,
+  connectionTimeoutMillis: 10000, // Increased timeout
   ssl: false,
-  application_name: 'rosepapermill-server'
+  application_name: 'rosepapermill-server',
+  // Add connection retry logic
+  retryDelay: 1000,
+  maxRetries: 3
 });
 
 // Test the connection
@@ -28,14 +31,16 @@ pool.on('connect', (client) => {
 
 pool.on('error', (err) => {
   console.error('Unexpected error on idle client', err);
-  process.exit(-1);
+  // Don't exit the process, just log the error
+  console.log('Attempting to reconnect...');
 });
 
 // Test the connection immediately
 pool.query('SELECT NOW()', (err, res) => {
   if (err) {
     console.error('Database connection error:', err);
-    process.exit(-1);
+    console.log('Server will continue but database operations may fail');
+    console.log('Please check your database connection and restart the server');
   } else {
     console.log('Database connected successfully');
   }

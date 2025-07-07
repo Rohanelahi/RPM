@@ -40,6 +40,7 @@ import CashFlowSummary from './components/reports/CashFlowSummary';
 import ChartOfAccountsLevel1 from './components/accounts/ChartOfAccountsLevel1';
 import ChartOfAccountsLevel2 from './components/accounts/ChartOfAccountsLevel2';
 import ChartOfAccountsLevel3 from './components/accounts/ChartOfAccountsLevel3';
+import ChartOfAccountsLevel4 from './components/accounts/ChartOfAccountsLevel4';
 import LongVoucher from './components/accounts/LongVoucher';
 
 // Protected Route component
@@ -134,6 +135,7 @@ function App() {
                 <Route path="chart/level1" element={<Layout><ChartOfAccountsLevel1 /></Layout>} />
                 <Route path="chart/level2" element={<Layout><ChartOfAccountsLevel2 /></Layout>} />
                 <Route path="chart/level3" element={<Layout><ChartOfAccountsLevel3 /></Layout>} />
+                <Route path="chart/level4" element={<Layout><ChartOfAccountsLevel4 /></Layout>} />
               </Routes>
             </ProtectedRoute>
           } />

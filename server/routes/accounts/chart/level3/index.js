@@ -62,6 +62,7 @@ router.get('/', async (req, res) => {
             json_agg(
               json_build_object(
                 'id', l3.id,
+                'unified_id', l3.unified_id,
                 'name', l3.name,
                 'opening_balance', l3.opening_balance,
                 'balance_type', l3.balance_type,

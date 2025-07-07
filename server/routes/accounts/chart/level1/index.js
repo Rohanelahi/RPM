@@ -32,7 +32,7 @@ router.get('/', async (req, res) => {
         COALESCE(SUM(l.amount), 0) as current_balance
       FROM chart_of_accounts_level1 c1
       LEFT JOIN ledgers l ON l.account_id = c1.id AND l.account_type = 'LEVEL1'
-      GROUP BY c1.id
+      GROUP BY c1.id, c1.unified_id
       ORDER BY c1.name
     `;
     const result = await pool.query(query);

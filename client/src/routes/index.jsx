@@ -7,6 +7,7 @@ import Header from '../components/layout/Header';
 import Sidebar from '../components/layout/Sidebar';
 import LeaveApplicationForm from '../components/hrm/LeaveApplicationForm';
 import LoanApplicationForm from '../components/hrm/LoanApplicationForm';
+import ChartOfAccountsLevel4 from '../components/accounts/ChartOfAccountsLevel4';
 
 const AppLayout = ({ children }) => (
   <>
@@ -40,6 +41,10 @@ const router = createBrowserRouter([
   {
     path: '/hrm/loan-application',
     element: <AppLayout><LoanApplicationForm /></AppLayout>
+  },
+  {
+    path: '/accounts/chart/level4',
+    element: <AppLayout><ChartOfAccountsLevel4 /></AppLayout>
   }
 ]);
 

@@ -59,10 +59,35 @@ router.post('/process-store-purchase', async (req, res) => {
       throw new Error('Invalid vendor ID');
     }
 
+    // Get the unified_account_id for the account
+    const accountResult = await client.query(
+      `SELECT 
+        COALESCE(l1.unified_id, l2.unified_id, l3.unified_id) as unified_account_id
+       FROM (
+         SELECT id, unified_id FROM chart_of_accounts_level1 WHERE id = $1
+         UNION ALL
+         SELECT id, unified_id FROM chart_of_accounts_level2 WHERE id = $1
+         UNION ALL
+         SELECT id, unified_id FROM chart_of_accounts_level3 WHERE id = $1
+       ) AS accounts(id, unified_id)
+       LEFT JOIN chart_of_accounts_level1 l1 ON accounts.id = l1.id
+       LEFT JOIN chart_of_accounts_level2 l2 ON accounts.id = l2.id
+       LEFT JOIN chart_of_accounts_level3 l3 ON accounts.id = l3.id
+       WHERE accounts.id = $1`,
+      [entry.vendor_id]
+    );
+
+    if (accountResult.rows.length === 0) {
+      throw new Error('Account not found');
+    }
+
+    const unified_account_id = accountResult.rows[0].unified_account_id;
+
     // Create transaction for vendor with description containing all details
     const transactionResult = await client.query(
       `INSERT INTO transactions (
         account_id, 
+        unified_account_id,
         transaction_date, 
         reference_no,
         entry_type, 
@@ -72,10 +97,11 @@ router.post('/process-store-purchase', async (req, res) => {
         quantity,
         unit,
         price_per_unit
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
       RETURNING id`,
       [
         entry.vendor_id,
+        unified_account_id,
         entry.process_time,
         entry.grn_number,
         'CREDIT',

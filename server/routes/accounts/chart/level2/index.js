@@ -35,7 +35,7 @@ router.get('/', async (req, res) => {
       FROM chart_of_accounts_level2 c2
       JOIN chart_of_accounts_level1 c1 ON c2.level1_id = c1.id
       LEFT JOIN ledgers l ON l.account_id = c2.id AND l.account_type = 'LEVEL2'
-      GROUP BY c2.id, c1.name
+      GROUP BY c2.id, c2.unified_id, c1.name
       ORDER BY c1.name, c2.name
     `;
     const result = await pool.query(query);

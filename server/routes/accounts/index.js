@@ -370,11 +370,36 @@ router.put('/store-entry/:grnNumber', async (req, res) => {
         [total_amount, storeResult.rows[0].vendor_id]
       );
       
+      // Get the unified_account_id for the account
+      const accountResult = await client.query(
+        `SELECT 
+          COALESCE(l1.unified_id, l2.unified_id, l3.unified_id) as unified_account_id
+         FROM (
+           SELECT id, unified_id FROM chart_of_accounts_level1 WHERE id = $1
+           UNION ALL
+           SELECT id, unified_id FROM chart_of_accounts_level2 WHERE id = $1
+           UNION ALL
+           SELECT id, unified_id FROM chart_of_accounts_level3 WHERE id = $1
+         ) AS accounts(id, unified_id)
+         LEFT JOIN chart_of_accounts_level1 l1 ON accounts.id = l1.id
+         LEFT JOIN chart_of_accounts_level2 l2 ON accounts.id = l2.id
+         LEFT JOIN chart_of_accounts_level3 l3 ON accounts.id = l3.id
+         WHERE accounts.id = $1`,
+        [storeResult.rows[0].vendor_id]
+      );
+
+      if (accountResult.rows.length === 0) {
+        throw new Error('Account not found');
+      }
+
+      const unified_account_id = accountResult.rows[0].unified_account_id;
+
       // Create a new transaction record
       await client.query(
         `INSERT INTO transactions (
           transaction_date,
           account_id,
+          unified_account_id,
           reference_no,
           entry_type,
           amount,
@@ -383,10 +408,11 @@ router.put('/store-entry/:grnNumber', async (req, res) => {
           quantity,
           unit,
           price_per_unit
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
         [
           new Date(),
           storeResult.rows[0].vendor_id,
+          unified_account_id,
           grnNumber,
           'CREDIT',
           total_amount,
@@ -418,9 +444,31 @@ router.post('/payments/long-voucher', async (req, res) => {
   const client = await pool.connect();
   try {
     const { fromAccount, toAccount, amount, date, description } = req.body;
+    
+    console.log('Long voucher request received:', {
+      fromAccount,
+      toAccount,
+      amount,
+      date,
+      description
+    });
     if (!fromAccount || !toAccount || !amount) {
       return res.status(400).json({ error: 'Missing required fields' });
     }
+
+    // Convert amount to number and ensure it's properly formatted
+    const numericAmount = Math.round(parseFloat(amount) * 100) / 100; // Round to 2 decimal places
+    
+    console.log('Long voucher request:', {
+      fromAccount,
+      toAccount,
+      originalAmount: amount,
+      numericAmount: numericAmount,
+      amountType: typeof amount,
+      numericAmountType: typeof numericAmount,
+      date,
+      description
+    });
 
     // Create date object with current time in local timezone
     const now = new Date();
@@ -471,6 +519,13 @@ router.post('/payments/long-voucher', async (req, res) => {
     const { rows: fromRows } = await client.query(fromAccountQuery, [fromAccount]);
     const { rows: toRows } = await client.query(toAccountQuery, [toAccount]);
 
+    console.log('Account query results:', {
+      fromAccount,
+      toAccount,
+      fromRows,
+      toRows
+    });
+
     const fromName = fromRows[0] ? 
       [fromRows[0].level1_name, fromRows[0].level2_name, fromRows[0].level3_name]
         .filter(Boolean)
@@ -481,24 +536,97 @@ router.post('/payments/long-voucher', async (req, res) => {
         .filter(Boolean)
         .join(' > ') : 'Account';
 
+    console.log('Account names:', {
+      fromName,
+      toName
+    });
+
     // Create a more concise description
     const detail = description && description.trim().length > 0
       ? description
       : `${fromName} to ${toName}`;
 
+    // Get unified_account_ids for both accounts - improved to handle accounts that exist in multiple levels
+    const fromAccountResult = await client.query(
+      `SELECT unified_account_id FROM (
+        SELECT l3.unified_id as unified_account_id, 3 as priority
+        FROM chart_of_accounts_level3 l3 WHERE l3.id = $1
+        UNION ALL
+        SELECT l2.unified_id as unified_account_id, 2 as priority
+        FROM chart_of_accounts_level2 l2 WHERE l2.id = $1
+        UNION ALL
+        SELECT l1.unified_id as unified_account_id, 1 as priority
+        FROM chart_of_accounts_level1 l1 WHERE l1.id = $1
+      ) accounts
+      ORDER BY priority DESC
+      LIMIT 1`,
+      [fromAccount]
+    );
+
+    const toAccountResult = await client.query(
+      `SELECT unified_account_id FROM (
+        SELECT l3.unified_id as unified_account_id, 3 as priority
+        FROM chart_of_accounts_level3 l3 WHERE l3.id = $1
+        UNION ALL
+        SELECT l2.unified_id as unified_account_id, 2 as priority
+        FROM chart_of_accounts_level2 l2 WHERE l2.id = $1
+        UNION ALL
+        SELECT l1.unified_id as unified_account_id, 1 as priority
+        FROM chart_of_accounts_level1 l1 WHERE l1.id = $1
+      ) accounts
+      ORDER BY priority DESC
+      LIMIT 1`,
+      [toAccount]
+    );
+
+    if (fromAccountResult.rows.length === 0 || toAccountResult.rows.length === 0) {
+      throw new Error('One or both accounts not found');
+    }
+
+    const fromUnifiedId = fromAccountResult.rows[0].unified_account_id;
+    const toUnifiedId = toAccountResult.rows[0].unified_account_id;
+
+    console.log('Unified account IDs:', {
+      fromAccount,
+      toAccount,
+      fromUnifiedId,
+      toUnifiedId,
+      fromAccountResult: fromAccountResult.rows[0],
+      toAccountResult: toAccountResult.rows[0]
+    });
+
+    console.log('Long voucher transaction details:', {
+      fromAccount,
+      toAccount,
+      fromUnifiedId,
+      toUnifiedId,
+      fromName,
+      toName,
+      voucherNo,
+      numericAmount,
+      detail
+    });
+
     await client.query('BEGIN');
     // CREDIT from account
-    await client.query(
-      `INSERT INTO transactions (transaction_date, account_id, reference_no, entry_type, amount, description, created_at)
-       VALUES ($1, $2, $3, 'CREDIT', $4, $5, NOW())`,
-      [dateObj, fromAccount, voucherNo, amount, detail]
+    const creditResult = await client.query(
+      `INSERT INTO transactions (transaction_date, account_id, unified_account_id, reference_no, entry_type, amount, description, created_at)
+       VALUES ($1, $2, $3, $4, 'CREDIT', $5, $6, NOW())
+       RETURNING id, account_id, unified_account_id`,
+      [dateObj, fromAccount, fromUnifiedId, voucherNo, numericAmount, detail]
     );
+    
+    console.log('Created CREDIT transaction:', creditResult.rows[0]);
+    
     // DEBIT to account
-    await client.query(
-      `INSERT INTO transactions (transaction_date, account_id, reference_no, entry_type, amount, description, created_at)
-       VALUES ($1, $2, $3, 'DEBIT', $4, $5, NOW())`,
-      [dateObj, toAccount, voucherNo, amount, detail]
+    const debitResult = await client.query(
+      `INSERT INTO transactions (transaction_date, account_id, unified_account_id, reference_no, entry_type, amount, description, created_at)
+       VALUES ($1, $2, $3, $4, 'DEBIT', $5, $6, NOW())
+       RETURNING id, account_id, unified_account_id`,
+      [dateObj, toAccount, toUnifiedId, voucherNo, numericAmount, detail]
     );
+    
+    console.log('Created DEBIT transaction:', debitResult.rows[0]);
     await client.query('COMMIT');
     res.json({ message: 'Long voucher created', voucherNo });
   } catch (err) {
@@ -648,10 +776,35 @@ router.post('/process-store-purchase', async (req, res) => {
       throw new Error('Invalid vendor ID');
     }
 
+    // Get the unified_account_id for the account
+    const accountResult = await client.query(
+      `SELECT 
+        COALESCE(l1.unified_id, l2.unified_id, l3.unified_id) as unified_account_id
+       FROM (
+         SELECT id, unified_id FROM chart_of_accounts_level1 WHERE id = $1
+         UNION ALL
+         SELECT id, unified_id FROM chart_of_accounts_level2 WHERE id = $1
+         UNION ALL
+         SELECT id, unified_id FROM chart_of_accounts_level3 WHERE id = $1
+       ) AS accounts(id, unified_id)
+       LEFT JOIN chart_of_accounts_level1 l1 ON accounts.id = l1.id
+       LEFT JOIN chart_of_accounts_level2 l2 ON accounts.id = l2.id
+       LEFT JOIN chart_of_accounts_level3 l3 ON accounts.id = l3.id
+       WHERE accounts.id = $1`,
+      [entry.vendor_id]
+    );
+
+    if (accountResult.rows.length === 0) {
+      throw new Error('Account not found');
+    }
+
+    const unified_account_id = accountResult.rows[0].unified_account_id;
+
     // Create transaction for vendor with description containing all details
     const transactionResult = await client.query(
       `INSERT INTO transactions (
         account_id, 
+        unified_account_id,
         transaction_date, 
         reference_no,
         entry_type, 
@@ -661,10 +814,11 @@ router.post('/process-store-purchase', async (req, res) => {
         quantity,
         unit,
         price_per_unit
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
       RETURNING id`,
       [
         entry.vendor_id,
+        unified_account_id,
         entry.process_time,
         entry.grn_number,
         'CREDIT',

@@ -21,13 +21,16 @@ const LongVoucher = () => {
     try {
       const res = await fetch(`${config.apiUrl}/accounts/chart/all`);
       const data = await res.json();
+      console.log('Fetched accounts:', data.slice(0, 5)); // Log first 5 accounts
       setAccounts(Array.isArray(data) ? data : []);
     } catch (err) {
+      console.error('Error fetching accounts:', err);
       setAccounts([]);
     }
   };
 
   const handleAccountChange = (name, value) => {
+    console.log(`Account ${name} changed to:`, value);
     if (value) {
       setForm({ ...form, [name]: value });
     } else {
@@ -45,6 +48,15 @@ const LongVoucher = () => {
       alert('Please fill all required fields');
       return;
     }
+    
+    console.log('Submitting long voucher with accounts:', {
+      creditAccount: form.creditAccount,
+      debitAccount: form.debitAccount,
+      amount: form.amount,
+      date: form.date,
+      description: form.description
+    });
+    
     setLoading(true);
     try {
       const res = await fetch(`${config.apiUrl}/accounts/payments/long-voucher`, {

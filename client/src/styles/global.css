@@ -132,3 +132,33 @@ body {
     padding: 16px;
   }
 } 
+
+/* Print styles */
+@media print {
+  .no-print {
+    display: none !important;
+  }
+  
+  .print-only {
+    display: block !important;
+  }
+  
+  .page-container {
+    margin-left: 0 !important;
+    margin-top: 0 !important;
+    padding: 0 !important;
+    width: 100% !important;
+  }
+  
+  .MuiTableContainer-root {
+    box-shadow: none !important;
+  }
+  
+  .MuiPaper-root {
+    box-shadow: none !important;
+  }
+}
+
+.print-only {
+  display: none;
+} 

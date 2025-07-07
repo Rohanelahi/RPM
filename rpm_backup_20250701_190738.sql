@@ -2,8 +2,8 @@
 -- PostgreSQL database dump
 --
 
--- Dumped from database version 17.2
--- Dumped by pg_dump version 17.2
+-- Dumped from database version 17.5
+-- Dumped by pg_dump version 17.5
 
 SET statement_timeout = 0;
 SET lock_timeout = 0;
@@ -158,7 +158,7 @@ CREATE TABLE public.accounts (
     created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
     chart_account_id integer,
     chart_account_level integer DEFAULT 1,
-    CONSTRAINT accounts_account_type_check CHECK (((account_type)::text = ANY ((ARRAY['SUPPLIER'::character varying, 'CUSTOMER'::character varying, 'VENDOR'::character varying])::text[])))
+    CONSTRAINT accounts_account_type_check CHECK (((account_type)::text = ANY ((ARRAY['SUPPLIER'::character varying, 'CUSTOMER'::character varying, 'VENDOR'::character varying, 'EXPENSE'::character varying])::text[])))
 );
 
 
@@ -194,19 +194,14 @@ CREATE TABLE public.bank_accounts (
     id integer NOT NULL,
     bank_name character varying(100) NOT NULL,
     account_name character varying(100) NOT NULL,
-    created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
-    account_number character varying(50),
+    account_number character varying(50) NOT NULL,
     branch_name character varying(100),
     ifsc_code character varying(20),
-    opening_balance numeric(15,2) DEFAULT 0,
-    current_balance numeric(15,2) DEFAULT 0,
-    account_type character varying(20),
-    status character varying(20) DEFAULT 'ACTIVE'::character varying,
-    updated_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
+    account_type character varying(20) DEFAULT 'CURRENT'::character varying,
     balance numeric(15,2) DEFAULT 0,
-    last_updated timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT bank_accounts_account_type_check CHECK (((account_type)::text = ANY ((ARRAY['SAVINGS'::character varying, 'CURRENT'::character varying, 'CC'::character varying, 'OD'::character varying])::text[]))),
-    CONSTRAINT bank_accounts_status_check CHECK (((status)::text = ANY ((ARRAY['ACTIVE'::character varying, 'INACTIVE'::character varying])::text[])))
+    status character varying(20) DEFAULT 'ACTIVE'::character varying,
+    created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
+    updated_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP
 );
 
 
@@ -241,15 +236,14 @@ ALTER SEQUENCE public.bank_accounts_id_seq OWNED BY public.bank_accounts.id;
 CREATE TABLE public.bank_transactions (
     id integer NOT NULL,
     account_id integer,
-    transaction_date timestamp without time zone NOT NULL,
-    description text,
+    transaction_date timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
+    balance numeric(15,2) NOT NULL,
     reference character varying(100),
     type character varying(10),
     amount numeric(15,2) NOT NULL,
-    balance numeric(15,2) NOT NULL,
-    created_at timestamp without time zone DEFAULT now() NOT NULL,
-    balance_after numeric(15,2),
     remarks text,
+    created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
+    balance_after numeric(15,2) NOT NULL,
     CONSTRAINT bank_transactions_type_check CHECK (((type)::text = ANY ((ARRAY['CREDIT'::character varying, 'DEBIT'::character varying])::text[])))
 );
 
@@ -409,7 +403,7 @@ CREATE TABLE public.chart_of_accounts_level1 (
     account_type character varying(10),
     created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
     updated_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT chart_of_accounts_level1_account_type_check CHECK (((account_type)::text = ANY ((ARRAY['SUPPLIER'::character varying, 'CUSTOMER'::character varying, 'VENDOR'::character varying, 'ACCOUNT'::character varying])::text[]))),
+    CONSTRAINT chart_of_accounts_level1_account_type_check CHECK (((account_type)::text = ANY ((ARRAY['SUPPLIER'::character varying, 'CUSTOMER'::character varying, 'VENDOR'::character varying, 'ACCOUNT'::character varying, 'EXPENSE'::character varying])::text[]))),
     CONSTRAINT chart_of_accounts_level1_balance_type_check CHECK (((balance_type)::text = ANY ((ARRAY['DEBIT'::character varying, 'CREDIT'::character varying])::text[])))
 );
 
@@ -451,8 +445,8 @@ CREATE TABLE public.chart_of_accounts_level2 (
     level1_id integer,
     created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
     updated_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT chart_of_accounts_level2_account_type_check CHECK (((account_type)::text = ANY ((ARRAY['SUPPLIER'::character varying, 'CUSTOMER'::character varying, 'VENDOR'::character varying, 'ACCOUNT'::character varying])::text[]))),
-    CONSTRAINT chart_of_accounts_level2_balance_type_check CHECK (((balance_type)::text = ANY ((ARRAY['DEBIT'::character varying, 'CREDIT'::character varying])::text[])))
+    CONSTRAINT chart_of_accounts_level2_account_type_check CHECK (((account_type)::text = ANY ((ARRAY['SUPPLIER'::character varying, 'CUSTOMER'::character varying, 'VENDOR'::character varying, 'ACCOUNT'::character varying, 'EXPENSE'::character varying])::text[]))),
+    CONSTRAINT chart_of_accounts_level2_balance_type_check CHECK (((balance_type)::text = ANY (ARRAY[('DEBIT'::character varying)::text, ('CREDIT'::character varying)::text])))
 );
 
 
@@ -494,8 +488,8 @@ CREATE TABLE public.chart_of_accounts_level3 (
     level2_id integer,
     created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
     updated_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT chart_of_accounts_level3_account_type_check CHECK (((account_type)::text = ANY ((ARRAY['SUPPLIER'::character varying, 'CUSTOMER'::character varying, 'VENDOR'::character varying, 'ACCOUNT'::character varying])::text[]))),
-    CONSTRAINT chart_of_accounts_level3_balance_type_check CHECK (((balance_type)::text = ANY ((ARRAY['DEBIT'::character varying, 'CREDIT'::character varying])::text[])))
+    CONSTRAINT chart_of_accounts_level3_account_type_check CHECK (((account_type)::text = ANY ((ARRAY['SUPPLIER'::character varying, 'CUSTOMER'::character varying, 'VENDOR'::character varying, 'ACCOUNT'::character varying, 'EXPENSE'::character varying])::text[]))),
+    CONSTRAINT chart_of_accounts_level3_balance_type_check CHECK (((balance_type)::text = ANY (ARRAY[('DEBIT'::character varying)::text, ('CREDIT'::character varying)::text])))
 );
 
 
@@ -655,7 +649,7 @@ CREATE TABLE public.daily_attendance (
     salary_for_day numeric(10,2) DEFAULT 0,
     hours_worked numeric(5,2) DEFAULT 0,
     standard_hours integer DEFAULT 8,
-    CONSTRAINT daily_attendance_status_check CHECK (((status)::text = ANY ((ARRAY['Present'::character varying, 'Absent'::character varying, 'Half Day'::character varying, 'On Leave'::character varying, 'Holiday'::character varying, 'Weekend'::character varying])::text[])))
+    CONSTRAINT daily_attendance_status_check CHECK (((status)::text = ANY (ARRAY[('Present'::character varying)::text, ('Absent'::character varying)::text, ('Half Day'::character varying)::text, ('On Leave'::character varying)::text, ('Holiday'::character varying)::text, ('Weekend'::character varying)::text])))
 );
 
 
@@ -739,7 +733,7 @@ CREATE TABLE public.employees (
     due_salary numeric(10,2) DEFAULT 0,
     emergency_contact_name character varying(100),
     emergency_contact_phone character varying(20),
-    CONSTRAINT valid_employee_separation_type CHECK (((separation_type)::text = ANY ((ARRAY['terminate'::character varying, 'resign'::character varying])::text[])))
+    CONSTRAINT valid_employee_separation_type CHECK (((separation_type)::text = ANY (ARRAY[('terminate'::character varying)::text, ('resign'::character varying)::text])))
 );
 
 
@@ -812,16 +806,16 @@ ALTER SEQUENCE public.expense_types_id_seq OWNED BY public.expense_types.id;
 CREATE TABLE public.expenses (
     id integer NOT NULL,
     date timestamp without time zone NOT NULL,
-    expense_type character varying(50) NOT NULL,
+    expense_type character varying(100) NOT NULL,
     amount numeric(10,2) NOT NULL,
     receiver_name character varying(100),
     remarks text,
-    created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
     voucher_no character varying(20),
     created_by integer,
     processed_by_role character varying(50),
     account_id integer,
-    account_type character varying(50)
+    account_type character varying(50),
+    created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP
 );
 
 
@@ -863,7 +857,7 @@ CREATE TABLE public.final_settlements (
     advance_deductions numeric(10,2) DEFAULT 0,
     net_settlement numeric(10,2) NOT NULL,
     created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT valid_separation_type CHECK (((separation_type)::text = ANY ((ARRAY['terminate'::character varying, 'resign'::character varying])::text[])))
+    CONSTRAINT valid_separation_type CHECK (((separation_type)::text = ANY (ARRAY[('terminate'::character varying)::text, ('resign'::character varying)::text])))
 );
 
 
@@ -914,7 +908,7 @@ CREATE TABLE public.gate_entries (
     has_freight boolean DEFAULT false,
     freight_amount numeric(10,2) DEFAULT 0,
     freight boolean DEFAULT false,
-    CONSTRAINT gate_entries_entry_type_check CHECK (((entry_type)::text = ANY ((ARRAY['PURCHASE_IN'::character varying, 'SALE_OUT'::character varying, 'PURCHASE_RETURN'::character varying, 'SALE_RETURN'::character varying])::text[])))
+    CONSTRAINT gate_entries_entry_type_check CHECK (((entry_type)::text = ANY (ARRAY[('PURCHASE_IN'::character varying)::text, ('SALE_OUT'::character varying)::text, ('PURCHASE_RETURN'::character varying)::text, ('SALE_RETURN'::character varying)::text])))
 );
 
 
@@ -961,8 +955,8 @@ CREATE TABLE public.gate_entries_pricing (
     final_quantity numeric(10,2),
     cut_weight numeric(10,2) DEFAULT 0,
     processed_by_role character varying(20),
-    CONSTRAINT gate_entries_pricing_entry_type_check CHECK (((entry_type)::text = ANY ((ARRAY['PURCHASE'::character varying, 'SALE'::character varying, 'PURCHASE_RETURN'::character varying, 'SALE_RETURN'::character varying])::text[]))),
-    CONSTRAINT gate_entries_pricing_status_check CHECK (((status)::text = ANY ((ARRAY['PENDING'::character varying, 'PROCESSED'::character varying])::text[])))
+    CONSTRAINT gate_entries_pricing_entry_type_check CHECK (((entry_type)::text = ANY (ARRAY[('PURCHASE'::character varying)::text, ('SALE'::character varying)::text, ('PURCHASE_RETURN'::character varying)::text, ('SALE_RETURN'::character varying)::text]))),
+    CONSTRAINT gate_entries_pricing_status_check CHECK (((status)::text = ANY (ARRAY[('PENDING'::character varying)::text, ('PROCESSED'::character varying)::text])))
 );
 
 
@@ -1007,7 +1001,7 @@ CREATE TABLE public.gate_returns (
     date_time timestamp without time zone NOT NULL,
     remarks text,
     created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT gate_returns_return_type_check CHECK (((return_type)::text = ANY ((ARRAY['PURCHASE_RETURN'::character varying, 'SALE_RETURN'::character varying])::text[])))
+    CONSTRAINT gate_returns_return_type_check CHECK (((return_type)::text = ANY (ARRAY[('PURCHASE_RETURN'::character varying)::text, ('SALE_RETURN'::character varying)::text])))
 );
 
 
@@ -1049,7 +1043,7 @@ CREATE TABLE public.income_statement_adjustments (
     new_value numeric(15,2) NOT NULL,
     remarks text,
     created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT valid_category CHECK (((category)::text = ANY ((ARRAY['LABOR'::character varying, 'MATERIALS'::character varying, 'BOILER_FUEL'::character varying, 'ENERGY'::character varying, 'MAINTENANCE'::character varying, 'PRODUCTION'::character varying])::text[])))
+    CONSTRAINT valid_category CHECK (((category)::text = ANY (ARRAY[('LABOR'::character varying)::text, ('MATERIALS'::character varying)::text, ('BOILER_FUEL'::character varying)::text, ('ENERGY'::character varying)::text, ('MAINTENANCE'::character varying)::text, ('PRODUCTION'::character varying)::text])))
 );
 
 
@@ -1127,7 +1121,7 @@ CREATE TABLE public.leave_applications (
     status character varying(20) DEFAULT 'PENDING'::character varying,
     approved_by character varying(100),
     created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT leave_applications_status_check CHECK (((status)::text = ANY ((ARRAY['PENDING'::character varying, 'APPROVED'::character varying, 'REJECTED'::character varying])::text[])))
+    CONSTRAINT leave_applications_status_check CHECK (((status)::text = ANY (ARRAY[('PENDING'::character varying)::text, ('APPROVED'::character varying)::text, ('REJECTED'::character varying)::text])))
 );
 
 
@@ -1169,8 +1163,8 @@ CREATE TABLE public.ledger_entries (
     voucher_no character varying(20),
     created_by integer,
     processed_by_role character varying(50),
-    created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
-    account_type character varying(50)
+    account_type character varying(50),
+    created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP
 );
 
 
@@ -1212,8 +1206,8 @@ CREATE TABLE public.ledgers (
     transaction_date timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
     created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
     updated_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT ledgers_account_type_check CHECK (((account_type)::text = ANY ((ARRAY['LEVEL1'::character varying, 'LEVEL2'::character varying, 'LEVEL3'::character varying])::text[]))),
-    CONSTRAINT ledgers_balance_type_check CHECK (((balance_type)::text = ANY ((ARRAY['DEBIT'::character varying, 'CREDIT'::character varying])::text[])))
+    CONSTRAINT ledgers_account_type_check CHECK (((account_type)::text = ANY (ARRAY[('LEVEL1'::character varying)::text, ('LEVEL2'::character varying)::text, ('LEVEL3'::character varying)::text]))),
+    CONSTRAINT ledgers_balance_type_check CHECK (((balance_type)::text = ANY (ARRAY[('DEBIT'::character varying)::text, ('CREDIT'::character varying)::text])))
 );
 
 
@@ -1257,8 +1251,8 @@ CREATE TABLE public.loan_applications (
     status character varying(20) DEFAULT 'PENDING'::character varying,
     approved_by character varying(100),
     created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT loan_applications_loan_type_check CHECK (((loan_type)::text = ANY ((ARRAY['loan'::character varying, 'advance'::character varying])::text[]))),
-    CONSTRAINT loan_applications_status_check CHECK (((status)::text = ANY ((ARRAY['PENDING'::character varying, 'APPROVED'::character varying, 'REJECTED'::character varying])::text[])))
+    CONSTRAINT loan_applications_loan_type_check CHECK (((loan_type)::text = ANY (ARRAY[('loan'::character varying)::text, ('advance'::character varying)::text]))),
+    CONSTRAINT loan_applications_status_check CHECK (((status)::text = ANY (ARRAY[('PENDING'::character varying)::text, ('APPROVED'::character varying)::text, ('REJECTED'::character varying)::text])))
 );
 
 
@@ -1588,7 +1582,7 @@ CREATE TABLE public.pricing_entries (
     processed_at timestamp without time zone,
     created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT pricing_entries_entry_type_check CHECK (((entry_type)::text = ANY (ARRAY[('PURCHASE'::character varying)::text, ('SALE'::character varying)::text, ('PURCHASE_RETURN'::character varying)::text, ('SALE_RETURN'::character varying)::text, ('STORE_PURCHASE'::character varying)::text, ('STORE_RETURN'::character varying)::text]))),
-    CONSTRAINT pricing_entries_status_check CHECK (((status)::text = ANY ((ARRAY['PENDING'::character varying, 'PROCESSED'::character varying])::text[])))
+    CONSTRAINT pricing_entries_status_check CHECK (((status)::text = ANY (ARRAY[('PENDING'::character varying)::text, ('PROCESSED'::character varying)::text])))
 );
 
 
@@ -1634,7 +1628,7 @@ CREATE TABLE public.production (
     electricity_units numeric(10,2),
     electricity_unit_price numeric(10,2),
     electricity_cost numeric(10,2),
-    CONSTRAINT production_boiler_fuel_type_check CHECK (((boiler_fuel_type)::text = ANY ((ARRAY['Boiler Fuel (Toori)'::character varying, 'Boiler Fuel (Tukka)'::character varying])::text[]))),
+    CONSTRAINT production_boiler_fuel_type_check CHECK (((boiler_fuel_type)::text = ANY (ARRAY[('Boiler Fuel (Toori)'::character varying)::text, ('Boiler Fuel (Tukka)'::character varying)::text]))),
     CONSTRAINT production_paper_type_check CHECK (((paper_type)::text = ANY (ARRAY['Super'::text])))
 );
 
@@ -1952,7 +1946,7 @@ CREATE TABLE public.store_entries (
     date_time timestamp without time zone NOT NULL,
     remarks text,
     created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT store_entries_entry_type_check CHECK (((entry_type)::text = ANY ((ARRAY['STORE_IN'::character varying, 'STORE_OUT'::character varying])::text[])))
+    CONSTRAINT store_entries_entry_type_check CHECK (((entry_type)::text = ANY (ARRAY[('STORE_IN'::character varying)::text, ('STORE_OUT'::character varying)::text])))
 );
 
 
@@ -2114,7 +2108,7 @@ CREATE TABLE public.transactions (
     unit character varying(20),
     price_per_unit numeric(10,2),
     created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT transactions_entry_type_check CHECK (((entry_type)::text = ANY ((ARRAY['DEBIT'::character varying, 'CREDIT'::character varying])::text[])))
+    CONSTRAINT transactions_entry_type_check CHECK (((entry_type)::text = ANY (ARRAY[('DEBIT'::character varying)::text, ('CREDIT'::character varying)::text])))
 );
 
 
@@ -2520,8 +2514,6 @@ ALTER TABLE ONLY public.workers_salary_totals ALTER COLUMN id SET DEFAULT nextva
 --
 
 COPY public.accounts (id, account_name, account_type, contact_person, phone, email, address, opening_balance, current_balance, created_at, chart_account_id, chart_account_level) FROM stdin;
-4	SMS	CUSTOMER	\N	\N	\N	\N	0.00	1157300.00	2025-06-15 16:18:19.536522	4	1
-5	RS	CUSTOMER	\N	\N	\N	\N	0.00	2568400.00	2025-06-20 18:12:19.651306	5	1
 \.
 
 
@@ -2529,8 +2521,8 @@ COPY public.accounts (id, account_name, account_type, contact_person, phone, ema
 -- Data for Name: bank_accounts; Type: TABLE DATA; Schema: public; Owner: postgres
 --
 
-COPY public.bank_accounts (id, bank_name, account_name, created_at, account_number, branch_name, ifsc_code, opening_balance, current_balance, account_type, status, updated_at, balance, last_updated) FROM stdin;
-1	Meezan		2025-06-13 17:33:30.434645	12345678			0.00	20900.00	CURRENT	ACTIVE	2025-06-14 14:57:27.158506	0.00	2025-06-13 17:33:30.434645
+COPY public.bank_accounts (id, bank_name, account_name, account_number, branch_name, ifsc_code, account_type, balance, status, created_at, updated_at) FROM stdin;
+2	Meezan		123456789			CURRENT	0.00	ACTIVE	2025-06-28 14:07:40.565729	2025-06-28 14:07:40.565729
 \.
 
 
@@ -2538,13 +2530,7 @@ COPY public.bank_accounts (id, bank_name, account_name, created_at, account_numb
 -- Data for Name: bank_transactions; Type: TABLE DATA; Schema: public; Owner: postgres
 --
 
-COPY public.bank_transactions (id, account_id, transaction_date, description, reference, type, amount, balance, created_at, balance_after, remarks) FROM stdin;
-1	1	2025-06-14 14:25:29.37	\N	RV20250011	CREDIT	10000.00	0.00	2025-06-14 14:25:46.228193	10000.00	Payment from Bhatti
-2	1	2025-06-14 14:28:15.354	\N	RV20250012	CREDIT	15000.00	10000.00	2025-06-14 14:28:27.349044	25000.00	Payment from sajjad
-3	1	2025-06-14 14:37:19.031	\N	PV20250003	DEBIT	1000.00	25000.00	2025-06-14 14:37:33.943944	24000.00	Payment to bhatti
-4	1	2025-06-14 14:55:26.510352	\N	Cash Withdrawal	DEBIT	4000.00	24000.00	2025-06-14 14:55:26.510352	20000.00	\N
-5	1	2025-06-14 14:56:33.95	\N	PV20250004	DEBIT	100.00	20000.00	2025-06-14 14:56:48.342664	19900.00	Payment to ali
-6	1	2025-06-14 14:57:27.158506	\N	Cash Deposit	CREDIT	1000.00	19900.00	2025-06-14 14:57:27.158506	20900.00	\N
+COPY public.bank_transactions (id, account_id, transaction_date, balance, reference, type, amount, remarks, created_at, balance_after) FROM stdin;
 \.
 
 
@@ -2553,7 +2539,7 @@ COPY public.bank_transactions (id, account_id, transaction_date, description, re
 --
 
 COPY public.cash_tracking (id, cash_in_hand, cash_in_bank, last_updated) FROM stdin;
-1	32610.00	0.00	2025-06-14 14:57:27.158506
+2	4900.00	0.00	2025-06-28 15:54:25.039527
 \.
 
 
@@ -2562,19 +2548,9 @@ COPY public.cash_tracking (id, cash_in_hand, cash_in_bank, last_updated) FROM st
 --
 
 COPY public.cash_transactions (id, transaction_date, type, amount, reference, remarks, balance, balance_after, created_at) FROM stdin;
-1	2025-06-13 16:52:24.614962	CREDIT	10000.00	RV20250001	Payment from Adeel	0.00	10000.00	2025-06-13 16:52:24.614962
-2	2025-06-13 16:59:54.07331	CREDIT	10000.00	RV20250002	Payment from Adeel	10000.00	20000.00	2025-06-13 16:59:54.07331
-5	2025-06-13 17:09:31.777	CREDIT	4000.00	RV20250004	Payment from ali	20000.00	24000.00	2025-06-13 17:21:06.026897
-6	2025-06-13 17:22:44.672	CREDIT	1000.00	RV20250005	Payment from ALI	24000.00	25000.00	2025-06-13 17:22:56.706735
-7	2025-06-13 19:48:17.787	CREDIT	1000.00	RV20250006	Payment from Murtaza	25000.00	26000.00	2025-06-13 19:48:28.644686
-8	2025-06-13 19:48:28.697	CREDIT	500.00	RV20250007	Payment from Murtaza	26000.00	26500.00	2025-06-13 19:57:52.189041
-9	2025-06-13 21:54:17.758	CREDIT	1700.00	RV20250008	Payment from abid	26500.00	28200.00	2025-06-13 21:54:33.211664
-10	2025-06-13 21:55:32.439	CREDIT	1600.00	RV20250009	Payment from ali	28200.00	29800.00	2025-06-13 21:55:47.451451
-11	2025-06-14 13:58:52.918	CREDIT	1000.00	RV20250010	Payment from ali	29800.00	30800.00	2025-06-14 13:59:06.404662
-12	2025-06-14 14:34:09.796	DEBIT	1000.00	PV20250001	Payment to bhatti	30800.00	29800.00	2025-06-14 14:34:30.149554
-13	2025-06-14 14:36:52.738	DEBIT	190.00	PV20250002	Payment to ali	29800.00	29610.00	2025-06-14 14:37:06.651611
-14	2025-06-14 14:55:26.510352	CREDIT	4000.00	Bank Withdrawal	Cash Withdrawal	29610.00	33610.00	2025-06-14 14:55:26.510352
-15	2025-06-14 14:57:27.158506	DEBIT	1000.00	Bank Deposit	Cash Deposit	33610.00	32610.00	2025-06-14 14:57:27.158506
+18	2025-06-28 14:07:59.453	CREDIT	10000.00	RV20250001	Payment from ali	0.00	10000.00	2025-06-28 14:10:29.807657
+19	2025-06-28 14:11:35.022	DEBIT	5000.00	PV20250001	Payment to ali	10000.00	5000.00	2025-06-28 14:11:48.45832
+20	2025-06-28 15:52:45.34	DEBIT	57.00	EV20250011	Expense payment to afrt	5000.00	4943.00	2025-06-28 15:54:25.039527
 \.
 
 
@@ -2591,10 +2567,9 @@ COPY public.chart_of_accounts (id, name, account_type, level1_id, level2_id, lev
 --
 
 COPY public.chart_of_accounts_level1 (id, name, opening_balance, balance_type, account_type, created_at, updated_at) FROM stdin;
-1	RECEIVABLE	0.00	DEBIT	ACCOUNT	2025-06-03 13:53:37.223122	2025-06-03 13:53:37.223122
-2	Expense	0.00	DEBIT	ACCOUNT	2025-06-03 13:54:36.540159	2025-06-03 13:54:36.540159
-3	Customer	0.00	DEBIT	ACCOUNT	2025-06-13 16:50:58.927367	2025-06-13 16:50:58.927367
-4	Payable	0.00	DEBIT	ACCOUNT	2025-06-20 17:20:53.238154	2025-06-20 17:20:53.238154
+5	Receivables	0.00	DEBIT	ACCOUNT	2025-06-28 14:05:49.099681	2025-06-28 14:05:49.099681
+6	Payables	0.00	DEBIT	ACCOUNT	2025-06-28 14:06:25.502073	2025-06-28 14:06:25.502073
+7	Expense	0.00	DEBIT	ACCOUNT	2025-06-28 14:18:49.26688	2025-06-28 14:18:49.26688
 \.
 
 
@@ -2603,10 +2578,9 @@ COPY public.chart_of_accounts_level1 (id, name, opening_balance, balance_type, a
 --
 
 COPY public.chart_of_accounts_level2 (id, name, opening_balance, balance_type, account_type, level1_id, created_at, updated_at) FROM stdin;
-1	Raddi 	0.00	DEBIT	ACCOUNT	1	2025-06-03 13:54:07.787659	2025-06-03 13:54:07.787659
-2	Petrol	0.00	DEBIT	ACCOUNT	2	2025-06-03 13:54:46.075782	2025-06-03 13:54:46.075782
-3	Paper	0.00	DEBIT	ACCOUNT	3	2025-06-13 16:51:19.302187	2025-06-13 16:51:19.302187
-4	Store	0.00	DEBIT	ACCOUNT	4	2025-06-20 17:21:08.129658	2025-06-20 17:21:08.129658
+5	Raddi	0.00	DEBIT	ACCOUNT	5	2025-06-28 14:06:02.198046	2025-06-28 14:06:02.198046
+6	customer	0.00	DEBIT	ACCOUNT	5	2025-06-28 14:06:36.212237	2025-06-28 14:06:36.212237
+7	Regular	0.00	DEBIT	ACCOUNT	7	2025-06-28 14:19:01.965002	2025-06-28 14:19:01.965002
 \.
 
 
@@ -2615,12 +2589,10 @@ COPY public.chart_of_accounts_level2 (id, name, opening_balance, balance_type, a
 --
 
 COPY public.chart_of_accounts_level3 (id, name, opening_balance, balance_type, account_type, level1_id, level2_id, created_at, updated_at) FROM stdin;
-1	Sajjad	0.00	DEBIT	ACCOUNT	1	1	2025-06-03 13:54:16.65937	2025-06-03 13:54:16.65937
-2	Sajjad1	0.00	DEBIT	SUPPLIER	1	1	2025-06-03 13:54:28.30691	2025-06-03 13:54:28.30691
-3	Mahmood	0.00	DEBIT	ACCOUNT	3	3	2025-06-13 16:51:33.00579	2025-06-13 16:51:33.00579
-4	SMS	0.00	DEBIT	CUSTOMER	3	3	2025-06-13 16:52:00.565438	2025-06-13 16:52:00.565438
-5	RS	0.00	DEBIT	CUSTOMER	3	3	2025-06-13 21:54:14.599429	2025-06-13 21:54:14.599429
-6	Murtaza	0.00	DEBIT	VENDOR	4	4	2025-06-20 17:21:24.360015	2025-06-20 17:21:24.360015
+7	Sajjad	0.00	DEBIT	SUPPLIER	5	5	2025-06-28 14:06:16.228922	2025-06-28 14:06:16.228922
+8	RS	0.00	DEBIT	CUSTOMER	5	6	2025-06-28 14:06:49.237034	2025-06-28 14:06:49.237034
+9	Petrol	0.00	DEBIT	ACCOUNT	7	7	2025-06-28 14:19:16.90545	2025-06-28 14:19:16.90545
+11	Petrol1	0.00	DEBIT	EXPENSE	7	7	2025-06-28 15:00:11.98864	2025-06-28 15:00:11.98864
 \.
 
 
@@ -2645,8 +2617,6 @@ COPY public.contractor_salary_history (id, contractor_id, previous_salary, new_s
 --
 
 COPY public.contractors (id, name, monthly_salary, status, created_at) FROM stdin;
-1	Load/Unload Contractor	500000.00	ACTIVE	2025-06-03 13:56:48.338784
-2	Rewinder Contractor	500000.00	ACTIVE	2025-06-03 13:56:48.338784
 \.
 
 
@@ -2655,10 +2625,6 @@ COPY public.contractors (id, name, monthly_salary, status, created_at) FROM stdi
 --
 
 COPY public.daily_attendance (id, employee_id, attendance_date, status, in_time, out_time, overtime, remarks, created_at, salary_for_day, hours_worked, standard_hours) FROM stdin;
-1	25GATE2681	2025-06-16	Present	07:00:00	19:00:00	0.00		2025-06-16 15:25:02.237201	0.00	12.00	12
-2	25GATE2681	2025-06-20	Present	07:00:00	19:00:00	0.00		2025-06-20 18:00:40.605971	0.00	12.00	12
-3	25GATE2681	2025-06-19	Present	07:00:00	19:00:00	0.00		2025-06-20 18:01:04.172977	0.00	12.00	12
-4	25GATE2681	2025-06-18	Present	07:00:00	19:00:00	0.00		2025-06-20 18:01:08.668086	0.00	12.00	12
 \.
 
 
@@ -2667,14 +2633,6 @@ COPY public.daily_attendance (id, employee_id, attendance_date, status, in_time,
 --
 
 COPY public.departments (id, name, code, created_at) FROM stdin;
-1	Machine Hall	MAH	2025-06-03 13:56:36.965796
-2	Mechanical	MECH	2025-06-03 13:56:36.965796
-3	Laboratory	LAB	2025-06-03 13:56:36.965796
-4	Store	STORE	2025-06-03 13:56:36.965796
-5	Administration	ADMIN	2025-06-03 13:56:36.965796
-6	Electrical	ELEC	2025-06-03 13:56:36.965796
-7	Gate	GATE	2025-06-03 13:56:36.965796
-8	Pulp Section	PULP	2025-06-03 13:56:36.965796
 \.
 
 
@@ -2683,7 +2641,6 @@ COPY public.departments (id, name, code, created_at) FROM stdin;
 --
 
 COPY public.employees (id, first_name, last_name, department_id, designation, joining_date, salary, phone, status, created_at, termination_date, separation_type, due_salary, emergency_contact_name, emergency_contact_phone) FROM stdin;
-25GATE2681	Ali	Rehman	7	Security	2025-06-16	25000.00	013245	ACTIVE	2025-06-16 15:24:45.685841	\N	\N	0.00	0321456	0321456
 \.
 
 
@@ -2699,7 +2656,18 @@ COPY public.expense_types (id, name, description, status, created_at, updated_at
 -- Data for Name: expenses; Type: TABLE DATA; Schema: public; Owner: postgres
 --
 
-COPY public.expenses (id, date, expense_type, amount, receiver_name, remarks, created_at, voucher_no, created_by, processed_by_role, account_id, account_type) FROM stdin;
+COPY public.expenses (id, date, expense_type, amount, receiver_name, remarks, voucher_no, created_by, processed_by_role, account_id, account_type, created_at) FROM stdin;
+5	2025-06-28 15:08:07.499	Expense > Regular	100.00	fida		EV20250001	\N	ACCOUNTS	11	OTHER	2025-06-28 15:08:22.627263
+7	2025-06-28 15:17:15.814	Expense > Regular	100.00	adel		EV20250002	\N	ACCOUNTS	11	OTHER	2025-06-28 15:17:31.63239
+8	2025-06-28 15:18:45.036	Expense > Regular	1500.00	adel		EV20250003	\N	ACCOUNTS	11	OTHER	2025-06-28 15:18:59.707971
+9	2025-06-28 15:29:52.591	Expense > Regular	10.00	adel		EV20250004	\N	ACCOUNTS	11	OTHER	2025-06-28 15:30:05.916263
+10	2025-06-28 15:34:18.897	Expense > Regular	1400.00	adel		EV20250005	\N	ACCOUNTS	11	OTHER	2025-06-28 15:34:39.093527
+11	2025-06-28 15:37:35.297	Expense > Regular	15.00	adel		EV20250006	\N	ACCOUNTS	11	OTHER	2025-06-28 15:37:47.081422
+12	2025-06-28 15:37:47.161	Expense > Regular	12.00	adel		EV20250007	\N	ACCOUNTS	11	OTHER	2025-06-28 15:41:43.985047
+13	2025-06-28 15:42:37.583	Expense > Regular	12.00	afrt		EV20250008	\N	ACCOUNTS	11	OTHER	2025-06-28 15:42:54.013862
+14	2025-06-28 15:42:54.092	Expense > Regular	33.00	afrt		EV20250009	\N	ACCOUNTS	11	OTHER	2025-06-28 15:48:13.445555
+15	2025-06-28 15:48:13.55	Expense > Regular	10.00	afrt		EV20250010	\N	ACCOUNTS	11	OTHER	2025-06-28 15:52:45.211685
+16	2025-06-28 15:52:45.34	Expense > Regular	57.00	afrt		EV20250011	\N	ACCOUNTS	11	OTHER	2025-06-28 15:54:25.039527
 \.
 
 
@@ -2716,31 +2684,7 @@ COPY public.final_settlements (id, employee_id, separation_type, last_working_da
 --
 
 COPY public.gate_entries (id, grn_number, entry_type, supplier_id, purchaser_id, vehicle_type, vehicle_number, driver_name, item_type, paper_type, quantity, unit, date_time, remarks, created_at, has_freight, freight_amount, freight) FROM stdin;
-4	GRN-SP-250614-357	PURCHASE_IN	2	\N	\N	123	Arif	Petti	\N	10000.00	KG	2025-06-14 10:01:00.293	Supplier Qty: 10000, Received Qty: 10000, 	2025-06-14 15:01:37.932838	f	0.00	f
-5	GRN-SP-250614-326	PURCHASE_IN	2	\N	\N	123	Arif	Petti	\N	10000.00	KG	2025-06-14 10:01:39.134	Supplier Qty: 10000, Received Qty: 10000, 	2025-06-14 15:08:29.995821	f	0.00	f
-6	GRN-SP-250614-670	PURCHASE_IN	2	\N	\N	ROHAN	Arif	Petti	\N	5000.00	KG	2025-06-14 10:08:31.021	Supplier Qty: 5000, Received Qty: 5000, 	2025-06-14 15:09:14.860626	f	0.00	f
-7	GRN-SP-250615-963	PURCHASE_IN	2	\N	\N	123	Arif	Petti	\N	5000.00	KG	2025-06-15 10:28:43.196	Supplier Qty: 5000, Received Qty: 5000, 	2025-06-15 15:28:58.562909	f	0.00	f
-8	GRN-SDM-250615-088	PURCHASE_IN	2	\N	\N	123	Arif	Dabbi Mix	\N	10000.00	KG	2025-06-15 10:28:59.397	Supplier Qty: 30000, Received Qty: 10000, 	2025-06-15 15:33:37.203336	f	0.00	f
-9	GRN-SBF-250615-013	PURCHASE_IN	2	\N	\N	123	Arif	Boiler Fuel (Toori)	\N	25000.00	KG	2025-06-15 10:33:38.569	Supplier Qty: 25000, Received Qty: 25000, 	2025-06-15 15:35:45.704041	f	0.00	f
-12	SO-SS-250615-953	SALE_OUT	\N	4	Mazda	123	arif	\N	Super	10000.00	KG	2025-06-15 11:13:49.975		2025-06-15 16:18:19.536522	f	0.00	f
-13	GRN-SP-250616-307	PURCHASE_IN	2	\N	\N	123	ali	Petti	\N	9700.00	KG	2025-06-16 10:29:33.411	Supplier Qty: 10000, Received Qty: 9700, 	2025-06-16 15:31:18.221228	f	0.00	f
-14	SO-RS-250620-419	SALE_OUT	\N	5	Mazda	123	PETR	\N	Super	10000.00	KG	2025-06-20 13:06:12.408		2025-06-20 18:12:19.651306	t	15000.00	f
-15	SO-RS-250620-894	SALE_OUT	\N	5	Mazda	123	PETR	\N	Super	1000.00	KG	2025-06-20 13:12:20.816		2025-06-20 18:15:23.435298	t	10000.00	f
-16	SO-RS-250620-660	SALE_OUT	\N	5	Mazda	123	PETR	\N	Super	1000.00	KG	2025-06-20 13:15:24.576		2025-06-20 18:17:16.321514	t	1000.00	f
-17	SO-RS-250620-119	SALE_OUT	\N	5	Mazda	123	PETR	\N	Super	1000.00	KG	2025-06-20 13:17:17.256		2025-06-20 18:22:42.112595	t	1000.00	f
-19	SO-RS-250620-502	SALE_OUT	\N	5	Mazda	123	ade	\N	Super	1000.00	KG	2025-06-20 13:27:51.98		2025-06-20 18:28:12.878112	t	1000.00	f
-20	SO-RS-250620-795	SALE_OUT	\N	5	Mazda	1000	ali	\N	Super	2500.00	KG	2025-06-20 13:28:14.128		2025-06-20 18:31:29.200976	t	1000.00	f
-21	SO-SS-250620-668	SALE_OUT	\N	4	Mazda	123	ale	\N	Super	1000.00	KG	2025-06-20 13:33:01.408		2025-06-20 18:33:21.749387	f	0.00	f
-22	SO-RS-250620-499	SALE_OUT	\N	5	Mazda	123	sajjad	\N	Super	1200.00	KG	2025-06-20 13:42:10.311		2025-06-20 19:39:17.428276	f	1900.00	t
-23	SO-RS-250620-279	SALE_OUT	\N	5	Mazda	123	sajjad	\N	Super	1000.00	KG	2025-06-20 14:39:19.385		2025-06-20 19:40:40.198182	f	1000.00	t
-24	SO-RS-250620-506	SALE_OUT	\N	5	Mazda	123	MAHM	\N	Super	1200.00	KG	2025-06-20 14:50:30.407		2025-06-20 19:52:04.962906	f	0.00	f
-25	SO-SS-250620-497	SALE_OUT	\N	4	Mazda	123	MAHM	\N	Super	1700.00	KG	2025-06-20 14:52:05.857		2025-06-20 19:55:06.841919	f	0.00	f
-26	SO-RS-250620-319	SALE_OUT	\N	5	Mazda	123	MAHM	\N	Super	1000.00	KG	2025-06-20 14:55:07.802		2025-06-20 19:57:03.052266	f	0.00	f
-27	SO-RS-250620-207	SALE_OUT	\N	5	Mazda	123	MAHM	\N	Super	1000.00	KG	2025-06-20 14:57:04.049		2025-06-20 19:58:38.87321	f	0.00	f
-28	SO-RS-250621-699	SALE_OUT	\N	5	Mazda	123	adeel	\N	Super	1000.00	KG	2025-06-21 10:14:38.691		2025-06-21 15:14:57.018918	f	0.00	f
-29	SO-RS-250621-428	SALE_OUT	\N	5	Mazda	123	123	\N	Super	1000.00	KG	2025-06-21 10:14:58.148		2025-06-21 15:19:28.056377	f	0.00	f
-30	SO-RS-250621-247	SALE_OUT	\N	5	Mazda	123	adeel	\N	Super	1900.00	KG	2025-06-21 10:19:29.068		2025-06-21 15:23:08.509487	f	0.00	f
-31	SO-RS-250621-842	SALE_OUT	\N	5	Mazda	ADEEL	adeel	\N	Super	1000.00	KG	2025-06-21 10:23:09.484		2025-06-21 15:29:10.983611	f	0.00	f
+32	GRN-SP-250628-055	PURCHASE_IN	7	\N	\N	123	ali	Petti	\N	10000.00	KG	2025-06-28 09:13:31.683	Supplier Qty: 10000, Received Qty: 10000, 	2025-06-28 14:13:58.074814	f	0.00	f
 \.
 
 
@@ -2749,31 +2693,7 @@ COPY public.gate_entries (id, grn_number, entry_type, supplier_id, purchaser_id,
 --
 
 COPY public.gate_entries_pricing (id, entry_type, grn_number, account_id, item_id, quantity, price_per_unit, total_amount, status, processed_at, created_at, final_quantity, cut_weight, processed_by_role) FROM stdin;
-4	PURCHASE	GRN-SP-250614-670	2	\N	5000.00	50.00	250000.00	PROCESSED	2025-06-14 15:11:37.010632	2025-06-14 15:09:14.860626	5000.00	0.00	ACCOUNTS
-3	PURCHASE	GRN-SP-250614-326	2	\N	10000.00	50.00	500000.00	PROCESSED	2025-06-14 15:20:31.390868	2025-06-14 15:08:29.995821	10000.00	0.00	ACCOUNTS
-2	PURCHASE	GRN-SP-250614-357	2	\N	10000.00	50.00	500000.00	PROCESSED	2025-06-15 15:26:29.061551	2025-06-14 15:01:37.932838	10000.00	0.00	ACCOUNTS
-5	PURCHASE	GRN-SP-250615-963	2	\N	5000.00	55.00	275000.00	PROCESSED	2025-06-15 15:29:19.229086	2025-06-15 15:28:58.562909	5000.00	0.00	ACCOUNTS
-6	PURCHASE	GRN-SDM-250615-088	2	\N	10000.00	33.00	330000.00	PROCESSED	2025-06-15 15:33:47.706454	2025-06-15 15:33:37.203336	10000.00	0.00	ACCOUNTS
-7	PURCHASE	GRN-SBF-250615-013	2	\N	25000.00	15.00	375000.00	PROCESSED	2025-06-15 15:35:58.399577	2025-06-15 15:35:45.704041	25000.00	0.00	ACCOUNTS
-8	SALE	SO-SS-250615-953	4	\N	10000.00	91.00	910000.00	PROCESSED	2025-06-15 16:18:39.287332	2025-06-15 16:18:19.536522	10000.00	0.00	ACCOUNTS
-9	PURCHASE	GRN-SP-250616-307	2	\N	9700.00	50.00	482500.00	PROCESSED	2025-06-16 15:32:52.941868	2025-06-16 15:31:18.221228	9650.00	50.00	ACCOUNTS
-10	SALE	SO-RS-250620-419	5	\N	10000.00	91.00	910000.00	PROCESSED	2025-06-20 18:12:30.950824	2025-06-20 18:12:19.651306	10000.00	0.00	ACCOUNTS
-11	SALE	SO-RS-250620-894	5	\N	1000.00	91.00	91000.00	PROCESSED	2025-06-20 18:15:30.789756	2025-06-20 18:15:23.435298	1000.00	0.00	ACCOUNTS
-12	SALE	SO-RS-250620-660	5	\N	1000.00	91.00	91000.00	PROCESSED	2025-06-20 18:21:17.197287	2025-06-20 18:17:16.321514	1000.00	0.00	ACCOUNTS
-13	SALE	SO-RS-250620-119	5	\N	1000.00	92.00	92000.00	PROCESSED	2025-06-20 18:22:52.31736	2025-06-20 18:22:42.112595	1000.00	0.00	ACCOUNTS
-14	SALE	SO-RS-250620-502	5	\N	1000.00	94.00	94000.00	PROCESSED	2025-06-20 18:28:20.333626	2025-06-20 18:28:12.878112	1000.00	0.00	ACCOUNTS
-15	SALE	SO-RS-250620-795	5	\N	2500.00	98.00	245000.00	PROCESSED	2025-06-20 18:31:35.76641	2025-06-20 18:31:29.200976	2500.00	0.00	ACCOUNTS
-16	SALE	SO-SS-250620-668	4	\N	1000.00	95.00	95000.00	PROCESSED	2025-06-20 18:33:31.06992	2025-06-20 18:33:21.749387	1000.00	0.00	ACCOUNTS
-17	SALE	SO-RS-250620-499	5	\N	1200.00	95.00	114000.00	PROCESSED	2025-06-20 19:39:43.352118	2025-06-20 19:39:17.428276	1200.00	0.00	ACCOUNTS
-18	SALE	SO-RS-250620-279	5	\N	1000.00	100.00	100000.00	PROCESSED	2025-06-20 19:40:50.182672	2025-06-20 19:40:40.198182	1000.00	0.00	ACCOUNTS
-19	SALE	SO-RS-250620-506	5	\N	1200.00	95.00	114000.00	PROCESSED	2025-06-20 19:52:27.974805	2025-06-20 19:52:04.962906	1200.00	0.00	ACCOUNTS
-20	SALE	SO-SS-250620-497	4	\N	1700.00	89.00	151300.00	PROCESSED	2025-06-20 19:55:16.551577	2025-06-20 19:55:06.841919	1700.00	0.00	ACCOUNTS
-21	SALE	SO-RS-250620-319	5	\N	1000.00	100.00	100000.00	PROCESSED	2025-06-20 19:57:13.735087	2025-06-20 19:57:03.052266	1000.00	0.00	ACCOUNTS
-22	SALE	SO-RS-250620-207	5	\N	1000.00	100.00	100000.00	PROCESSED	2025-06-20 19:58:52.919629	2025-06-20 19:58:38.87321	1000.00	0.00	ACCOUNTS
-23	SALE	SO-RS-250621-699	5	\N	1000.00	98.00	98000.00	PROCESSED	2025-06-21 15:15:04.194855	2025-06-21 15:14:57.018918	1000.00	0.00	ACCOUNTS
-24	SALE	SO-RS-250621-428	5	\N	1000.00	99.00	99000.00	PROCESSED	2025-06-21 15:19:43.395021	2025-06-21 15:19:28.056377	1000.00	0.00	ACCOUNTS
-25	SALE	SO-RS-250621-247	5	\N	1900.00	100.00	190000.00	PROCESSED	2025-06-21 15:23:21.210771	2025-06-21 15:23:08.509487	1900.00	0.00	ACCOUNTS
-26	SALE	SO-RS-250621-842	5	\N	1000.00	100.00	100000.00	PROCESSED	2025-06-21 15:29:25.87527	2025-06-21 15:29:10.983611	1000.00	0.00	ACCOUNTS
+27	PURCHASE	GRN-SP-250628-055	7	\N	10000.00	50.00	500000.00	PROCESSED	2025-06-28 14:14:04.648499	2025-06-28 14:13:58.074814	10000.00	0.00	ACCOUNTS
 \.
 
 
@@ -2798,9 +2718,7 @@ COPY public.income_statement_adjustments (id, month, year, category, adjustment_
 --
 
 COPY public.item_types (id, name, description, created_at) FROM stdin;
-1	Petti		2025-06-14 14:43:40.841877
-2	Dabbi Mix		2025-06-15 15:33:22.446723
-3	Boiler Fuel (Toori)		2025-06-15 15:35:28.111098
+4	Petti		2025-06-28 14:13:43.474052
 \.
 
 
@@ -2816,7 +2734,51 @@ COPY public.leave_applications (id, employee_id, start_date, end_date, reason, l
 -- Data for Name: ledger_entries; Type: TABLE DATA; Schema: public; Owner: postgres
 --
 
-COPY public.ledger_entries (id, date, account_id, debit_amount, credit_amount, description, voucher_no, created_by, processed_by_role, created_at, account_type) FROM stdin;
+COPY public.ledger_entries (id, date, account_id, debit_amount, credit_amount, description, voucher_no, created_by, processed_by_role, account_type, created_at) FROM stdin;
+5	2025-06-28 15:08:07.499	11	100.00	0.00	Expense payment to fida - No remarks	EV20250001	\N	ACCOUNTS	LEVEL3	2025-06-28 15:08:22.627263
+6	2025-06-28 15:08:07.499	1	0.00	100.00	Expense payment to fida - No remarks	EV20250001	\N	ACCOUNTS	CASH	2025-06-28 15:08:22.627263
+7	2025-06-28 15:08:07.499	7	100.00	0.00	Expense payment to fida - No remarks	EV20250001	\N	ACCOUNTS	LEVEL1	2025-06-28 15:08:22.627263
+8	2025-06-28 15:08:07.499	7	100.00	0.00	Expense payment to fida - No remarks	EV20250001	\N	ACCOUNTS	LEVEL2	2025-06-28 15:08:22.627263
+9	2025-06-28 15:17:15.814	11	100.00	0.00	Expense payment to adel - No remarks	EV20250002	\N	ACCOUNTS	LEVEL3	2025-06-28 15:17:31.63239
+10	2025-06-28 15:17:15.814	1	0.00	100.00	Expense payment to adel - No remarks	EV20250002	\N	ACCOUNTS	CASH	2025-06-28 15:17:31.63239
+11	2025-06-28 15:17:15.814	7	100.00	0.00	Expense payment to adel - No remarks	EV20250002	\N	ACCOUNTS	LEVEL1	2025-06-28 15:17:31.63239
+12	2025-06-28 15:17:15.814	7	100.00	0.00	Expense payment to adel - No remarks	EV20250002	\N	ACCOUNTS	LEVEL2	2025-06-28 15:17:31.63239
+13	2025-06-28 15:18:45.036	11	1500.00	0.00	Expense payment to adel - No remarks	EV20250003	\N	ACCOUNTS	LEVEL3	2025-06-28 15:18:59.707971
+14	2025-06-28 15:18:45.036	1	0.00	1500.00	Expense payment to adel - No remarks	EV20250003	\N	ACCOUNTS	CASH	2025-06-28 15:18:59.707971
+15	2025-06-28 15:18:45.036	7	1500.00	0.00	Expense payment to adel - No remarks	EV20250003	\N	ACCOUNTS	LEVEL1	2025-06-28 15:18:59.707971
+16	2025-06-28 15:18:45.036	7	1500.00	0.00	Expense payment to adel - No remarks	EV20250003	\N	ACCOUNTS	LEVEL2	2025-06-28 15:18:59.707971
+17	2025-06-28 15:29:52.591	11	10.00	0.00	Expense payment to adel - No remarks	EV20250004	\N	ACCOUNTS	LEVEL3	2025-06-28 15:30:05.916263
+18	2025-06-28 15:29:52.591	1	0.00	10.00	Expense payment to adel - No remarks	EV20250004	\N	ACCOUNTS	CASH	2025-06-28 15:30:05.916263
+19	2025-06-28 15:29:52.591	7	10.00	0.00	Expense payment to adel - No remarks	EV20250004	\N	ACCOUNTS	LEVEL1	2025-06-28 15:30:05.916263
+20	2025-06-28 15:29:52.591	7	10.00	0.00	Expense payment to adel - No remarks	EV20250004	\N	ACCOUNTS	LEVEL2	2025-06-28 15:30:05.916263
+21	2025-06-28 15:34:18.897	11	1400.00	0.00	Expense payment to adel - No remarks	EV20250005	\N	ACCOUNTS	LEVEL3	2025-06-28 15:34:39.093527
+22	2025-06-28 15:34:18.897	1	0.00	1400.00	Expense payment to adel - No remarks	EV20250005	\N	ACCOUNTS	CASH	2025-06-28 15:34:39.093527
+23	2025-06-28 15:34:18.897	7	1400.00	0.00	Expense payment to adel - No remarks	EV20250005	\N	ACCOUNTS	LEVEL1	2025-06-28 15:34:39.093527
+24	2025-06-28 15:34:18.897	7	1400.00	0.00	Expense payment to adel - No remarks	EV20250005	\N	ACCOUNTS	LEVEL2	2025-06-28 15:34:39.093527
+25	2025-06-28 15:37:35.297	11	15.00	0.00	Expense payment to adel - No remarks	EV20250006	\N	ACCOUNTS	LEVEL3	2025-06-28 15:37:47.081422
+26	2025-06-28 15:37:35.297	1	0.00	15.00	Expense payment to adel - No remarks	EV20250006	\N	ACCOUNTS	CASH	2025-06-28 15:37:47.081422
+27	2025-06-28 15:37:35.297	7	15.00	0.00	Expense payment to adel - No remarks	EV20250006	\N	ACCOUNTS	LEVEL1	2025-06-28 15:37:47.081422
+28	2025-06-28 15:37:35.297	7	15.00	0.00	Expense payment to adel - No remarks	EV20250006	\N	ACCOUNTS	LEVEL2	2025-06-28 15:37:47.081422
+29	2025-06-28 15:37:47.161	11	12.00	0.00	Expense payment to adel - No remarks	EV20250007	\N	ACCOUNTS	LEVEL3	2025-06-28 15:41:43.985047
+30	2025-06-28 15:37:47.161	1	0.00	12.00	Expense payment to adel - No remarks	EV20250007	\N	ACCOUNTS	CASH	2025-06-28 15:41:43.985047
+31	2025-06-28 15:37:47.161	7	12.00	0.00	Expense payment to adel - No remarks	EV20250007	\N	ACCOUNTS	LEVEL1	2025-06-28 15:41:43.985047
+32	2025-06-28 15:37:47.161	7	12.00	0.00	Expense payment to adel - No remarks	EV20250007	\N	ACCOUNTS	LEVEL2	2025-06-28 15:41:43.985047
+33	2025-06-28 15:42:37.583	11	12.00	0.00	Expense payment to afrt - No remarks	EV20250008	\N	ACCOUNTS	LEVEL3	2025-06-28 15:42:54.013862
+34	2025-06-28 15:42:37.583	1	0.00	12.00	Expense payment to afrt - No remarks	EV20250008	\N	ACCOUNTS	CASH	2025-06-28 15:42:54.013862
+35	2025-06-28 15:42:37.583	7	12.00	0.00	Expense payment to afrt - No remarks	EV20250008	\N	ACCOUNTS	LEVEL1	2025-06-28 15:42:54.013862
+36	2025-06-28 15:42:37.583	7	12.00	0.00	Expense payment to afrt - No remarks	EV20250008	\N	ACCOUNTS	LEVEL2	2025-06-28 15:42:54.013862
+37	2025-06-28 15:42:54.092	11	33.00	0.00	Expense payment to afrt - No remarks	EV20250009	\N	ACCOUNTS	LEVEL3	2025-06-28 15:48:13.445555
+38	2025-06-28 15:42:54.092	1	0.00	33.00	Expense payment to afrt - No remarks	EV20250009	\N	ACCOUNTS	CASH	2025-06-28 15:48:13.445555
+39	2025-06-28 15:42:54.092	7	33.00	0.00	Expense payment to afrt - No remarks	EV20250009	\N	ACCOUNTS	LEVEL1	2025-06-28 15:48:13.445555
+40	2025-06-28 15:42:54.092	7	33.00	0.00	Expense payment to afrt - No remarks	EV20250009	\N	ACCOUNTS	LEVEL2	2025-06-28 15:48:13.445555
+41	2025-06-28 15:48:13.55	11	10.00	0.00	Expense payment to afrt - No remarks	EV20250010	\N	ACCOUNTS	LEVEL3	2025-06-28 15:52:45.211685
+42	2025-06-28 15:48:13.55	1	0.00	10.00	Expense payment to afrt - No remarks	EV20250010	\N	ACCOUNTS	CASH	2025-06-28 15:52:45.211685
+43	2025-06-28 15:48:13.55	7	10.00	0.00	Expense payment to afrt - No remarks	EV20250010	\N	ACCOUNTS	LEVEL1	2025-06-28 15:52:45.211685
+44	2025-06-28 15:48:13.55	7	10.00	0.00	Expense payment to afrt - No remarks	EV20250010	\N	ACCOUNTS	LEVEL2	2025-06-28 15:52:45.211685
+45	2025-06-28 15:52:45.34	11	57.00	0.00	Expense payment to afrt - No remarks	EV20250011	\N	ACCOUNTS	LEVEL3	2025-06-28 15:54:25.039527
+46	2025-06-28 15:52:45.34	1	0.00	57.00	Expense payment to afrt - No remarks	EV20250011	\N	ACCOUNTS	CASH	2025-06-28 15:54:25.039527
+47	2025-06-28 15:52:45.34	7	57.00	0.00	Expense payment to afrt - No remarks	EV20250011	\N	ACCOUNTS	LEVEL1	2025-06-28 15:54:25.039527
+48	2025-06-28 15:52:45.34	7	57.00	0.00	Expense payment to afrt - No remarks	EV20250011	\N	ACCOUNTS	LEVEL2	2025-06-28 15:54:25.039527
 \.
 
 
@@ -2825,20 +2787,16 @@ COPY public.ledger_entries (id, date, account_id, debit_amount, credit_amount, d
 --
 
 COPY public.ledgers (id, account_id, account_type, opening_balance, balance_type, amount, transaction_date, created_at, updated_at) FROM stdin;
-3	1	LEVEL3	0.00	DEBIT	0.00	2025-06-03 13:54:16.65937	2025-06-03 13:54:16.65937	2025-06-03 13:54:16.65937
-4	2	LEVEL3	0.00	DEBIT	0.00	2025-06-03 13:54:28.30691	2025-06-03 13:54:28.30691	2025-06-03 13:54:28.30691
-2	1	LEVEL2	0.00	DEBIT	0.00	2025-06-03 13:54:07.787659	2025-06-03 13:54:07.787659	2025-06-03 13:54:07.787659
-1	1	LEVEL1	0.00	DEBIT	0.00	2025-06-03 13:53:37.223122	2025-06-03 13:53:37.223122	2025-06-03 13:53:37.223122
-6	2	LEVEL2	0.00	DEBIT	0.00	2025-06-03 13:54:46.075782	2025-06-03 13:54:46.075782	2025-06-03 13:54:46.075782
-5	2	LEVEL1	0.00	DEBIT	0.00	2025-06-03 13:54:36.540159	2025-06-03 13:54:36.540159	2025-06-03 13:54:36.540159
-9	3	LEVEL3	0.00	DEBIT	0.00	2025-06-13 16:51:33.00579	2025-06-13 16:51:33.00579	2025-06-13 16:51:33.00579
-10	4	LEVEL3	0.00	DEBIT	0.00	2025-06-13 16:52:00.565438	2025-06-13 16:52:00.565438	2025-06-13 16:52:00.565438
-11	5	LEVEL3	0.00	DEBIT	0.00	2025-06-13 21:54:14.599429	2025-06-13 21:54:14.599429	2025-06-13 21:54:14.599429
-8	3	LEVEL2	0.00	DEBIT	0.00	2025-06-13 16:51:19.302187	2025-06-13 16:51:19.302187	2025-06-13 16:51:19.302187
-7	3	LEVEL1	0.00	DEBIT	0.00	2025-06-13 16:50:58.927367	2025-06-13 16:50:58.927367	2025-06-13 16:50:58.927367
-14	6	LEVEL3	0.00	DEBIT	0.00	2025-06-20 17:21:24.360015	2025-06-20 17:21:24.360015	2025-06-20 17:21:24.360015
-13	4	LEVEL2	0.00	DEBIT	0.00	2025-06-20 17:21:08.129658	2025-06-20 17:21:08.129658	2025-06-20 17:21:08.129658
-12	4	LEVEL1	0.00	DEBIT	0.00	2025-06-20 17:20:53.238154	2025-06-20 17:20:53.238154	2025-06-20 17:20:53.238154
+17	7	LEVEL3	0.00	DEBIT	0.00	2025-06-28 14:06:16.228922	2025-06-28 14:06:16.228922	2025-06-28 14:06:16.228922
+16	5	LEVEL2	0.00	DEBIT	0.00	2025-06-28 14:06:02.198046	2025-06-28 14:06:02.198046	2025-06-28 14:06:02.198046
+18	6	LEVEL1	0.00	DEBIT	0.00	2025-06-28 14:06:25.502073	2025-06-28 14:06:25.502073	2025-06-28 14:06:25.502073
+20	8	LEVEL3	0.00	DEBIT	0.00	2025-06-28 14:06:49.237034	2025-06-28 14:06:49.237034	2025-06-28 14:06:49.237034
+19	6	LEVEL2	0.00	DEBIT	0.00	2025-06-28 14:06:36.212237	2025-06-28 14:06:36.212237	2025-06-28 14:06:36.212237
+15	5	LEVEL1	0.00	DEBIT	0.00	2025-06-28 14:05:49.099681	2025-06-28 14:05:49.099681	2025-06-28 14:05:49.099681
+23	9	LEVEL3	0.00	DEBIT	0.00	2025-06-28 14:19:16.90545	2025-06-28 14:19:16.90545	2025-06-28 14:19:16.90545
+24	11	LEVEL3	0.00	DEBIT	3249.00	2025-06-28 15:00:11.98864	2025-06-28 15:00:11.98864	2025-06-28 15:00:11.98864
+21	7	LEVEL1	0.00	DEBIT	3249.00	2025-06-28 14:18:49.26688	2025-06-28 14:18:49.26688	2025-06-28 14:18:49.26688
+22	7	LEVEL2	0.00	DEBIT	3249.00	2025-06-28 14:19:01.965002	2025-06-28 14:19:01.965002	2025-06-28 14:19:01.965002
 \.
 
 
@@ -2863,7 +2821,6 @@ COPY public.loan_installments (id, loan_application_id, installment_date, amount
 --
 
 COPY public.maintenance_issue_items (id, issue_id, item_code, quantity, unit_price, created_at) FROM stdin;
-3	3	B597	2	1000.00	2025-06-20 17:52:15.887661
 \.
 
 
@@ -2872,7 +2829,6 @@ COPY public.maintenance_issue_items (id, issue_id, item_code, quantity, unit_pri
 --
 
 COPY public.maintenance_issues (id, department_code, issue_date, created_at) FROM stdin;
-3	MAH	2025-06-20	2025-06-20 17:52:15.887661
 \.
 
 
@@ -2881,6 +2837,7 @@ COPY public.maintenance_issues (id, department_code, issue_date, created_at) FRO
 --
 
 COPY public.monthly_price_averages (id, item_type, month, year, average_price, created_at) FROM stdin;
+1	Petti	6	2025	50.00	2025-07-01 00:00:01.111182
 \.
 
 
@@ -2889,7 +2846,6 @@ COPY public.monthly_price_averages (id, item_type, month, year, average_price, c
 --
 
 COPY public.monthly_salary_totals (id, month, year, total_amount, payment_date, payment_status) FROM stdin;
-1	6	2025	0.00	2025-06-20	PAID
 \.
 
 
@@ -2898,7 +2854,6 @@ COPY public.monthly_salary_totals (id, month, year, total_amount, payment_date, 
 --
 
 COPY public.paper_types (id, name, description, created_at) FROM stdin;
-1	Super		2025-06-15 15:30:26.332555
 \.
 
 
@@ -2907,22 +2862,8 @@ COPY public.paper_types (id, name, description, created_at) FROM stdin;
 --
 
 COPY public.payments (id, payment_date, payment_mode, account_id, account_type, amount, payment_type, remarks, created_at, receiver_name, voucher_no, is_tax_payment, created_by, processed_by_role, bank_account_id) FROM stdin;
-1	2025-06-13 16:52:02.95	CASH	4	CUSTOMER	10000.00	RECEIVED		2025-06-13 16:52:24.614962	Adeel	RV20250001	f	\N	ACCOUNTS	\N
-2	2025-06-13 16:59:32.668	CASH	4	CUSTOMER	10000.00	RECEIVED		2025-06-13 16:59:54.07331	Adeel	RV20250002	f	\N	ACCOUNTS	\N
-3	2025-06-13 17:06:24.867		4	CUSTOMER	5000.00	RECEIVED		2025-06-13 17:09:31.756389	ali	RV20250003	f	\N	ACCOUNTS	\N
-6	2025-06-13 17:09:31.777	CASH	4	CUSTOMER	4000.00	RECEIVED		2025-06-13 17:21:06.026897	ali	RV20250004	f	\N	ACCOUNTS	\N
-7	2025-06-13 17:22:44.672	CASH	4	CUSTOMER	1000.00	RECEIVED		2025-06-13 17:22:56.706735	ALI	RV20250005	f	\N	ACCOUNTS	\N
-8	2025-06-13 19:48:17.787	CASH	4	CUSTOMER	1000.00	RECEIVED		2025-06-13 19:48:28.644686	Murtaza	RV20250006	f	\N	ACCOUNTS	\N
-9	2025-06-13 19:48:28.697	CASH	4	CUSTOMER	500.00	RECEIVED		2025-06-13 19:57:52.189041	Murtaza	RV20250007	f	\N	ACCOUNTS	\N
-10	2025-06-13 21:54:17.758	CASH	5	CUSTOMER	1700.00	RECEIVED		2025-06-13 21:54:33.211664	abid	RV20250008	f	\N	ACCOUNTS	\N
-11	2025-06-13 21:55:32.439	CASH	4	CUSTOMER	1600.00	RECEIVED		2025-06-13 21:55:47.451451	ali	RV20250009	f	\N	ACCOUNTS	\N
-12	2025-06-14 13:58:52.918	CASH	5	CUSTOMER	1000.00	RECEIVED		2025-06-14 13:59:06.404662	ali	RV20250010	f	\N	ACCOUNTS	\N
-13	2025-06-14 14:25:29.37	ONLINE	5	CUSTOMER	10000.00	RECEIVED		2025-06-14 14:25:46.228193	Bhatti	RV20250011	f	\N	ACCOUNTS	1
-14	2025-06-14 14:28:15.354	ONLINE	4	CUSTOMER	15000.00	RECEIVED		2025-06-14 14:28:27.349044	sajjad	RV20250012	f	\N	ACCOUNTS	1
-15	2025-06-14 14:34:09.796	CASH	2	SUPPLIER	1000.00	ISSUED		2025-06-14 14:34:30.149554	bhatti	PV20250001	f	\N	ACCOUNTS	\N
-16	2025-06-14 14:36:52.738	CASH	2	SUPPLIER	190.00	ISSUED		2025-06-14 14:37:06.651611	ali	PV20250002	f	\N	ACCOUNTS	\N
-17	2025-06-14 14:37:19.031	ONLINE	2	SUPPLIER	1000.00	ISSUED		2025-06-14 14:37:33.943944	bhatti	PV20250003	f	\N	ACCOUNTS	1
-18	2025-06-14 14:56:33.95	ONLINE	2	SUPPLIER	100.00	ISSUED		2025-06-14 14:56:48.342664	ali	PV20250004	f	\N	ACCOUNTS	1
+22	2025-06-28 14:07:59.453	CASH	8	CUSTOMER	10000.00	RECEIVED		2025-06-28 14:10:29.807657	ali	RV20250001	f	\N	ACCOUNTS	\N
+23	2025-06-28 14:11:35.022	CASH	7	SUPPLIER	5000.00	ISSUED		2025-06-28 14:11:48.45832	ali	PV20250001	f	\N	ACCOUNTS	\N
 \.
 
 
@@ -2931,33 +2872,6 @@ COPY public.payments (id, payment_date, payment_mode, account_id, account_type, 
 --
 
 COPY public.pricing_entries (id, entry_type, reference_id, status, quantity, unit, price_per_unit, total_amount, processed_at, created_at) FROM stdin;
-1	STORE_PURCHASE	1	PROCESSED	10.00	Piece	1000.00	10000.00	2025-04-23 15:55:10.985873	2025-04-22 16:19:45.626081
-2	STORE_PURCHASE	8	PROCESSED	120.00	Piece	700.00	84000.00	2025-05-18 18:17:03.637699	2025-05-18 18:04:35.45781
-3	STORE_PURCHASE	9	PROCESSED	10.00	Piece	250.00	2500.00	2025-05-18 18:23:46.007766	2025-05-18 18:23:36.031467
-4	STORE_PURCHASE	10	PROCESSED	10.00	Liter	100.00	1000.00	2025-05-19 15:15:15.606396	2025-05-19 15:12:03.600525
-10	STORE_PURCHASE	58	PENDING	10.00	Set	\N	\N	\N	2025-05-19 16:34:22.536956
-12	STORE_PURCHASE	60	PENDING	5.00	Liter	\N	\N	\N	2025-05-19 16:38:16.216228
-14	STORE_PURCHASE	62	PENDING	1.00	Liter	\N	\N	\N	2025-05-19 16:40:57.879471
-16	STORE_PURCHASE	66	PENDING	1.00	Liter	\N	\N	\N	2025-05-19 16:45:44.463678
-17	STORE_PURCHASE	67	PENDING	1.00	Liter	\N	\N	\N	2025-05-19 16:48:14.07199
-18	STORE_PURCHASE	68	PENDING	-1.00	Liter	\N	\N	\N	2025-05-19 16:52:15.574875
-19	STORE_PURCHASE	69	PENDING	-1.00	Liter	\N	NaN	\N	2025-05-19 16:59:21.49368
-20	STORE_PURCHASE	70	PENDING	-10.00	Set	700.00	-7000.00	\N	2025-05-19 17:01:11.468868
-21	STORE_PURCHASE	71	PENDING	-12.00	Set	700.00	-8400.00	\N	2025-05-19 17:04:22.620751
-23	PURCHASE_RETURN	74	PROCESSED	8.00	Set	100.00	800.00	2025-05-19 18:04:28.562031	2025-05-19 17:57:44.482874
-24	PURCHASE_RETURN	75	PROCESSED	10.00	Set	1000.00	10000.00	2025-05-19 18:09:14.018718	2025-05-19 18:07:38.089141
-25	PURCHASE_RETURN	76	PROCESSED	10.00	Set	150.00	1500.00	2025-05-19 18:12:20.683899	2025-05-19 18:11:46.385424
-27	PURCHASE_RETURN	78	PROCESSED	10.00	Set	100.00	1000.00	2025-05-19 18:19:10.652117	2025-05-19 18:18:19.887034
-28	PURCHASE_RETURN	79	PROCESSED	10.00	Set	100.00	1000.00	2025-05-19 18:21:25.627266	2025-05-19 18:21:19.631483
-29	PURCHASE_RETURN	80	PROCESSED	2.00	Set	100.00	200.00	2025-05-20 14:10:08.446673	2025-05-20 14:10:02.201154
-31	STORE_RETURN	82	PROCESSED	10.00	Set	100.00	1000.00	2025-05-20 14:30:51.480325	2025-05-20 14:21:09.334371
-32	STORE_RETURN	83	PROCESSED	2.00	Set	100.00	200.00	2025-05-20 14:33:56.498209	2025-05-20 14:33:49.480698
-33	STORE_RETURN	84	PROCESSED	2.00	Set	300.00	600.00	2025-05-20 14:34:44.009246	2025-05-20 14:34:36.914677
-34	STORE_RETURN	85	PROCESSED	2.00	Set	150.00	300.00	2025-05-20 14:39:13.26618	2025-05-20 14:39:06.806996
-35	STORE_RETURN	86	PROCESSED	2.00	Set	120.00	240.00	2025-05-20 14:41:20.522294	2025-05-20 14:41:14.733381
-36	STORE_RETURN	87	PROCESSED	2.00	Set	120.00	240.00	2025-05-20 14:43:29.441669	2025-05-20 14:43:23.581799
-37	STORE_RETURN	88	PROCESSED	2.00	Set	120.00	240.00	2025-05-20 14:45:25.720916	2025-05-20 14:45:18.430299
-38	STORE_PURCHASE	1	PROCESSED	10.00	Piece	1000.00	10000.00	2025-06-20 17:27:27.679704	2025-06-20 17:21:53.21773
 \.
 
 
@@ -2966,8 +2880,6 @@ COPY public.pricing_entries (id, entry_type, reference_id, status, quantity, uni
 --
 
 COPY public.production (id, date_time, paper_type, total_weight, total_reels, boiler_fuel_type, boiler_fuel_quantity, boiler_fuel_cost, total_yield_percentage, created_at, electricity_units, electricity_unit_price, electricity_cost) FROM stdin;
-1	2025-06-15 15:36:01.759	Super	10000.00	0	Boiler Fuel (Toori)	5000.00	12000.00	\N	2025-06-15 15:36:46.858149	5000.00	50.00	250000.00
-2	2025-06-20 17:52:50.466	Super	12000.00	0	Boiler Fuel (Toori)	5000.00	75000.00	\N	2025-06-20 17:53:44.060937	1000.00	60.00	60000.00
 \.
 
 
@@ -2976,8 +2888,6 @@ COPY public.production (id, date_time, paper_type, total_weight, total_reels, bo
 --
 
 COPY public.production_paper_types (id, production_id, paper_type, total_weight, boiler_fuel_cost, electricity_cost) FROM stdin;
-1	1	Super	10000.00	0.00	0.00
-2	2	Super	12000.00	0.00	0.00
 \.
 
 
@@ -2986,9 +2896,6 @@ COPY public.production_paper_types (id, production_id, paper_type, total_weight,
 --
 
 COPY public.production_recipe (id, production_id, raddi_type, percentage_used, quantity_used, yield_percentage) FROM stdin;
-1	1	Petti	25.00	3125.00	80.00
-2	1	Dabbi Mix	75.00	10000.00	75.00
-3	2	Petti	100.00	15000.00	80.00
 \.
 
 
@@ -3029,11 +2936,6 @@ COPY public.salary_payments (id, employee_id, payment_month, payment_year, basic
 --
 
 COPY public.stock_adjustments (id, item_type, quantity, adjustment_type, reference_type, reference_id, date_time, created_at) FROM stdin;
-1	Petti	-3125.00	PRODUCTION_USAGE	PRODUCTION	1	2025-06-15 15:36:01.759	2025-06-15 15:36:46.858149
-2	Dabbi Mix	-10000.00	PRODUCTION_USAGE	PRODUCTION	1	2025-06-15 15:36:01.759	2025-06-15 15:36:46.858149
-3	Boiler Fuel (Toori)	-5000.00	PRODUCTION_USAGE	PRODUCTION	1	2025-06-15 15:36:01.759	2025-06-15 15:36:46.858149
-4	Petti	-15000.00	PRODUCTION_USAGE	PRODUCTION	2	2025-06-20 17:52:50.466	2025-06-20 17:53:44.060937
-5	Boiler Fuel (Toori)	-5000.00	PRODUCTION_USAGE	PRODUCTION	2	2025-06-20 17:52:50.466	2025-06-20 17:53:44.060937
 \.
 
 
@@ -3042,8 +2944,6 @@ COPY public.stock_adjustments (id, item_type, quantity, adjustment_type, referen
 --
 
 COPY public.store_entries (id, grn_number, entry_type, item_id, quantity, unit, vendor_id, department, issued_to, vehicle_number, driver_name, date_time, remarks, created_at) FROM stdin;
-1	STI-250620-931-01	STORE_IN	1	10.00	Piece	6	\N	\N	123	fida	2025-06-20 12:21:30.318		2025-06-20 17:21:53.21773
-2	ISSUE-3-1750423935902	STORE_OUT	1	2.00	Piece	\N	MAH	Maintenance Issue	\N	\N	2025-06-20 00:00:00	Maintenance issue ID: 3	2025-06-20 17:52:15.887661
 \.
 
 
@@ -3052,7 +2952,6 @@ COPY public.store_entries (id, grn_number, entry_type, item_id, quantity, unit, 
 --
 
 COPY public.store_items (id, item_name, item_code, category, unit, current_stock, created_at) FROM stdin;
-1	Baring	B597	Others	Piece	10.00	2025-06-20 17:21:41.681796
 \.
 
 
@@ -3077,66 +2976,9 @@ COPY public.suppliers (id, name, contact, address, created_at) FROM stdin;
 --
 
 COPY public.transactions (id, transaction_date, account_id, reference_no, entry_type, amount, description, item_name, quantity, unit, price_per_unit, created_at) FROM stdin;
-1	2025-06-13 16:52:02.95	4	RV20250001	CREDIT	10000.00	Payment received in cash	\N	\N	\N	\N	2025-06-13 16:52:24.614962
-2	2025-06-13 16:59:32.668	4	RV20250002	CREDIT	10000.00	Payment received in cash	\N	\N	\N	\N	2025-06-13 16:59:54.07331
-3	2025-06-13 17:06:24.867	4	RV20250003	CREDIT	5000.00	Payment received	\N	\N	\N	\N	2025-06-13 17:09:31.756389
-6	2025-06-13 17:09:31.777	4	RV20250004	CREDIT	4000.00	Payment received in cash	\N	\N	\N	\N	2025-06-13 17:21:06.026897
-7	2025-06-13 17:22:44.672	4	RV20250005	CREDIT	1000.00	Payment received in cash	\N	\N	\N	\N	2025-06-13 17:22:56.706735
-8	2025-06-13 19:48:17.787	4	RV20250006	CREDIT	1000.00	Payment received in cash	\N	\N	\N	\N	2025-06-13 19:48:28.644686
-9	2025-06-13 19:48:28.697	4	RV20250007	CREDIT	500.00	Payment received in cash	\N	\N	\N	\N	2025-06-13 19:57:52.189041
-10	2025-06-13 21:54:17.758	5	RV20250008	CREDIT	1700.00	Payment received in cash	\N	\N	\N	\N	2025-06-13 21:54:33.211664
-11	2025-06-13 21:55:32.439	4	RV20250009	CREDIT	1600.00	Payment received in cash	\N	\N	\N	\N	2025-06-13 21:55:47.451451
-12	2025-06-14 13:58:52.918	5	RV20250010	CREDIT	1000.00	Payment received in cash	\N	\N	\N	\N	2025-06-14 13:59:06.404662
-13	2025-06-14 14:25:29.37	5	RV20250011	CREDIT	10000.00	Payment received via bank transfer (Meezan)	\N	\N	\N	\N	2025-06-14 14:25:46.228193
-14	2025-06-14 14:28:15.354	4	RV20250012	CREDIT	15000.00	Payment received via bank transfer (Meezan)	\N	\N	\N	\N	2025-06-14 14:28:27.349044
-15	2025-06-14 14:34:09.796	2	PV20250001	DEBIT	1000.00	Payment issued in cash	\N	\N	\N	\N	2025-06-14 14:34:30.149554
-16	2025-06-14 14:36:52.738	2	PV20250002	DEBIT	190.00	Payment issued in cash	\N	\N	\N	\N	2025-06-14 14:37:06.651611
-17	2025-06-14 14:37:19.031	2	PV20250003	DEBIT	1000.00	Payment issued via bank transfer (Meezan)	\N	\N	\N	\N	2025-06-14 14:37:33.943944
-18	2025-06-14 05:00:00	4	LV-250614-265	CREDIT	1000.00	Long Voucher: Paid from Customer > Paper > SMS to RECEIVABLE > Raddi  > Sajjad1 (Voucher: LV-250614-265)	\N	\N	\N	\N	2025-06-14 14:46:13.087901
-19	2025-06-14 05:00:00	2	LV-250614-265	DEBIT	1000.00	Long Voucher: Paid from Customer > Paper > SMS to RECEIVABLE > Raddi  > Sajjad1 (Voucher: LV-250614-265)	\N	\N	\N	\N	2025-06-14 14:46:13.087901
-20	2025-06-14 14:49:40.378	4	LV-250614-646	CREDIT	500.00	Long Voucher: Customer > Paper > SMS to RECEIVABLE > Raddi  > Sajjad1	\N	\N	\N	\N	2025-06-14 14:49:40.383237
-21	2025-06-14 14:49:40.378	2	LV-250614-646	DEBIT	500.00	Long Voucher: Customer > Paper > SMS to RECEIVABLE > Raddi  > Sajjad1	\N	\N	\N	\N	2025-06-14 14:49:40.383237
-22	2025-06-14 14:51:03.285	5	LV-250614-285	CREDIT	300.00	Long Voucher: Customer > Paper > RS to RECEIVABLE > Raddi  > Sajjad1	\N	\N	\N	\N	2025-06-14 14:51:03.288005
-23	2025-06-14 14:51:03.285	2	LV-250614-285	DEBIT	300.00	Long Voucher: Customer > Paper > RS to RECEIVABLE > Raddi  > Sajjad1	\N	\N	\N	\N	2025-06-14 14:51:03.288005
-24	2025-06-14 14:54:33.164	4	LV-250614-782	CREDIT	100.00	Customer > Paper > SMS to RECEIVABLE > Raddi  > Sajjad1	\N	\N	\N	\N	2025-06-14 14:54:33.167513
-25	2025-06-14 14:54:33.164	2	LV-250614-782	DEBIT	100.00	Customer > Paper > SMS to RECEIVABLE > Raddi  > Sajjad1	\N	\N	\N	\N	2025-06-14 14:54:33.167513
-26	2025-06-14 14:56:33.95	2	PV20250004	DEBIT	100.00	Payment issued via bank transfer (Meezan)	\N	\N	\N	\N	2025-06-14 14:56:48.342664
-27	2025-06-14 15:11:37.03	2	GRN-SP-250614-670	CREDIT	250000.00	Purchase against GRN: GRN-SP-250614-670	Petti	5000.00	KG	50.00	2025-06-14 15:11:37.010632
-28	2025-06-14 15:20:31.398	2	GRN-SP-250614-326	CREDIT	500000.00	Purchase against GRN: GRN-SP-250614-326	Petti	10000.00	KG	50.00	2025-06-14 15:20:31.390868
-29	2025-06-15 15:26:29.432	2	GRN-SP-250614-357	CREDIT	500000.00	Purchase	Petti	10000.00	KG	50.00	2025-06-15 15:26:29.061551
-30	2025-06-15 15:29:19.232	2	GRN-SP-250615-963	CREDIT	275000.00	Purchase	Petti	5000.00	KG	55.00	2025-06-15 15:29:19.229086
-31	2025-06-15 15:33:47.711	2	GRN-SDM-250615-088	CREDIT	330000.00	Purchase	Dabbi Mix	10000.00	KG	33.00	2025-06-15 15:33:47.706454
-32	2025-06-15 15:35:58.403	2	GRN-SBF-250615-013	CREDIT	375000.00	Purchase	Boiler Fuel (Toori)	25000.00	KG	15.00	2025-06-15 15:35:58.399577
-33	2025-06-15 16:18:39.291	4	SO-SS-250615-953	DEBIT	910000.00	Sale	Super	10000.00	KG	91.00	2025-06-15 16:18:39.287332
-34	2025-06-16 15:32:52.964	2	GRN-SP-250616-307	CREDIT	482500.00	Purchase	Petti	9650.00	KG	50.00	2025-06-16 15:32:52.941868
-35	2025-06-20 17:27:27.679	6	STI-250620-931-01	CREDIT	10000.00	Store Purchase: Baring from Murtaza	Baring	10.00	Piece	1000.00	2025-06-20 17:27:27.679704
-36	2025-06-20 18:12:19.651306	5	SO-RS-250620-419	CREDIT	15000.00	Freight Adjustment - SO-RS-250620-419	\N	\N	\N	\N	2025-06-20 18:12:19.651306
-37	2025-06-20 18:15:23.435298	5	SO-RS-250620-894	CREDIT	10000.00	Freight Adjustment - SO-RS-250620-894	\N	\N	\N	\N	2025-06-20 18:15:23.435298
-38	2025-06-20 18:17:16.321514	5	SO-RS-250620-660-FREIGHT	CREDIT	1000.00	Freight Adjustment - SO-RS-250620-660	\N	\N	\N	\N	2025-06-20 18:17:16.321514
-39	2025-06-20 18:21:17.203	5	SO-RS-250620-660	DEBIT	91000.00	Sale Super	Super	1000.00	KG	91.00	2025-06-20 18:21:17.197287
-40	2025-06-20 18:22:42.112595	5	SO-RS-250620-119	DEBIT	0.00	Sale Out - SO-RS-250620-119 (Pending Pricing)	\N	\N	\N	\N	2025-06-20 18:22:42.112595
-41	2025-06-20 18:22:42.112595	5	SO-RS-250620-119-FREIGHT	CREDIT	1000.00	Freight Adjustment - SO-RS-250620-119	\N	\N	\N	\N	2025-06-20 18:22:42.112595
-42	2025-06-20 18:28:12.878112	5	SO-RS-250620-502	DEBIT	0.00	Sale Out - SO-RS-250620-502 (Pending Pricing)	\N	\N	\N	\N	2025-06-20 18:28:12.878112
-43	2025-06-20 18:31:29.200976	5	SO-RS-250620-795	DEBIT	0.00	Sale Out - SO-RS-250620-795 (Pending Pricing)	\N	\N	\N	\N	2025-06-20 18:31:29.200976
-44	2025-06-20 18:33:31.074	4	SO-SS-250620-668	DEBIT	95000.00	Sale Super	Super	1000.00	KG	95.00	2025-06-20 18:33:31.06992
-45	2025-06-20 19:39:43.357	5	SO-RS-250620-499	DEBIT	114000.00	Sale Super	Super	1200.00	KG	95.00	2025-06-20 19:39:43.352118
-46	2025-06-20 19:39:43.358	5		CREDIT	1500.00	Freight Adjustment	\N	\N	\N	\N	2025-06-20 19:39:43.352118
-47	2025-06-20 19:40:50.187	5	SO-RS-250620-279	DEBIT	100000.00	Sale Super	Super	1000.00	KG	100.00	2025-06-20 19:40:50.182672
-48	2025-06-20 19:40:50.188	5		CREDIT	1000.00	Freight Adjustment	\N	\N	\N	\N	2025-06-20 19:40:50.182672
-49	2025-06-20 19:52:27.98	5	SO-RS-250620-506	DEBIT	114000.00	Sale Super	Super	1200.00	KG	95.00	2025-06-20 19:52:27.974805
-50	2025-06-20 19:52:27.981	5	FRSO-RS-250620-506	CREDIT	1000.00	Freight Adjustment	Freight	1.00	Entry	1000.00	2025-06-20 19:52:27.974805
-51	2025-06-20 19:55:16.556	4	SO-SS-250620-497	DEBIT	151300.00	Sale Super	Super	1700.00	KG	89.00	2025-06-20 19:55:16.551577
-52	2025-06-20 19:55:16.558	4	FRSO-SS-250620-497	CREDIT	1000.00	Freight Adjustment	Freight	1.00	Entry	1000.00	2025-06-20 19:55:16.551577
-53	2025-06-20 19:57:13.738	5	SO-RS-250620-319	DEBIT	100000.00	Sale Super	Super	1000.00	KG	100.00	2025-06-20 19:57:13.735087
-54	2025-06-20 19:57:13.739	5	FRSO-RS-250620-319	CREDIT	1000.00	Freight Adjustment	Freight	1.00	Entry	1000.00	2025-06-20 19:57:13.735087
-55	2025-06-20 19:58:52.932	5	SO-RS-250620-207	DEBIT	100000.00	Sale Super	Super	1000.00	KG	100.00	2025-06-20 19:58:52.919629
-56	2025-06-20 19:58:52.936	5	FRSO-RS-250620-207	CREDIT	1900.00	Freight Adjustment	Freight	1.00	Entry	1900.00	2025-06-20 19:58:52.919629
-57	2025-06-21 15:15:04.211	5	SO-RS-250621-699	DEBIT	98000.00	Sale Super	Super	1000.00	KG	98.00	2025-06-21 15:15:04.194855
-58	2025-06-21 15:19:43.4	5	SO-RS-250621-428	DEBIT	99000.00	Sale Super	Super	1000.00	KG	99.00	2025-06-21 15:19:43.395021
-59	2025-06-21 15:23:21.216	5	SO-RS-250621-247	DEBIT	190000.00	Sale Super	Super	1900.00	KG	100.00	2025-06-21 15:23:21.210771
-60	2025-06-21 15:23:21.217	5	FR-SO-RS-250621-247	CREDIT	1000.00	Freight Adjustment	Super	1900.00	KG	0.00	2025-06-21 15:23:21.210771
-61	2025-06-21 15:29:25.878	5	SO-RS-250621-842	DEBIT	100000.00	Sale Super	Super	1000.00	KG	100.00	2025-06-21 15:29:25.87527
-62	2025-06-21 15:29:25.88	5	FR-SO-RS-250621-842	CREDIT	1000.00	Freight Adjustment	Super	1000.00	KG	0.00	2025-06-21 15:29:25.87527
+66	2025-06-28 14:07:59.453	8	RV20250001	CREDIT	10000.00	Payment received in cash	\N	\N	\N	\N	2025-06-28 14:10:29.807657
+67	2025-06-28 14:11:35.022	7	PV20250001	DEBIT	5000.00	Payment issued in cash	\N	\N	\N	\N	2025-06-28 14:11:48.45832
+68	2025-06-28 14:14:04.655	7	GRN-SP-250628-055	CREDIT	500000.00	Purchase	Petti	10000.00	KG	50.00	2025-06-28 14:14:04.648499
 \.
 
 
@@ -3145,7 +2987,6 @@ COPY public.transactions (id, transaction_date, account_id, reference_no, entry_
 --
 
 COPY public.workers_salary_totals (id, month, year, total_amount, created_at) FROM stdin;
-1	6	2025	1003226.00	2025-06-20 18:02:12.358132
 \.
 
 
@@ -3160,7 +3001,7 @@ SELECT pg_catalog.setval('public.accounts_id_seq', 5, true);
 -- Name: bank_accounts_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
-SELECT pg_catalog.setval('public.bank_accounts_id_seq', 1, true);
+SELECT pg_catalog.setval('public.bank_accounts_id_seq', 2, true);
 
 
 --
@@ -3174,14 +3015,14 @@ SELECT pg_catalog.setval('public.bank_transactions_id_seq', 6, true);
 -- Name: cash_tracking_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
-SELECT pg_catalog.setval('public.cash_tracking_id_seq', 1, true);
+SELECT pg_catalog.setval('public.cash_tracking_id_seq', 2, true);
 
 
 --
 -- Name: cash_transactions_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
-SELECT pg_catalog.setval('public.cash_transactions_id_seq', 15, true);
+SELECT pg_catalog.setval('public.cash_transactions_id_seq', 20, true);
 
 
 --
@@ -3195,21 +3036,21 @@ SELECT pg_catalog.setval('public.chart_of_accounts_id_seq', 1, false);
 -- Name: chart_of_accounts_level1_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
-SELECT pg_catalog.setval('public.chart_of_accounts_level1_id_seq', 4, true);
+SELECT pg_catalog.setval('public.chart_of_accounts_level1_id_seq', 7, true);
 
 
 --
 -- Name: chart_of_accounts_level2_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
-SELECT pg_catalog.setval('public.chart_of_accounts_level2_id_seq', 4, true);
+SELECT pg_catalog.setval('public.chart_of_accounts_level2_id_seq', 7, true);
 
 
 --
 -- Name: chart_of_accounts_level3_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
-SELECT pg_catalog.setval('public.chart_of_accounts_level3_id_seq', 6, true);
+SELECT pg_catalog.setval('public.chart_of_accounts_level3_id_seq', 11, true);
 
 
 --
@@ -3258,7 +3099,7 @@ SELECT pg_catalog.setval('public.expense_types_id_seq', 1, false);
 -- Name: expenses_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
-SELECT pg_catalog.setval('public.expenses_id_seq', 1, true);
+SELECT pg_catalog.setval('public.expenses_id_seq', 16, true);
 
 
 --
@@ -3272,14 +3113,14 @@ SELECT pg_catalog.setval('public.final_settlements_id_seq', 1, false);
 -- Name: gate_entries_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
-SELECT pg_catalog.setval('public.gate_entries_id_seq', 31, true);
+SELECT pg_catalog.setval('public.gate_entries_id_seq', 32, true);
 
 
 --
 -- Name: gate_entries_pricing_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
-SELECT pg_catalog.setval('public.gate_entries_pricing_id_seq', 26, true);
+SELECT pg_catalog.setval('public.gate_entries_pricing_id_seq', 27, true);
 
 
 --
@@ -3300,7 +3141,7 @@ SELECT pg_catalog.setval('public.income_statement_adjustments_id_seq', 1, false)
 -- Name: item_types_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
-SELECT pg_catalog.setval('public.item_types_id_seq', 3, true);
+SELECT pg_catalog.setval('public.item_types_id_seq', 4, true);
 
 
 --
@@ -3314,14 +3155,14 @@ SELECT pg_catalog.setval('public.leave_applications_id_seq', 1, false);
 -- Name: ledger_entries_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
-SELECT pg_catalog.setval('public.ledger_entries_id_seq', 1, true);
+SELECT pg_catalog.setval('public.ledger_entries_id_seq', 48, true);
 
 
 --
 -- Name: ledgers_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
-SELECT pg_catalog.setval('public.ledgers_id_seq', 14, true);
+SELECT pg_catalog.setval('public.ledgers_id_seq', 24, true);
 
 
 --
@@ -3363,7 +3204,7 @@ SELECT pg_catalog.setval('public.maintenance_issues_id_seq', 3, true);
 -- Name: monthly_price_averages_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
-SELECT pg_catalog.setval('public.monthly_price_averages_id_seq', 1, false);
+SELECT pg_catalog.setval('public.monthly_price_averages_id_seq', 1, true);
 
 
 --
@@ -3384,7 +3225,7 @@ SELECT pg_catalog.setval('public.paper_types_id_seq', 1, true);
 -- Name: payments_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
-SELECT pg_catalog.setval('public.payments_id_seq', 18, true);
+SELECT pg_catalog.setval('public.payments_id_seq', 23, true);
 
 
 --
@@ -3482,7 +3323,7 @@ SELECT pg_catalog.setval('public.suppliers_id_seq', 1, false);
 -- Name: transactions_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
-SELECT pg_catalog.setval('public.transactions_id_seq', 62, true);
+SELECT pg_catalog.setval('public.transactions_id_seq', 70, true);
 
 
 --
@@ -4443,14 +4284,6 @@ ALTER TABLE ONLY public.leave_applications
 
 
 --
--- Name: ledger_entries ledger_entries_account_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.ledger_entries
-    ADD CONSTRAINT ledger_entries_account_id_fkey FOREIGN KEY (account_id) REFERENCES public.chart_of_accounts(id);
-
-
---
 -- Name: loan_applications loan_applications_employee_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
 --
 
@@ -4480,14 +4313,6 @@ ALTER TABLE ONLY public.maintenance_issue_items
 
 ALTER TABLE ONLY public.maintenance_issues
     ADD CONSTRAINT maintenance_issues_department_code_fkey FOREIGN KEY (department_code) REFERENCES public.departments(code);
-
-
---
--- Name: payments payments_bank_account_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.payments
-    ADD CONSTRAINT payments_bank_account_id_fkey FOREIGN KEY (bank_account_id) REFERENCES public.bank_accounts(id);
 
 
 --

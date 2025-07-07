@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Box,
   Button,
@@ -20,7 +20,8 @@ import {
   Select,
   MenuItem,
   IconButton,
-  Tooltip
+  Tooltip,
+  Stack
 } from '@mui/material';
 import { Add as AddIcon, Edit as EditIcon, Delete as DeleteIcon } from '@mui/icons-material';
 import axios from 'axios';
@@ -40,59 +41,98 @@ const ChartOfAccountsLevel1 = () => {
   const [level3Accounts, setLevel3Accounts] = useState([]);
   const [accountBalances, setAccountBalances] = useState({});
   const [loading, setLoading] = useState(true);
+  const [startDate, setStartDate] = useState(() => {
+    const d = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    return d.toISOString().split('T')[0];
+  });
+  const [endDate, setEndDate] = useState(() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 1);
+    return d.toISOString().split('T')[0];
+  });
+  const [openingBalances, setOpeningBalances] = useState({});
+  const [movement, setMovement] = useState({});
+  const [closingBalances, setClosingBalances] = useState({});
+  const printRef = useRef();
 
-  useEffect(() => {
-    fetchAllAccounts();
-  }, []);
-
-  const fetchAllAccounts = async () => {
+  const fetchAllAccounts = useCallback(async () => {
     try {
       setLoading(true);
-      // Fetch all levels
       const [level1Res, level2Res, level3Res] = await Promise.all([
         axios.get(`${config.apiUrl}/accounts/chart/level1`),
         axios.get(`${config.apiUrl}/accounts/chart/level2`),
         axios.get(`${config.apiUrl}/accounts/chart/level3`)
       ]);
-      setAccounts(level1Res.data);
-      setLevel2Accounts(level2Res.data);
-      // Flatten all level 3 accounts
+      
+      // Add namespaced IDs to Level 1 accounts using unified_id
+      const level1WithNamespacedIds = level1Res.data.map(acc => ({
+        ...acc,
+        namespacedId: `L1-${acc.unified_id || acc.id}`
+      }));
+      setAccounts(level1WithNamespacedIds);
+      
+      // Add namespaced IDs to Level 2 accounts using unified_id
+      const level2WithNamespacedIds = level2Res.data.map(acc => ({
+        ...acc,
+        namespacedId: `L2-${acc.unified_id || acc.id}`
+      }));
+      setLevel2Accounts(level2WithNamespacedIds);
+      
+      // Flatten all level 3 accounts and add namespaced IDs
       const allLevel3 = [];
       level3Res.data.forEach(level1 => {
         if (level1.level2_accounts) {
           level1.level2_accounts.forEach(level2 => {
             if (level2.level3_accounts) {
               level2.level3_accounts.forEach(level3 => {
-                allLevel3.push({ ...level3, level2_id: level2.id });
+                allLevel3.push({ 
+                  ...level3, 
+                  level2_id: level2.id,
+                  namespacedId: `L3-${level3.unified_id || level3.id}`
+                });
               });
             }
           });
         }
       });
       setLevel3Accounts(allLevel3);
-      // Fetch balances for all level 3 accounts
-      const tomorrow = new Date();
-      tomorrow.setDate(tomorrow.getDate() + 1);
-      const endDate = tomorrow.toISOString().split('T')[0];
-      const startDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-      const balances = {};
-      for (const acc of allLevel3) {
-        try {
-          const balanceResponse = await axios.get(
-            `${config.apiUrl}/accounts/ledger?accountId=${acc.id}&startDate=${startDate}&endDate=${endDate}`
-          );
-          balances[acc.id] = balanceResponse.data.account_details.current_balance;
-        } catch (error) {
-          balances[acc.id] = 0;
-        }
-      }
-      setAccountBalances(balances);
+      
+      // For each Level 1, fetch opening, movement, closing using unified ID and level
+      const openingBalancesTemp = {};
+      const movementTemp = {};
+      const closingBalancesTemp = {};
+      await Promise.all(level1WithNamespacedIds.map(async (account) => {
+        // Opening balance as of startDate (exclusive)
+        const openingRes = await axios.get(`${config.apiUrl}/accounts/ledger?accountId=${account.id}&level=1&endDate=${startDate}`);
+        openingBalancesTemp[account.namespacedId] = openingRes.data.current_balance || 0;
+        // Net movement between startDate and endDate (inclusive)
+        const nextDay = new Date(endDate);
+        nextDay.setDate(nextDay.getDate() + 1);
+        const nextDayStr = nextDay.toISOString().split('T')[0];
+        const movementRes = await axios.get(`${config.apiUrl}/accounts/ledger?accountId=${account.id}&level=1&startDate=${startDate}&endDate=${nextDayStr}`);
+        let debit = 0, credit = 0;
+        (movementRes.data.transactions || []).forEach(txn => {
+          if (txn.entry_type === 'DEBIT') debit += parseFloat(txn.amount);
+          if (txn.entry_type === 'CREDIT') credit += parseFloat(txn.amount);
+        });
+        movementTemp[account.namespacedId] = { debit, credit };
+        // Closing balance as of endDate (inclusive)
+        const closingRes = await axios.get(`${config.apiUrl}/accounts/ledger?accountId=${account.id}&level=1&endDate=${nextDayStr}`);
+        closingBalancesTemp[account.namespacedId] = closingRes.data.current_balance || 0;
+      }));
+      setOpeningBalances(openingBalancesTemp);
+      setMovement(movementTemp);
+      setClosingBalances(closingBalancesTemp);
     } catch (error) {
       // handle error
     } finally {
       setLoading(false);
     }
-  };
+  }, [startDate, endDate]);
+
+  useEffect(() => {
+    fetchAllAccounts();
+  }, [fetchAllAccounts]);
 
   const getLevel2AccountsForLevel1 = (level1Id) => {
     return level2Accounts.filter(account => account.level1_id === level1Id);
@@ -106,7 +146,7 @@ const ChartOfAccountsLevel1 = () => {
     let totalDebit = 0;
     let totalCredit = 0;
     getLevel3AccountsForLevel2(level2Id).forEach(acc => {
-      const bal = accountBalances[acc.id] || 0;
+      const bal = accountBalances[acc.namespacedId] || 0;
       if (bal < 0) totalDebit += Math.abs(bal);
       if (bal > 0) totalCredit += bal;
     });
@@ -172,6 +212,67 @@ const ChartOfAccountsLevel1 = () => {
     }
   };
 
+  const handlePrint = () => {
+    const printWindow = window.open('', '_blank');
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Trial Balance</title>
+          <style>
+            @page { size: A4; margin: 1cm; }
+            body { font-family: 'Times New Roman', serif; margin: 0; padding: 20px; font-size: 14px; line-height: 1.4; }
+            table { width: 100%; border-collapse: collapse !important; border-spacing: 0 !important; margin-bottom: 15px; page-break-inside: avoid; }
+            th, td { border: 1px solid #000; padding: 4px 6px; text-align: left; vertical-align: top; }
+            th { background-color: #f0f0f0; font-weight: bold; font-size: 13px; text-align: center; padding: 4px 6px; }
+            .print-header { text-align: center; margin-bottom: 25px; border-bottom: 2px solid #000; padding-bottom: 15px; }
+            .print-header h1 { margin: 0; font-size: 24px; font-weight: bold; text-transform: uppercase; letter-spacing: 1px; }
+            .print-header h2 { margin: 8px 0; font-size: 16px; font-weight: normal; }
+            .print-header p { margin: 8px 0; font-size: 14px; font-weight: bold; }
+            .level1-header, .level1-header td, tr.level1-header { font-size: 16px !important; font-weight: 900 !important; font-family: Arial, sans-serif !important; letter-spacing: 0.5px !important; padding: 2px 8px !important; }
+          </style>
+        </head>
+        <body>
+          <div class="print-header">
+            <h1>TRIAL BALANCE</h1>
+            <h2>(OPENING, MOVEMENT & CLOSING)</h2>
+            <p>From: ${startDate} To: ${endDate}</p>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th>Account Name</th>
+                <th>Opening Balance</th>
+                <th>Account Type</th>
+                <th>Debit Balance</th>
+                <th>Credit Balance</th>
+                <th>Balance</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${accounts.map(account => `
+                <tr>
+                  <td>${account.name}</td>
+                  <td style="text-align:right">${parseFloat(openingBalances[account.namespacedId] || 0).toFixed(2)}</td>
+                  <td>${account.account_type}</td>
+                  <td style="text-align:right">${parseFloat(movement[account.namespacedId]?.debit || 0).toFixed(2)}</td>
+                  <td style="text-align:right">${parseFloat(movement[account.namespacedId]?.credit || 0).toFixed(2)}</td>
+                  <td style="text-align:right">${parseFloat(closingBalances[account.namespacedId] || 0).toFixed(2)}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+    printWindow.focus();
+    setTimeout(() => {
+      printWindow.print();
+      printWindow.close();
+    }, 500);
+  };
+
   return (
     <Box sx={{ p: 3, ml: '300px' }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 3 }}>
@@ -187,6 +288,25 @@ const ChartOfAccountsLevel1 = () => {
           Add Account
         </Button>
       </Box>
+      <Stack direction="row" spacing={2} sx={{ mb: 2 }}>
+        <TextField
+          label="Start Date"
+          type="date"
+          size="small"
+          value={startDate}
+          onChange={e => setStartDate(e.target.value)}
+          InputLabelProps={{ shrink: true }}
+        />
+        <TextField
+          label="End Date"
+          type="date"
+          size="small"
+          value={endDate}
+          onChange={e => setEndDate(e.target.value)}
+          InputLabelProps={{ shrink: true }}
+        />
+        <Button variant="contained" onClick={handlePrint}>Print</Button>
+      </Stack>
       {loading ? (
         <Box display="flex" justifyContent="center" alignItems="center" minHeight="200px">
           <CircularProgress />
@@ -201,6 +321,7 @@ const ChartOfAccountsLevel1 = () => {
                 <TableCell align="right">Account Type</TableCell>
                 <TableCell align="right">Debit Balance</TableCell>
                 <TableCell align="right">Credit Balance</TableCell>
+                <TableCell align="right">Balance</TableCell>
                 <TableCell align="center">Actions</TableCell>
               </TableRow>
             </TableHead>
@@ -208,12 +329,13 @@ const ChartOfAccountsLevel1 = () => {
               {accounts.map((account) => {
                 const net = getLevel1NetBalance(account.id);
                 return (
-                  <TableRow key={account.id}>
+                  <TableRow key={account.namespacedId}>
                     <TableCell>{account.name}</TableCell>
-                    <TableCell align="right">{parseFloat(account.opening_balance || 0).toFixed(2)} {account.balance_type}</TableCell>
+                    <TableCell align="right">{parseFloat(openingBalances[account.namespacedId] || 0).toFixed(2)}</TableCell>
                     <TableCell align="right">{account.account_type}</TableCell>
-                    <TableCell align="right" sx={{ color: 'error.main' }}>{net < 0 ? Math.abs(net).toFixed(2) : '0.00'}</TableCell>
-                    <TableCell align="right" sx={{ color: 'success.main' }}>{net > 0 ? net.toFixed(2) : '0.00'}</TableCell>
+                    <TableCell align="right" sx={{ color: 'error.main' }}>{parseFloat(movement[account.namespacedId]?.debit || 0).toFixed(2)}</TableCell>
+                    <TableCell align="right" sx={{ color: 'success.main' }}>{parseFloat(movement[account.namespacedId]?.credit || 0).toFixed(2)}</TableCell>
+                    <TableCell align="right">{parseFloat(closingBalances[account.namespacedId] || 0).toFixed(2)}</TableCell>
                     <TableCell align="center">
                       <Tooltip title="Edit">
                         <IconButton size="small" color="primary">

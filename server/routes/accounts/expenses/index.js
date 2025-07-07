@@ -208,10 +208,16 @@ router.post('/', async (req, res) => {
     
     const { date, expenseType, amount, receiverName, remarks, voucherNo, account_type, account_id } = req.body;
     
+    // Convert amount to number and ensure it's properly formatted
+    const numericAmount = Math.round(parseFloat(amount) * 100) / 100; // Round to 2 decimal places
+    
     console.log('Received request body:', {
       date,
       expenseType,
-      amount,
+      originalAmount: amount,
+      numericAmount: numericAmount,
+      amountType: typeof amount,
+      numericAmountType: typeof numericAmount,
       receiverName,
       remarks,
       voucherNo,
@@ -238,7 +244,7 @@ router.post('/', async (req, res) => {
             id::integer,
             name::text,
             account_type::text,
-            NULL::integer as level1_id,
+            id::integer as level1_id,
             NULL::integer as level2_id,
             NULL::integer as level3_id,
             'LEVEL1'::text as level
@@ -250,7 +256,7 @@ router.post('/', async (req, res) => {
             name::text,
             account_type::text,
             level1_id::integer,
-            NULL::integer as level2_id,
+            id::integer as level2_id,
             NULL::integer as level3_id,
             'LEVEL2'::text as level
           FROM chart_of_accounts_level2
@@ -262,7 +268,7 @@ router.post('/', async (req, res) => {
             account_type::text,
             level1_id::integer,
             level2_id::integer,
-            NULL::integer as level3_id,
+            id::integer as level3_id,
             'LEVEL3'::text as level
           FROM chart_of_accounts_level3
           WHERE id = $1
@@ -285,13 +291,20 @@ router.post('/', async (req, res) => {
 
       accountDetails = accountData;
       // Use the full account hierarchy name
-      expenseTypeName = accountData.level3_name 
-        ? `${accountData.level1_name} > ${accountData.level2_name} > ${accountData.level3_name}`
-        : accountData.level2_name 
-          ? `${accountData.level1_name} > ${accountData.level2_name}`
-          : accountData.level1_name || accountData.name;
+      const parts = [];
+      if (accountData.level1_name) parts.push(accountData.level1_name);
+      if (accountData.level2_name) parts.push(accountData.level2_name);
+      if (accountData.level3_name) parts.push(accountData.level3_name);
+      
+      expenseTypeName = parts.length > 0 ? parts.join(' > ') : accountData.name;
           
-      console.log('Constructed expense type name:', expenseTypeName);
+      console.log('Account data for hierarchy:', {
+        level1_name: accountData.level1_name,
+        level2_name: accountData.level2_name,
+        level3_name: accountData.level3_name,
+        name: accountData.name,
+        constructed: expenseTypeName
+      });
     } else if (isNaN(expenseType)) {
       // If it's a string, use it directly as the expense type name
       expenseTypeName = expenseType;
@@ -314,7 +327,7 @@ router.post('/', async (req, res) => {
     // Update cash in hand
     await client.query(
       'UPDATE cash_tracking SET cash_in_hand = cash_in_hand - $1, last_updated = CURRENT_TIMESTAMP',
-      [amount]
+      [numericAmount]
     );
 
     // Create cash_transactions entry for dashboard
@@ -332,11 +345,11 @@ router.post('/', async (req, res) => {
     `, [new Date(date)]);
     
     const currentBalance = Number(cashBalanceResult.rows[0].current_balance);
-    const newBalance = currentBalance - Number(amount);
+    const newBalance = currentBalance - numericAmount;
 
     console.log('Creating cash_transactions entry for expense:', {
       type: 'DEBIT',
-      amount,
+      amount: numericAmount,
       reference: finalVoucherNo,
       remarks: `Expense payment to ${receiverName}${remarks ? ` - ${remarks}` : ''}`,
       currentBalance,
@@ -350,7 +363,7 @@ router.post('/', async (req, res) => {
       ) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
       [
         'DEBIT',
-        amount,
+        numericAmount,
         finalVoucherNo,
         `Expense payment to ${receiverName}${remarks ? ` - ${remarks}` : ''}`,
         currentBalance,
@@ -380,7 +393,7 @@ router.post('/', async (req, res) => {
       [
         new Date(date), 
         expenseTypeName, 
-        amount, 
+        numericAmount, 
         receiverName, 
         remarks, 
         finalVoucherNo,
@@ -412,9 +425,9 @@ router.post('/', async (req, res) => {
         [
           new Date(date),
           account_id,
-          amount,
+          numericAmount,
           0,
-          `Expense payment to ${receiverName} - ${remarks || 'No remarks'}`,
+          `Expense payment to ${receiverName} (${expenseTypeName}) - ${remarks || 'No remarks'}`,
           finalVoucherNo,
           req.body.created_by,
           req.body.processed_by_role,
@@ -441,8 +454,8 @@ router.post('/', async (req, res) => {
           new Date(date),
           1, // Assuming 1 is the cash account ID
           0,
-          amount,
-          `Expense payment to ${receiverName} - ${remarks || 'No remarks'}`,
+          numericAmount,
+          `Expense payment to ${receiverName} (${expenseTypeName}) - ${remarks || 'No remarks'}`,
           finalVoucherNo,
           req.body.created_by,
           req.body.processed_by_role,
@@ -469,9 +482,9 @@ router.post('/', async (req, res) => {
           [
             new Date(date),
             accountDetails.level1_id,
-            amount,
+            numericAmount,
             0,
-            `Expense payment to ${receiverName} - ${remarks || 'No remarks'}`,
+            `Expense payment to ${receiverName} (${expenseTypeName}) - ${remarks || 'No remarks'}`,
             finalVoucherNo,
             req.body.created_by,
             req.body.processed_by_role,
@@ -498,9 +511,9 @@ router.post('/', async (req, res) => {
           [
             new Date(date),
             accountDetails.level2_id,
-            amount,
+            numericAmount,
             0,
-            `Expense payment to ${receiverName} - ${remarks || 'No remarks'}`,
+            `Expense payment to ${receiverName} (${expenseTypeName}) - ${remarks || 'No remarks'}`,
             finalVoucherNo,
             req.body.created_by,
             req.body.processed_by_role,
@@ -515,7 +528,7 @@ router.post('/', async (req, res) => {
         `UPDATE ledgers 
          SET amount = amount + $1 
          WHERE account_id = $2 AND account_type = $3`,
-        [amount, account_id, accountDetails.level]
+        [numericAmount, account_id, accountDetails.level]
       );
 
       if (accountDetails.level1_id) {
@@ -523,7 +536,7 @@ router.post('/', async (req, res) => {
           `UPDATE ledgers 
            SET amount = amount + $1 
            WHERE account_id = $2 AND account_type = $3`,
-          [amount, accountDetails.level1_id, 'LEVEL1']
+          [numericAmount, accountDetails.level1_id, 'LEVEL1']
         );
       }
 
@@ -532,7 +545,7 @@ router.post('/', async (req, res) => {
           `UPDATE ledgers 
            SET amount = amount + $1 
            WHERE account_id = $2 AND account_type = $3`,
-          [amount, accountDetails.level2_id, 'LEVEL2']
+          [numericAmount, accountDetails.level2_id, 'LEVEL2']
         );
       }
 
@@ -541,8 +554,73 @@ router.post('/', async (req, res) => {
         `UPDATE ledgers 
          SET amount = amount - $1 
          WHERE account_id = $2 AND account_type = $3`,
-        [amount, 1, 'CASH']
+        [numericAmount, 1, 'CASH']
       );
+
+      // Create transaction entry for the ledger view
+      // Get the unified_account_id and account hierarchy for the account
+      const unifiedAccountResult = await client.query(
+        `SELECT 
+          COALESCE(l1.unified_id, l2.unified_id, l3.unified_id) as unified_account_id,
+          CASE 
+            WHEN l3.id IS NOT NULL THEN CONCAT(l1.name, ' > ', l2.name, ' > ', l3.name)
+            WHEN l2.id IS NOT NULL THEN CONCAT(l1.name, ' > ', l2.name)
+            ELSE l1.name
+          END as account_hierarchy
+         FROM (
+           SELECT id, unified_id FROM chart_of_accounts_level1 WHERE id = $1
+           UNION ALL
+           SELECT id, unified_id FROM chart_of_accounts_level2 WHERE id = $1
+           UNION ALL
+           SELECT id, unified_id FROM chart_of_accounts_level3 WHERE id = $1
+         ) AS accounts(id, unified_id)
+         LEFT JOIN chart_of_accounts_level1 l1 ON accounts.id = l1.id
+         LEFT JOIN chart_of_accounts_level2 l2 ON accounts.id = l2.id
+         LEFT JOIN chart_of_accounts_level3 l3 ON accounts.id = l3.id
+         WHERE accounts.id = $1`,
+        [account_id]
+      );
+
+      if (unifiedAccountResult.rows.length > 0) {
+        const unified_account_id = unifiedAccountResult.rows[0].unified_account_id;
+        const account_hierarchy = unifiedAccountResult.rows[0].account_hierarchy;
+        
+        console.log('About to create transaction entry for ledger view:', {
+          account_id,
+          unified_account_id,
+          account_hierarchy,
+          finalVoucherNo,
+          amount: numericAmount,
+          description: `Expense payment to ${receiverName} (${account_hierarchy})${remarks ? ` - ${remarks}` : ''}`
+        });
+        
+        // Create transaction record for the ledger view
+        const transactionResult = await client.query(
+          `INSERT INTO transactions (
+            transaction_date,
+            account_id,
+            unified_account_id,
+            reference_no,
+            entry_type,
+            amount,
+            description
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7)
+          RETURNING *`,
+          [
+            new Date(date),
+            account_id,
+            unified_account_id,
+            finalVoucherNo,
+            'DEBIT',
+            amount,
+            `Expense payment to ${receiverName} (${account_hierarchy})${remarks ? ` - ${remarks}` : ''}`
+          ]
+        );
+        
+        console.log('Successfully created transaction entry for ledger view:', transactionResult.rows[0]);
+      } else {
+        console.log('No unified_account_id found for account_id:', account_id);
+      }
     }
 
     await client.query('COMMIT');

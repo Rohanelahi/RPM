@@ -205,19 +205,45 @@ router.post('/received', async (req, res) => {
       ]
     );
 
+    // Get the unified_account_id for the account
+    const accountResult = await client.query(
+      `SELECT 
+        COALESCE(l1.unified_id, l2.unified_id, l3.unified_id) as unified_account_id
+       FROM (
+         SELECT id, unified_id FROM chart_of_accounts_level1 WHERE id = $1
+         UNION ALL
+         SELECT id, unified_id FROM chart_of_accounts_level2 WHERE id = $1
+         UNION ALL
+         SELECT id, unified_id FROM chart_of_accounts_level3 WHERE id = $1
+       ) AS accounts(id, unified_id)
+       LEFT JOIN chart_of_accounts_level1 l1 ON accounts.id = l1.id
+       LEFT JOIN chart_of_accounts_level2 l2 ON accounts.id = l2.id
+       LEFT JOIN chart_of_accounts_level3 l3 ON accounts.id = l3.id
+       WHERE accounts.id = $1`,
+      [account_id]
+    );
+
+    if (accountResult.rows.length === 0) {
+      throw new Error('Account not found');
+    }
+
+    const unified_account_id = accountResult.rows[0].unified_account_id;
+
     // Create transaction record for the ledger
     await client.query(
       `INSERT INTO transactions (
         transaction_date,
         account_id,
+        unified_account_id,
         reference_no,
         entry_type,
         amount,
         description
-      ) VALUES ($1, $2, $3, $4, $5, $6)`,
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
       [
         new Date(payment_date),
         account_id,
+        unified_account_id,
         finalVoucherNo, // Use the full voucher number as reference
         'CREDIT',
         amount,
@@ -338,6 +364,19 @@ router.post('/issued', async (req, res) => {
     bank_account_id
   } = req.body;
 
+  // Convert amount to number and ensure it's properly formatted
+  const numericAmount = Math.round(parseFloat(amount) * 100) / 100; // Round to 2 decimal places
+  
+  console.log('Payment issued request:', {
+    originalAmount: amount,
+    numericAmount: numericAmount,
+    amountType: typeof amount,
+    numericAmountType: typeof numericAmount,
+    account_type,
+    account_id,
+    receiver_name
+  });
+
   // Validate required fields
   if (!payment_date) {
     return res.status(400).json({ error: 'Payment date is required' });
@@ -374,7 +413,7 @@ router.post('/issued', async (req, res) => {
       RETURNING *`,
       [
         account_id,
-        amount,
+        numericAmount,
         new Date(payment_date),
         payment_mode,
         account_type === 'OTHER' ? 'EXPENSE' : 'ISSUED', // Set payment_type as EXPENSE for OTHER account type
@@ -389,47 +428,79 @@ router.post('/issued', async (req, res) => {
       ]
     );
 
+    // Get the unified_account_id for the account
+    const accountResult = await client.query(
+      `SELECT 
+        COALESCE(l1.unified_id, l2.unified_id, l3.unified_id) as unified_account_id
+       FROM (
+         SELECT id, unified_id FROM chart_of_accounts_level1 WHERE id = $1
+         UNION ALL
+         SELECT id, unified_id FROM chart_of_accounts_level2 WHERE id = $1
+         UNION ALL
+         SELECT id, unified_id FROM chart_of_accounts_level3 WHERE id = $1
+       ) AS accounts(id, unified_id)
+       LEFT JOIN chart_of_accounts_level1 l1 ON accounts.id = l1.id
+       LEFT JOIN chart_of_accounts_level2 l2 ON accounts.id = l2.id
+       LEFT JOIN chart_of_accounts_level3 l3 ON accounts.id = l3.id
+       WHERE accounts.id = $1`,
+      [account_id]
+    );
+
+    if (accountResult.rows.length === 0) {
+      throw new Error('Account not found');
+    }
+
+    const unified_account_id = accountResult.rows[0].unified_account_id;
+
+    // Get account hierarchy for description
+    const accountHierarchyResult = await client.query(
+      `SELECT 
+        CASE 
+          WHEN l3.id IS NOT NULL THEN CONCAT(l1.name, ' > ', l2.name, ' > ', l3.name)
+          WHEN l2.id IS NOT NULL THEN CONCAT(l1.name, ' > ', l2.name)
+          ELSE l1.name
+        END as account_hierarchy
+       FROM (
+         SELECT id FROM chart_of_accounts_level1 WHERE id = $1
+         UNION ALL
+         SELECT id FROM chart_of_accounts_level2 WHERE id = $1
+         UNION ALL
+         SELECT id FROM chart_of_accounts_level3 WHERE id = $1
+       ) AS accounts(id)
+       LEFT JOIN chart_of_accounts_level1 l1 ON accounts.id = l1.id
+       LEFT JOIN chart_of_accounts_level2 l2 ON accounts.id = l2.id
+       LEFT JOIN chart_of_accounts_level3 l3 ON accounts.id = l3.id
+       WHERE accounts.id = $1`,
+      [account_id]
+    );
+
+    const account_hierarchy = accountHierarchyResult.rows[0]?.account_hierarchy || 'Unknown Account';
+
     // Create transaction record for the ledger
+    // For OTHER account types, this creates a DEBIT entry in the expense account
+    // For other account types, this creates a DEBIT entry in the account being paid
     await client.query(
       `INSERT INTO transactions (
         transaction_date,
         account_id,
+        unified_account_id,
         reference_no,
         entry_type,
         amount,
         description
-      ) VALUES ($1, $2, $3, $4, $5, $6)`,
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
       [
         new Date(payment_date),
         account_id,
+        unified_account_id,
         finalVoucherNo, // Use the full voucher number as reference
         'DEBIT',
-        amount,
-        `Payment issued${payment_mode === 'CASH' ? ' in cash' : payment_mode === 'ONLINE' && bankAccountName ? ` via bank transfer (${bankAccountName})` : ''}${remarks ? ` - ${remarks}` : ''}`
+        numericAmount,
+        account_type === 'OTHER' 
+          ? `Expense payment to ${receiver_name} (${account_hierarchy})${remarks ? ` - ${remarks}` : ''}`
+          : `Payment issued${payment_mode === 'CASH' ? ' in cash' : payment_mode === 'ONLINE' && bankAccountName ? ` via bank transfer (${bankAccountName})` : ''}${remarks ? ` - ${remarks}` : ''}`
       ]
     );
-
-    // If account_type is OTHER (expense account), create additional transaction for the expense account
-    if (account_type === 'OTHER') {
-      await client.query(
-        `INSERT INTO transactions (
-          transaction_date,
-          account_id,
-          reference_no,
-          entry_type,
-          amount,
-          description
-        ) VALUES ($1, $2, $3, $4, $5, $6)`,
-        [
-          new Date(payment_date),
-          account_id,
-          finalVoucherNo,
-          'DEBIT',
-          amount,
-          `Expense payment to ${receiver_name}${remarks ? ` - ${remarks}` : ''}`
-        ]
-      );
-    }
 
     // If payment mode is CASH, update cash balance
     if (payment_mode === 'CASH') {
@@ -448,7 +519,7 @@ router.post('/issued', async (req, res) => {
       `, [new Date(payment_date)]);
       
       const currentBalance = Number(cashBalanceResult.rows[0].current_balance);
-      const newBalance = currentBalance - Number(amount);
+      const newBalance = currentBalance - numericAmount;
 
       if (newBalance < 0) {
         throw new Error('Insufficient cash balance');
@@ -458,7 +529,7 @@ router.post('/issued', async (req, res) => {
       if (account_type !== 'OTHER') {
         console.log('Creating cash transaction for regular payment:', {
           type: 'DEBIT',
-          amount,
+          amount: numericAmount,
           reference: finalVoucherNo,
           remarks: remarks || `Payment to ${receiver_name}`,
           currentBalance,
@@ -466,27 +537,27 @@ router.post('/issued', async (req, res) => {
           transactionDate: new Date(payment_date)
         });
 
-        await client.query(
-          `INSERT INTO cash_transactions (
-            type, amount, reference, remarks, balance, balance_after, transaction_date
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-          [
-            'DEBIT',
-            amount,
-            finalVoucherNo,
-            remarks || `Payment to ${receiver_name}`,
-            currentBalance,
-            newBalance,
-            new Date(payment_date)
-          ]
-        );
+      await client.query(
+        `INSERT INTO cash_transactions (
+          type, amount, reference, remarks, balance, balance_after, transaction_date
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        [
+          'DEBIT',
+          numericAmount,
+          finalVoucherNo,
+          remarks || `Payment to ${receiver_name}`,
+          currentBalance,
+          newBalance,
+          new Date(payment_date)
+        ]
+      );
       }
 
       // If account_type is OTHER (expense), create cash transaction for cash account
       if (account_type === 'OTHER') {
         console.log('Creating cash transaction for OTHER payment:', {
           type: 'DEBIT',
-          amount,
+          amount: numericAmount,
           reference: finalVoucherNo,
           remarks: `Expense payment to ${receiver_name}${remarks ? ` - ${remarks}` : ''}`,
           currentBalance,
@@ -501,7 +572,7 @@ router.post('/issued', async (req, res) => {
           ) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
           [
             'DEBIT',
-            amount,
+            numericAmount,
             finalVoucherNo,
             `Expense payment to ${receiver_name}${remarks ? ` - ${remarks}` : ''}`,
             currentBalance,
@@ -524,7 +595,7 @@ router.post('/issued', async (req, res) => {
       `, [bank_account_id]);
       
       const currentBalance = Number(bankBalanceResult.rows[0].current_balance);
-      const newBalance = currentBalance - Number(amount);
+      const newBalance = currentBalance - numericAmount;
 
       if (newBalance < 0) {
         throw new Error('Insufficient bank balance');
@@ -538,7 +609,7 @@ router.post('/issued', async (req, res) => {
         [
           bank_account_id,
           'DEBIT',
-          amount,
+          numericAmount,
           finalVoucherNo,
           remarks || `Payment to ${receiver_name}`,
           currentBalance,

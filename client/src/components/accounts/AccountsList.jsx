@@ -26,7 +26,7 @@ import {
   Alert,
   InputAdornment
 } from '@mui/material';
-import { Add as AddIcon, Edit as EditIcon, ExpandMore as ExpandMoreIcon, ExpandLess as ExpandLessIcon, Search as SearchIcon } from '@mui/icons-material';
+import { Add as AddIcon, Edit as EditIcon, ExpandMore as ExpandMoreIcon, ExpandLess as ExpandLessIcon, Search as SearchIcon, Refresh as RefreshIcon } from '@mui/icons-material';
 import axios from 'axios';
 
 const AccountsList = () => {
@@ -67,6 +67,8 @@ const AccountsList = () => {
   const [level3Accounts, setLevel3Accounts] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [filteredAccounts, setFilteredAccounts] = useState([]);
+  const [accountBalances, setAccountBalances] = useState({});
+  const [balancesLoading, setBalancesLoading] = useState(false);
 
   const fetchAccounts = async () => {
     try {
@@ -119,6 +121,59 @@ const AccountsList = () => {
     } catch (error) {
       console.error(`Error fetching level ${level} accounts:`, error);
       return [];
+    }
+  };
+
+  const fetchAccountBalances = async (level1Data, level2Data, level3Data) => {
+    try {
+      setBalancesLoading(true);
+      const balances = {};
+
+      // Set start date to January 1, 2025
+      const startDate = '2025-01-01';
+      // Use tomorrow's date to ensure today's transactions are included
+      const tomorrow = new Date();
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      const endDate = tomorrow.toISOString().split('T')[0];
+
+      // Fetch balances for Level 1 accounts
+      for (const account of level1Data) {
+        try {
+          const response = await axios.get(`${config.apiUrl}/accounts/ledger?accountId=${account.id}&level=1&startDate=${startDate}&endDate=${endDate}`);
+          balances[`L1-${account.id}`] = response.data.current_balance || 0;
+        } catch (error) {
+          console.error(`Error fetching balance for Level 1 account ${account.id}:`, error);
+          balances[`L1-${account.id}`] = 0;
+        }
+      }
+
+      // Fetch balances for Level 2 accounts
+      for (const account of level2Data) {
+        try {
+          const response = await axios.get(`${config.apiUrl}/accounts/ledger?accountId=${account.id}&level=2&startDate=${startDate}&endDate=${endDate}`);
+          balances[`L2-${account.id}`] = response.data.current_balance || 0;
+        } catch (error) {
+          console.error(`Error fetching balance for Level 2 account ${account.id}:`, error);
+          balances[`L2-${account.id}`] = 0;
+        }
+      }
+
+      // Fetch balances for Level 3 accounts
+      for (const account of level3Data) {
+        try {
+          const response = await axios.get(`${config.apiUrl}/accounts/ledger?accountId=${account.id}&level=3&startDate=${startDate}&endDate=${endDate}`);
+          balances[`L3-${account.id}`] = response.data.current_balance || 0;
+        } catch (error) {
+          console.error(`Error fetching balance for Level 3 account ${account.id}:`, error);
+          balances[`L3-${account.id}`] = 0;
+        }
+      }
+
+      setAccountBalances(balances);
+    } catch (error) {
+      console.error('Error fetching account balances:', error);
+    } finally {
+      setBalancesLoading(false);
     }
   };
 
@@ -198,6 +253,10 @@ const AccountsList = () => {
 
       setLevel1Accounts(updatedLevel1Accounts);
       setLevel2Accounts(level2Data);
+      setLevel3Accounts(allLevel3Accounts);
+      
+      // Fetch current balances for all accounts
+      await fetchAccountBalances(updatedLevel1Accounts, level2Data, allLevel3Accounts);
       setLevel3Accounts(allLevel3Accounts);
 
     } catch (error) {
@@ -408,9 +467,16 @@ const AccountsList = () => {
   };
 
   const formatBalance = (balance, type) => {
-    if (balance === null || balance === undefined) return 0;
+    if (balance === null || balance === undefined) return { amount: 0, prefix: '' };
     const amount = parseFloat(balance);
-    return type === 'DEBIT' ? amount : -amount;
+    const adjustedAmount = type === 'DEBIT' ? amount : -amount;
+    
+    // Return object with amount and prefix
+    if (adjustedAmount < 0) {
+      return { amount: Math.abs(adjustedAmount), prefix: 'DB' };
+    } else {
+      return { amount: adjustedAmount, prefix: 'CR' };
+    }
   };
 
   useEffect(() => {
@@ -439,16 +505,35 @@ const AccountsList = () => {
   }, [searchTerm, level1Accounts, level2Accounts, level3Accounts]);
 
   if (loading) {
-    return <div>Loading...</div>;
+    return (
+      <Box sx={{ p: 3, ml: '300px', display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '200px' }}>
+        <CircularProgress />
+      </Box>
+    );
   }
 
   return (
-    <Box sx={{ p: 3, ml: '300px' }}>
-      <Typography variant="h4" component="h1" sx={{ mb: 3 }}>
+    <Box sx={{ p: 3, ml: '300px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3, width: '100%', maxWidth: '1200px' }}>
+        <Box>
+          <Typography variant="h4" component="h1">
         Chart of Accounts
       </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+            Current balances from January 1, 2025
+          </Typography>
+        </Box>
+        <Button
+          variant="outlined"
+          startIcon={<RefreshIcon />}
+          onClick={() => fetchAccountBalances(level1Accounts, level2Accounts, level3Accounts)}
+          disabled={balancesLoading}
+        >
+          {balancesLoading ? 'Refreshing...' : 'Refresh Balances'}
+        </Button>
+      </Box>
 
-      <Box sx={{ mb: 4 }}>
+      <Box sx={{ mb: 4, width: '100%', maxWidth: '1200px' }}>
         <TextField
           fullWidth
           variant="outlined"
@@ -465,7 +550,7 @@ const AccountsList = () => {
         />
       </Box>
 
-      <TableContainer component={Paper}>
+      <TableContainer component={Paper} sx={{ width: '100%', maxWidth: '1200px' }}>
         <Table>
           <TableHead>
             <TableRow>
@@ -485,7 +570,14 @@ const AccountsList = () => {
                   <TableCell align="right">{account.balance_type || 'DEBIT'}</TableCell>
                   <TableCell align="right">{account.account_type || 'ACCOUNT'}</TableCell>
                   <TableCell align="right">
-                    {formatBalance(account.current_balance, account.balance_type || 'DEBIT').toFixed(2)}
+                    {balancesLoading ? (
+                      <CircularProgress size={16} />
+                    ) : (
+                      (() => {
+                        const formatted = formatBalance(accountBalances[`${account.level === 'Level 1' ? 'L1' : account.level === 'Level 2' ? 'L2' : 'L3'}-${account.id}`] || 0, account.balance_type || 'DEBIT');
+                        return `${formatted.prefix} ${formatted.amount.toFixed(2)}`;
+                      })()
+                    )}
                   </TableCell>
                 </TableRow>
               ))
@@ -498,7 +590,14 @@ const AccountsList = () => {
                     <TableCell align="right">{level1Account.balance_type || 'DEBIT'}</TableCell>
                     <TableCell align="right">{level1Account.account_type || 'ACCOUNT'}</TableCell>
                     <TableCell align="right">
-                      {formatBalance(level1Account.current_balance, level1Account.balance_type || 'DEBIT').toFixed(2)}
+                      {balancesLoading ? (
+                        <CircularProgress size={16} />
+                      ) : (
+                        (() => {
+                          const formatted = formatBalance(accountBalances[`L1-${level1Account.id}`] || 0, level1Account.balance_type || 'DEBIT');
+                          return `${formatted.prefix} ${formatted.amount.toFixed(2)}`;
+                        })()
+                      )}
                     </TableCell>
                   </TableRow>
                   {level1Account.level2_accounts?.map((level2Account) => (
@@ -509,7 +608,14 @@ const AccountsList = () => {
                         <TableCell align="right">{level2Account.balance_type || 'DEBIT'}</TableCell>
                         <TableCell align="right">{level2Account.account_type || 'ACCOUNT'}</TableCell>
                         <TableCell align="right">
-                          {formatBalance(level2Account.current_balance, level2Account.balance_type || 'DEBIT').toFixed(2)}
+                          {balancesLoading ? (
+                            <CircularProgress size={16} />
+                          ) : (
+                            (() => {
+                              const formatted = formatBalance(accountBalances[`L2-${level2Account.id}`] || 0, level2Account.balance_type || 'DEBIT');
+                              return `${formatted.prefix} ${formatted.amount.toFixed(2)}`;
+                            })()
+                          )}
                         </TableCell>
                       </TableRow>
                       {level2Account.level3_accounts?.map((level3Account) => (
@@ -519,7 +625,14 @@ const AccountsList = () => {
                           <TableCell align="right">{level3Account.balance_type || 'DEBIT'}</TableCell>
                           <TableCell align="right">{level3Account.account_type || 'ACCOUNT'}</TableCell>
                           <TableCell align="right">
-                            {formatBalance(level3Account.current_balance, level3Account.balance_type || 'DEBIT').toFixed(2)}
+                            {balancesLoading ? (
+                              <CircularProgress size={16} />
+                            ) : (
+                              (() => {
+                                const formatted = formatBalance(accountBalances[`L3-${level3Account.id}`] || 0, level3Account.balance_type || 'DEBIT');
+                                return `${formatted.prefix} ${formatted.amount.toFixed(2)}`;
+                              })()
+                            )}
                 </TableCell>
               </TableRow>
             ))}

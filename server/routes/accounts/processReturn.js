@@ -50,19 +50,45 @@ router.post('/process-return', async (req, res) => {
       [totalAmount * balanceModifier, pricing.account_id]
     );
 
+    // Get the unified_account_id for the account
+    const accountResult = await client.query(
+      `SELECT 
+        COALESCE(l1.unified_id, l2.unified_id, l3.unified_id) as unified_account_id
+       FROM (
+         SELECT id, unified_id FROM chart_of_accounts_level1 WHERE id = $1
+         UNION ALL
+         SELECT id, unified_id FROM chart_of_accounts_level2 WHERE id = $1
+         UNION ALL
+         SELECT id, unified_id FROM chart_of_accounts_level3 WHERE id = $1
+       ) AS accounts(id, unified_id)
+       LEFT JOIN chart_of_accounts_level1 l1 ON accounts.id = l1.id
+       LEFT JOIN chart_of_accounts_level2 l2 ON accounts.id = l2.id
+       LEFT JOIN chart_of_accounts_level3 l3 ON accounts.id = l3.id
+       WHERE accounts.id = $1`,
+      [pricing.account_id]
+    );
+
+    if (accountResult.rows.length === 0) {
+      throw new Error('Account not found');
+    }
+
+    const unified_account_id = accountResult.rows[0].unified_account_id;
+
     // 4. Create transaction record
     await client.query(
       `INSERT INTO transactions (
         transaction_date,
         account_id,
+        unified_account_id,
         reference_no,
         entry_type,
         amount,
         description
-      ) VALUES ($1, $2, $3, $4, $5, $6)`,
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
       [
         new Date(),
         pricing.account_id,
+        unified_account_id,
         pricing.return_number,
         pricing.return_type === 'SALE_RETURN' ? 'CREDIT' : 'DEBIT',
         totalAmount,

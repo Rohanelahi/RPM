@@ -77,7 +77,7 @@ const Ledger = () => {
     // Create properly structured account objects for each level
     const level1AccountsWithHierarchy = level1Accounts.map(acc => ({
       ...acc,
-      level: 'Level 1',
+      level: 1,
       level1_id: acc.id,
       level2_id: null,
       level1_name: acc.name,
@@ -86,7 +86,7 @@ const Ledger = () => {
 
     const level2AccountsWithHierarchy = level2Accounts.map(acc => ({
       ...acc,
-      level: 'Level 2',
+      level: 2,
       level1_id: acc.level1_id,
       level2_id: acc.id,
       level1_name: level1Accounts.find(l1 => l1.id === acc.level1_id)?.name || '',
@@ -95,7 +95,7 @@ const Ledger = () => {
 
     const level3AccountsWithHierarchy = level3Accounts.map(acc => ({
       ...acc,
-      level: 'Level 3',
+      level: 3,
       level1_id: acc.level1_id,
       level2_id: acc.level2_id,
       level1_name: acc.level1_name || '',
@@ -125,19 +125,23 @@ const Ledger = () => {
         fetch(`${config.apiUrl}/accounts/chart/level3`).then(res => res.json())
       ]);
 
-      // Process Level 1 accounts
+      // Process Level 1 accounts with namespaced IDs
       const level1Data = level1Res.map(acc => ({
         ...acc,
-        level2_accounts: []
+        level2_accounts: [],
+        namespacedId: `L1-${acc.id}`,
+        level: 1
       }));
 
-      // Process Level 2 accounts
+      // Process Level 2 accounts with namespaced IDs
       const level2Data = level2Res.map(acc => ({
         ...acc,
-        level3_accounts: []
+        level3_accounts: [],
+        namespacedId: `L2-${acc.id}`,
+        level: 2
       }));
 
-      // Extract all Level 3 accounts
+      // Extract all Level 3 accounts with namespaced IDs
       const allLevel3Accounts = [];
       level3Res.forEach(level1 => {
         if (level1.level2_accounts) {
@@ -149,7 +153,9 @@ const Ledger = () => {
                   level1_id: level1.id,
                   level2_id: level2.id,
                   level1_name: level1.name,
-                  level2_name: level2.name
+                  level2_name: level2.name,
+                  namespacedId: `L3-${level3.id}`,
+                  level: 3
                 });
               });
             }
@@ -197,9 +203,9 @@ const Ledger = () => {
             `${config.apiUrl}/accounts/ledger?accountId=${acc.id}&startDate=${startDate}&endDate=${endDate}`
           );
           const data = await balanceResponse.json();
-          balances[acc.id] = data.account_details?.current_balance || 0;
+          balances[acc.namespacedId] = data.account_details?.current_balance || 0;
         } catch (error) {
-          balances[acc.id] = 0;
+          balances[acc.namespacedId] = 0;
         }
       }
 
@@ -210,9 +216,9 @@ const Ledger = () => {
             `${config.apiUrl}/accounts/ledger?accountId=${acc.id}&startDate=${startDate}&endDate=${endDate}`
           );
           const data = await balanceResponse.json();
-          balances[acc.id] = data.account_details?.current_balance || 0;
+          balances[acc.namespacedId] = data.account_details?.current_balance || 0;
         } catch (error) {
-          balances[acc.id] = 0;
+          balances[acc.namespacedId] = 0;
         }
       }
 
@@ -220,12 +226,12 @@ const Ledger = () => {
       for (const acc of level1Data) {
         try {
           const balanceResponse = await fetch(
-            `${config.apiUrl}/accounts/ledger?accountId=${acc.id}&startDate=${startDate}&endDate=${endDate}`
+            `${config.apiUrl}/accounts/ledger?accountId=${acc.id}&level=1&startDate=${startDate}&endDate=${endDate}`
           );
           const data = await balanceResponse.json();
-          balances[acc.id] = data.account_details?.current_balance || 0;
+          balances[acc.namespacedId] = data.account_details?.current_balance || 0;
         } catch (error) {
-          balances[acc.id] = 0;
+          balances[acc.namespacedId] = 0;
         }
       }
 
@@ -334,8 +340,36 @@ const Ledger = () => {
 
       console.log('Date range:', { formattedStartDate, formattedEndDate });
 
+      // Extract the level from the account object with better error handling
+      let level;
+      if (typeof account.level === 'string') {
+        level = parseInt(account.level.replace('Level ', ''));
+      } else if (typeof account.level === 'number') {
+        level = account.level;
+      } else {
+        // Fallback: try to determine level from account structure
+        if (account.level1_id && account.level2_id && account.level3_name) {
+          level = 3;
+        } else if (account.level1_id && account.level2_name) {
+          level = 2;
+        } else if (account.level1_name) {
+          level = 1;
+        } else {
+          level = 1; // Default fallback
+        }
+      }
+
+      // Validate level
+      if (isNaN(level) || level < 1 || level > 3) {
+        console.error('Invalid level extracted:', level, 'from account:', account);
+        level = 1; // Default to level 1 if invalid
+      }
+
+      console.log('Extracted level:', level, 'for account:', account.name);
+
+      // Pass both accountId and level to the backend
       const response = await fetch(
-        `${config.apiUrl}/accounts/ledger?accountId=${account.id}&startDate=${formattedStartDate}&endDate=${formattedEndDate}${user?.role ? `&userRole=${user.role}` : ''}`
+        `${config.apiUrl}/accounts/ledger?accountId=${account.id}&level=${level}&startDate=${formattedStartDate}&endDate=${formattedEndDate}${user?.role ? `&userRole=${user.role}` : ''}`
       );
       const data = await response.json();
 
@@ -364,21 +398,23 @@ const Ledger = () => {
   };
 
   const calculateBalance = (index) => {
-    let balance = accountDetails?.opening_balance || 0;
+    // Start with the opening balance from the backend (balance as of start date)
+    let balance = openingBalance || 0;
     
-    // For opening balance (index === -1), use the account's balance_type
+    // For opening balance row (index === -1), show the opening balance
     if (index === -1) {
       const absAmount = Math.abs(balance);
-      return `${absAmount.toFixed(2)} ${accountDetails?.balance_type}`;
+      const suffix = balance >= 0 ? 'CREDIT' : 'DEBIT';
+      return `${absAmount.toFixed(2)} ${suffix}`;
     }
 
     // Calculate running balance for transactions
     for (let i = 0; i <= index; i++) {
       const transaction = transactions[i];
-      if (transaction.type === 'CREDIT') {
-        balance += transaction.amount;
-      } else if (transaction.type === 'DEBIT') {
-        balance -= transaction.amount;
+      if (transaction.entry_type === 'CREDIT') {
+        balance += parseFloat(transaction.amount) || 0;
+      } else if (transaction.entry_type === 'DEBIT') {
+        balance -= parseFloat(transaction.amount) || 0;
       }
     }
 
@@ -400,12 +436,14 @@ const Ledger = () => {
       }
     });
 
-    const balance = totalCredits - totalDebits;
+    // Calculate the final balance: opening balance + net movement during the period
+    const netMovement = totalCredits - totalDebits;
+    const finalBalance = (openingBalance || 0) + netMovement;
 
     return {
       totalDebits: totalDebits.toFixed(2),
       totalCredits: totalCredits.toFixed(2),
-      balance: balance.toFixed(2)
+      balance: finalBalance.toFixed(2)
     };
   };
 
@@ -594,6 +632,13 @@ const Ledger = () => {
                   ${accountDetails.opening_balance >= 0 ? ' CR' : ' DB'}
                 </td>
               </tr>
+              <tr style="background-color: #e8f5e8;">
+                <td colspan="7">Balance as of ${format(dateRange.startDate, 'MMM dd, yyyy')}</td>
+                <td class="amount-cell" colspan="3">
+                  Rs.${Math.abs(openingBalance).toFixed(2)}
+                  ${openingBalance >= 0 ? ' CR' : ' DB'}
+                </td>
+              </tr>
               ${transactions.map((transaction, index) => `
                 <tr>
                   <td>${formatDateTime(transaction.display_date)}</td>
@@ -631,7 +676,7 @@ const Ledger = () => {
               <div class="total-item">
                 <div>Current Balance:</div>
                 <div>
-                  Rs.${totals.balance} CR
+                  Rs.${Math.abs(parseFloat(totals.balance)).toFixed(2)} ${parseFloat(totals.balance) >= 0 ? 'CR' : 'DB'}
                 </div>
               </div>
             </div>
@@ -649,7 +694,7 @@ const Ledger = () => {
   };
 
   const getLevel3Balance = (level3Id) => {
-    return level3Balances[level3Id] || 0;
+    return level3Balances[`L3-${level3Id}`] || 0;
   };
 
   const getLevel2NetBalance = (level2Id) => {
@@ -663,7 +708,7 @@ const Ledger = () => {
     }
 
     // If the Level 2 account has no Level 3 children, use its own balance
-    return level3Balances[level2Id] || 0;
+    return level3Balances[`L2-${level2Id}`] || 0;
   };
 
   const getLevel1NetBalance = (level1Id) => {
@@ -677,7 +722,7 @@ const Ledger = () => {
     }
 
     // If the Level 1 account has no Level 2 children, use its own balance
-    return level3Balances[level1Id] || 0;
+    return level3Balances[`L1-${level1Id}`] || 0;
   };
 
   const formatAmount = (amount) => {
@@ -734,7 +779,7 @@ const Ledger = () => {
                   return (
                     <TableRow 
                       key={`${account.level}-${account.id}`}
-                            onClick={() => handleAccountSelect(account)}
+                      onClick={() => handleAccountSelect(account)}
                       sx={{ 
                         cursor: 'pointer',
                         backgroundColor: selectedAccount === account.id ? '#e3f2fd' : 'inherit',
@@ -759,77 +804,77 @@ const Ledger = () => {
                   );
                 })
               ) : (
-                      level1Accounts.map((level1Account) => (
-                        <React.Fragment key={`level1-${level1Account.id}`}>
+                level1Accounts.map((level1Account) => (
+                  <React.Fragment key={`level1-${level1Account.namespacedId}`}>
+                    <TableRow 
+                      onClick={() => {
+                        toggleExpand(level1Account.id);
+                        handleAccountSelect(level1Account);
+                      }}
+                      sx={{ 
+                        cursor: 'pointer',
+                        backgroundColor: selectedAccount === level1Account.id ? '#e3f2fd' : 'inherit',
+                        '&:hover': { backgroundColor: '#f5f5f5' }
+                      }}
+                    >
+                      <TableCell sx={{ fontWeight: 'bold' }}>
+                        {level1Account.name}
+                      </TableCell>
+                      <TableCell align="right">{parseFloat(level1Account.opening_balance || 0).toFixed(2)}</TableCell>
+                      <TableCell align="right">{level1Account.balance_type || 'DEBIT'}</TableCell>
+                      <TableCell align="right">{level1Account.account_type || 'ACCOUNT'}</TableCell>
+                      <TableCell align="right">
+                        {parseFloat(level1Account.current_balance || 0).toFixed(2)}
+                      </TableCell>
+                    </TableRow>
+                    {expandedAccounts.has(level1Account.id) && level1Account.level2_accounts?.map((level2Account) => (
+                      <React.Fragment key={`level2-${level2Account.namespacedId}`}>
+                        <TableRow 
+                          onClick={() => {
+                            if (!level2Account.has_level3) {
+                              handleAccountSelect(level2Account);
+                            } else {
+                              toggleExpand(level2Account.id);
+                            }
+                          }}
+                          sx={{ 
+                            cursor: 'pointer',
+                            backgroundColor: selectedAccount === level2Account.id ? '#e3f2fd' : 'inherit',
+                            '&:hover': { backgroundColor: '#f5f5f5' }
+                          }}
+                        >
+                          <TableCell sx={{ pl: 4 }}>{level2Account.name}</TableCell>
+                          <TableCell align="right">{parseFloat(level2Account.opening_balance || 0).toFixed(2)}</TableCell>
+                          <TableCell align="right">{level2Account.balance_type || 'DEBIT'}</TableCell>
+                          <TableCell align="right">{level2Account.account_type || 'ACCOUNT'}</TableCell>
+                          <TableCell align="right">
+                            {parseFloat(level2Account.current_balance || 0).toFixed(2)}
+                          </TableCell>
+                        </TableRow>
+                        {expandedAccounts.has(level2Account.id) && level2Account.level3_accounts?.map((level3Account) => (
                           <TableRow 
-                            onClick={() => {
-                              toggleExpand(level1Account.id);
-                              handleAccountSelect(level1Account);
-                            }}
+                            key={`level3-${level3Account.namespacedId}`}
+                            onClick={() => handleAccountSelect(level3Account)}
                             sx={{ 
                               cursor: 'pointer',
-                              backgroundColor: selectedAccount === level1Account.id ? '#e3f2fd' : 'inherit',
+                              backgroundColor: selectedAccount === level3Account.id ? '#e3f2fd' : 'inherit',
                               '&:hover': { backgroundColor: '#f5f5f5' }
                             }}
                           >
-                            <TableCell sx={{ fontWeight: 'bold' }}>
-                              {level1Account.name}
-                            </TableCell>
-                            <TableCell align="right">{parseFloat(level1Account.opening_balance || 0).toFixed(2)}</TableCell>
-                            <TableCell align="right">{level1Account.balance_type || 'DEBIT'}</TableCell>
-                            <TableCell align="right">{level1Account.account_type || 'ACCOUNT'}</TableCell>
+                            <TableCell sx={{ pl: 8 }}>{level3Account.name}</TableCell>
+                            <TableCell align="right">{parseFloat(level3Account.opening_balance || 0).toFixed(2)}</TableCell>
+                            <TableCell align="right">{level3Account.balance_type || 'DEBIT'}</TableCell>
+                            <TableCell align="right">{level3Account.account_type || 'ACCOUNT'}</TableCell>
                             <TableCell align="right">
-                              {parseFloat(level1Account.current_balance || 0).toFixed(2)}
+                              {parseFloat(level3Account.current_balance || 0).toFixed(2)}
                             </TableCell>
                           </TableRow>
-                          {expandedAccounts.has(level1Account.id) && level1Account.level2_accounts?.map((level2Account) => (
-                            <React.Fragment key={`level2-${level2Account.id}`}>
-                              <TableRow 
-                                onClick={() => {
-                                  if (!level2Account.has_level3) {
-                                    handleAccountSelect(level2Account);
-                                  } else {
-                                  toggleExpand(level2Account.id);
-                                  }
-                                }}
-                                sx={{ 
-                                  cursor: 'pointer',
-                                  backgroundColor: selectedAccount === level2Account.id ? '#e3f2fd' : 'inherit',
-                                  '&:hover': { backgroundColor: '#f5f5f5' }
-                                }}
-                              >
-                                <TableCell sx={{ pl: 4 }}>{level2Account.name}</TableCell>
-                                <TableCell align="right">{parseFloat(level2Account.opening_balance || 0).toFixed(2)}</TableCell>
-                                <TableCell align="right">{level2Account.balance_type || 'DEBIT'}</TableCell>
-                                <TableCell align="right">{level2Account.account_type || 'ACCOUNT'}</TableCell>
-                                <TableCell align="right">
-                                  {parseFloat(level2Account.current_balance || 0).toFixed(2)}
-                                </TableCell>
-                              </TableRow>
-                              {expandedAccounts.has(level2Account.id) && level2Account.level3_accounts?.map((level3Account) => (
-                                <TableRow 
-                                  key={`level3-${level3Account.id}`}
-                                  onClick={() => handleAccountSelect(level3Account)}
-                                  sx={{ 
-                                    cursor: 'pointer',
-                                    backgroundColor: selectedAccount === level3Account.id ? '#e3f2fd' : 'inherit',
-                                    '&:hover': { backgroundColor: '#f5f5f5' }
-                                  }}
-                                >
-                                  <TableCell sx={{ pl: 8 }}>{level3Account.name}</TableCell>
-                                  <TableCell align="right">{parseFloat(level3Account.opening_balance || 0).toFixed(2)}</TableCell>
-                                  <TableCell align="right">{level3Account.balance_type || 'DEBIT'}</TableCell>
-                                  <TableCell align="right">{level3Account.account_type || 'ACCOUNT'}</TableCell>
-                                  <TableCell align="right">
-                                    {parseFloat(level3Account.current_balance || 0).toFixed(2)}
-                                  </TableCell>
-                                </TableRow>
-                              ))}
-                            </React.Fragment>
-                          ))}
-                        </React.Fragment>
-                      ))
-                    )}
+                        ))}
+                      </React.Fragment>
+                    ))}
+                  </React.Fragment>
+                ))
+              )}
                   </TableBody>
                 </Table>
               </TableContainer>
@@ -968,13 +1013,26 @@ const Ledger = () => {
                   </TableHead>
                   <TableBody>
                     <TableRow sx={{ backgroundColor: '#f5f5f5' }}>
-                      <TableCell colSpan={5}>
+                      <TableCell colSpan={9}>
                         <Typography variant="subtitle2">Opening Balance</Typography>
                       </TableCell>
                       <TableCell align="right">
                         <Typography variant="subtitle2">
                           Rs.{Math.abs(accountDetails.opening_balance).toFixed(2)}
                           {accountDetails.opening_balance >= 0 ? ' CR' : ' DB'}
+                        </Typography>
+                      </TableCell>
+                    </TableRow>
+                    
+                    {/* Balance as of Start Date */}
+                    <TableRow sx={{ backgroundColor: '#e8f5e8' }}>
+                      <TableCell colSpan={9}>
+                        <Typography variant="subtitle2">Balance as of {format(dateRange.startDate, 'MMM dd, yyyy')}</Typography>
+                      </TableCell>
+                      <TableCell align="right">
+                        <Typography variant="subtitle2">
+                          Rs.{Math.abs(openingBalance).toFixed(2)}
+                          {openingBalance >= 0 ? ' CR' : ' DB'}
                         </Typography>
                       </TableCell>
                     </TableRow>
@@ -1013,7 +1071,12 @@ const Ledger = () => {
                       <TableCell colSpan={7} align="right"><strong>Totals</strong></TableCell>
                       <TableCell align="right"><strong>{formatAmount(calculateTotals().totalDebits)}</strong></TableCell>
                       <TableCell align="right"><strong>{formatAmount(calculateTotals().totalCredits)}</strong></TableCell>
-                      <TableCell align="right"><strong>{formatAmount(calculateTotals().balance)}</strong></TableCell>
+                      <TableCell align="right">
+                        <strong>
+                          {Math.abs(parseFloat(calculateTotals().balance)).toFixed(2)}
+                          {parseFloat(calculateTotals().balance) >= 0 ? ' CR' : ' DB'}
+                        </strong>
+                      </TableCell>
                     </TableRow>
                   </TableBody>
                 </Table>
