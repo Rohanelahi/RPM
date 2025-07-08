@@ -78,6 +78,46 @@ const addRemarksColumn = async () => {
 // Run column check when server starts
 addRemarksColumn();
 
+// Fix the update_bank_balance function to use correct column name
+const fixUpdateBankBalanceFunction = async () => {
+  try {
+    await pool.query(`
+      CREATE OR REPLACE FUNCTION update_bank_balance() RETURNS trigger
+      LANGUAGE plpgsql
+      AS $$
+      BEGIN
+          IF NEW.type = 'CREDIT' THEN
+              UPDATE bank_accounts 
+              SET balance = balance + NEW.amount,
+                  updated_at = CURRENT_TIMESTAMP
+              WHERE id = NEW.account_id;
+          ELSE
+              UPDATE bank_accounts 
+              SET balance = balance - NEW.amount,
+                  updated_at = CURRENT_TIMESTAMP
+              WHERE id = NEW.account_id;
+          END IF;
+          
+          -- Update balance_after in the transaction
+          NEW.balance_after := (
+              SELECT balance 
+              FROM bank_accounts 
+              WHERE id = NEW.account_id
+          );
+          
+          RETURN NEW;
+      END;
+      $$;
+    `);
+    console.log('Fixed update_bank_balance function successfully');
+  } catch (err) {
+    console.error('Error fixing update_bank_balance function:', err);
+  }
+};
+
+// Run function fix when server starts
+fixUpdateBankBalanceFunction();
+
 // Get all bank accounts with latest balance
 router.get('/bank-accounts', async (req, res) => {
   try {
